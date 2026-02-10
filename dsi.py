@@ -15,10 +15,8 @@ sp_client_secret =  APItokens.client_secret
 sp_redirect = APItokens.redirect
 # the URL for the Spotify redirect, also inside Spotify Dashboard (replace with "PLACE REDIRECT URL HERE")
 
-disc_client_ID = APItokens.discClient_ID
-# discord client ID (replace with "PLACE DISCORD CLIENT ID HERE")
-disc_client_secret = APItokens.discClient_secret
-# discord client secret key (replace with "PLACE DISCORD SECRET KEY HERE")
+disc_application = APItokens.discAppID
+# discord client ID (replace with "PLACE DISCORD APPLICATION ID HERE")
 
 ###
 # user input area ^
@@ -70,14 +68,23 @@ def song():
     # stores the info about all the images tied to the song
     csAlbumCover = csImages[0].get("url")
     # stores the link to the album cover
+    # not used for now, since you can't dynamically update Discord Rich Presence icons
+
+    csLength = int(csShort.get("duration_ms")/1000)
+    # stores the length of the song (in seconds)
+    csUnix = int(time.time()+csLength)
+    # turns the length of the song into a UNIX timestamp
+    # which is then passed to Discord as an "end timestamp", showing when the song ends
+
+
 
     if os.path.exists(devDir):
         # this is the addon part to Spotify (History) Analyser (SHA + addon = shaa)
-        # this data is only entered to rich presence if used with SHA
-        # checks if the CSV file exists to pull data from)
+        # this data is only entered to rich presence if used with SHA (and installed correctly)
+        # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
         csvReader = pd.read_csv(devDir, index_col=0)
         # opens the CSV file and uses column 0 as index (track names)
-        shaaPlaycount = int(csvReader.loc[csName, "Playcount"])
+        shaaPlaycount = (csvReader.loc[csName, "Playcount"]).astype(int)
         # finds total number of plays for current song
         shaaPlaytime = round( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60)
         # finds total time played (min) for current song (milliseconds/1000 = seconds / 60 = minutes)
@@ -87,22 +94,12 @@ def song():
         # None
         print("CSV file not found, additional functionality not enabled")
 
-    discordPresence()
-    # once everything else has run, calls discordPresence
-
-
-
-    def discordPresence():
-        # this function takes all the data from song() and pushes it to Discord
-        # defined inside song() because it needs access to variables, but defined as its own function because idk honestly, could just be a part of song()
-        print("Hello, you made it here! This does nothing, but it works!")
-
-
 
     # TESTING AREA: (used to print/debug)
     # print(csShort)
-    print("Song name: ", csName, ", Artist name: ", csArtist, ", Album name: ", csAlbum, ", Progress is at: ", csProgressMin,":",csProgressSec, " out of ", csDurationMin,":",csDurationSec, ", Album cover: ", csAlbumCover, sep="")
-    print(shaaPlaycount, shaaPlaytime, shaaTotaltime)
+    print("Song name: ", csName, ", Artist name: ", csArtist, ", Album name: ", csAlbum, ", Progress is at: ", csProgressMin,":","%02d" % (csProgressSec,), " out of ", csDurationMin,":","%02d" % (csDurationSec,), sep="")
+    print(shaaPlaycount, "times played", shaaPlaytime, "minutes listened to", shaaTotaltime, "hours listened to (total)")
+    print("song ending timestamp:", csUnix)
 
 
 
@@ -116,28 +113,36 @@ def looper():
     # grabs the name of the currently playing song
     global currentSong
     if currentSong is None:
+        # when the program first starts, the currentSong will be "None", this updates it
         currentSong = songName
-    # makes a loop that calls for a new song if the previous ends (more or less)
+        # since this only runs when the program first starts, calls the song updater right away
+        song()
     songProg = (info.get("progress_ms"))
     songDur = (info.get("item")).get("duration_ms")
-    # grabs both the current time of the song and the length
-    songLeft = ((songDur-songProg)/1000)+1
-    # grabs the time left on the song and adds 1 second (to allow for some headroom)
+    # grabs both the current time and length of the song (in milliseconds)
+    songLeft = ((songDur-songProg)/1000)
+    # calculates the time left on the song (in seconds)
 
     if currentSong == songName:
-        print("song is still same, sleeping for", songLeft, "seconds")
-        time.sleep(songLeft)
-        # puts the loop to sleep until the song ends, since there's no new information
-        looper()
-        # re-runs once the timer ends, now should have a new song
+        # current song is the same as the last time
+        print("the song is still the same for", songLeft, "seconds")
+        if songLeft > 10:
+            time.sleep(10)
+            # sleeps for 10 seconds
+            looper()
+        if songLeft <= 10:
+            time.sleep(songLeft)
+            # if the song has <10 seconds, doesn't wait 10 seconds
+            looper()
 
     if currentSong != songName:
+        # song is not the same as it was last time it was checked
         print("new song - re-running")
         song()
-        # starts the song parser
+        # starts the song status updater
         currentSong = songName
-        # updates the current song
-        time.sleep(5)
+        # updates the current song to match
+        time.sleep(3)
         # sleeps for a few seconds to let other parts work
         looper()
         # re-runs looper, which now has the new song name
@@ -145,11 +150,8 @@ def looper():
 
 
 looper()
-# once all the above stuff has processed, starts the looper (on py load)
+# once all the above stuff has processed, starts the looper (a few seconds after dsi.py load)
 
-
-
-# once the spotify -> py stuff works, go to https://discord.com/developers/docs/activities/overview to see how to get from py -> discord
 
 """
 something along the lines of:
@@ -157,10 +159,9 @@ something along the lines of:
 [Listening to <song> by <artist>]
 [total track playtime: <total>, track played <count> times.]
 [total playtime on Spotify: <time> hours]
-
-
-maybe in the future it could have its own GUI that determines what the data looks like, not sure
 """
+
+# below is a chunk of code that Discord uses for rich presence
 
 """
 static void UpdatePresence()
