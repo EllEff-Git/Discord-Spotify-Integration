@@ -2,7 +2,6 @@ __pycache__
 .cache
 APITokens.py
 todo.txt
-lib
-lib/*
-CMakeLists.txt
+songData.txt
 main.cpp
+Discord/*
