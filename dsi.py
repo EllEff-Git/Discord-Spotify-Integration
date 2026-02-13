@@ -66,6 +66,8 @@ hoverText = Config.get("Pictures", "text_On_Small_Hover")
 
 # [SHAA-Song-Info]
 shaalessPlaycount = shaalessPlaytime = shaalessTotalTime = Config.get("SHAA-Song-Info", "song_Info_Empty_Field")
+songInfoField1 = Config.get("SHAA-Song-Info", "song_Info_First_Field")
+songInfoField2 = Config.get("SHAA-Song-Info", "song_Info_Second_Field")
 songInfoSpacer = Config.get("SHAA-Song-Info", "song_Info_Spacer")
 songInfoFormatPlays = Config.get("SHAA-Song-Info", "song_Info_Format_Plays")
 songInfoFormatMins = Config.get("SHAA-Song-Info", "song_Info_Format_Mins")
@@ -321,51 +323,80 @@ def song(pictureQueue):
 
             csvReader = pd.read_csv(devDir, index_col=0)
             # opens the CSV file and uses column 0 as index (track names)
+
             if csName in csvReader.index:
-                # checks if any appearance of the song is on the list 
+                # checks if any appearance of the track is on the list 
 
-                if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
-                    # if there's exactly one instance of the current song (returns as a number)
-                    shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
-                    # finds total times the song has been played, turns into formatted string
+                ### Field 1 ###
 
-                elif isinstance(csvReader.loc[csName, "Playcount"], pd.Series):
-                    # if there's more than one instance of the same song, calculates playcount for all instances
-                    pcVar = csvReader.loc[csName, "Playcount"]
-                    # finds all instances of total times the song has been played
-                    shaaPlaycount = f"{pcVar.sum():,.0f}"
-                    # finds total number of plays for all instances of current song, turns into string
+                if songInfoField1 == "Track":
+                    # if the selected type for first field is Track
+                    if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
+                        # if there's exactly one instance of the current song (returns as a number)
+                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
+                        # finds total times the song has been played, turns into formatted string
 
-                if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
-                    # if there's exactly one instance of the current song (returns as a number)
-                    shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
-                    # finds total time played (min) for current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
+                    elif isinstance(csvReader.loc[csName, "Playcount"], pd.Series):
+                        # if there's more than one instance of the same song, calculates playcount for all instances
+                        pcVar = csvReader.loc[csName, "Playcount"]
+                        # finds all instances of total times the song has been played
+                        shaaPlaycount = f"{pcVar.sum():,.0f}"
+                        # finds total number of plays for all instances of current track, turns into string
 
-                elif isinstance(csvReader.loc[csName, "Total Time"], pd.Series):
-                    # if there's more than one instance of the same song, calculates playtime for all instances
-                    ttVar = csvReader.loc[csName, "Total Time"]
-                    shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f}"
-                    # finds total time played (min) for all instances of current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
+                if songInfoField1 == "Total":
+                    # if the selected type for the first field is Total
+                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                    # adds up *all* the playcounts for all tracks
+
+                ### Field 2 ###
+
+                if songInfoField2 == "Track":
+                    # if the selected type for the second field is Track
+                    if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
+                        # if there's exactly one instance of the current song (returns as a number)
+                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
+                        # finds total time played (min) for current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
+
+                    elif isinstance(csvReader.loc[csName, "Total Time"], pd.Series):
+                        # if there's more than one instance of the same song, calculates playtime for all instances
+                        ttVar = csvReader.loc[csName, "Total Time"]
+                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f}"
+                        # finds total time played (min) for all instances of current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
+                
+                if songInfoField2 == "Total":
+                    # if the selected type for the first field is Total
+                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+                    # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
+
+            ### No Track Match ###
 
             else:
                 # in case the song has never been played before (or doesn't appear in the CSV)
                 shaaPlaycount = "0"
                 shaaPlaytime = "0"
                 # makes the playcount and playtime for that song 0
-        
+
+            ### Total Hours ###
+
             shaaTotalTime =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
             # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+
+            ### String Joiner ###
 
             cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
             # joins together the playcount and time
             # default appearance: " 1,234 plays ※ 5,678 minutes "
 
+        ### No SHAA ###
+
         else:
-            # if not installed as an addon to Spotify Analyser, will not send numbers forward, rather just configured, set fields
+            # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
             shaaPlaycount = shaalessPlaycount
             shaaPlaytime = shaalessPlaytime
             shaaTotalTime = shaalessTotalTime
-            # gives them string values based on user configured input
+            # gives them string values based on user configured input 
+
+            ### String Joiner SHAAless ###
 
             cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
             # joins together the song information without Spotify Analyser
@@ -388,17 +419,16 @@ def song(pictureQueue):
             songNameList.append(csName)
             # adds to string
             if not songNameSpacerL == "":
-
                 # if songNameSpacerL(eft) has something
                 songNameList.append(songNameSpacerL)
-                SNSL = False
                 # adds to string
+                SNSL = False
+                # sets the requirement to add Left Spacer to false, so that it doesn't get added again
 
         if enableArtist:
             # if artist is enabled
             songNameList.append(csArtist)
             # adds to string
-
             if not songNameSpacerL == "" and SNSL:
                 # if songNameSpacerL(eft) has something and isn't already in
                 songNameList.append(songNameSpacerL)
@@ -515,9 +545,6 @@ def looper():
 
 
 ### First Load Commands ###
-
-# debug = main.current_playback()
-# print(debug)
 
 songThread = threading.Thread(target=song, args=(pictureQueue,))
 # creates the song thread
