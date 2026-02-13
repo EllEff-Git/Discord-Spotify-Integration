@@ -3,35 +3,28 @@ import numpy as np
 import os, time, configparser, spotipy, random, threading, queue
 from spotipy.oauth2 import SpotifyOAuth
 
-import APItokens
+
 
 # all this will be deleted and the "devDir" will be replaced by the mainDir's path below
 devDir = "S:/Spotify Analyzer/Data/CSV/grouped.csv"
 # the directory used during development (will be deleted)
-mainDir = "../Data/CSV/grouped.csv"
-# the directory used after installation (this addon installs into Spotify Analyzer/DSI/)
+SHAAdir = "../Data/CSV/grouped.csv"
+# the directory used after installation (this addon installs into Spotify Analyzer/DSI/)  <---------------------------------------
 
-Config = configparser.ConfigParser(comment_prefixes=["/", "#"], allow_no_value=True)
-Config.read('./config.ini', "utf8")
-# this opens the config file to be checked later
+Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
+# sets up the config reader
+Config.read('./testconfig.ini', "utf8")
+# reads from the config, saves values below (testconfig in use for debug) <------------------------------------
 
-sp_client_ID = APItokens.client_ID
-# the "client ID" token inside Spotify Dashboard (replace with "PLACE CLIENT ID HERE")
-sp_client_secret =  APItokens.client_secret 
-# the "client secret" token inside Spotify Dashboard (replace with "PLACE CLIENT SECRET HERE")
-sp_redirect = APItokens.redirect
-# the URL for the Spotify redirect, also inside Spotify Dashboard (replace with "PLACE REDIRECT URL HERE")
-dc_app_ID = APItokens.dcID
-picCycleList = APItokens.picList
-smallPic = APItokens.smallPic
+
 
 ### Config section - Pulls config info from config.ini
 
 # [Required]
-# sp_client_ID = Config.get("Required", "Spotify_Client_ID")
-# sp_client_secret = Config.get("Required, Spotify_Client_Secret")
-# sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
-# dc_app_ID = Config.get("Required", Discord_Application_ID)
+sp_client_ID = Config.get("Required", "Spotify_Client_ID")
+sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
+sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
+dc_app_ID = Config.get("Required", "Discord_Application_ID")
 
 # [Function]
 refreshTime = int(Config.get("Function", "time_between_refresh"))
@@ -47,13 +40,15 @@ songNameSpacerR = Config.get("Song-Style", "song_Spacer_Right")
 # [Song-Format]
 preText = Config.get("Song-Format", "preText")
 postText = Config.get("Song-Format", "postText")
-songOrder = Config.get("Song-Format", "song_format")
+enableSong = Config.getboolean("Song-Format", "enable_Song")
+enableArtist = Config.getboolean("Song-Format", "enable_Artist")
+enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 
 # [Pictures]
-# picCycleList = Config.get("Pictures", "pictures_to_cycle")
+picCycleList = (Config.get("Pictures", "pictures_to_cycle").replace('"', '')).split(", ")
 picCycleTime = int(Config.get("Pictures", "picture_cycle_time"))
 picCycleType = Config.get("Pictures", "picture_cycle_behavior")
-# smallPic = Config.get("Pictures", "small_picture_name")
+smallPic = Config.get("Pictures", "small_picture_name").replace('"', '')
 hoverText = Config.get("Pictures", "text_on_small_hover")
 
 # [SHAA-Song-Info]
@@ -63,10 +58,7 @@ songInfoFormatPlays = Config.get("SHAA-Song-Info", "song_Info_Format_Plays")
 songInfoFormatMins = Config.get("SHAA-Song-Info", "song_Info_Format_Mins")
 songInfoFormatHours = Config.get("SHAA-Song-Info", "song_Info_Format_Hours")
 songInfoFormatHourSpacer = Config.get("SHAA-Song-Info", "song_Info_Format_Hour_Spacer")
-
-##
-# if you know what you're doing, you can further customise the look of the output below (lines 126 and beyond)
-##
+songInfoHourDoubleSpace = Config.getboolean("SHAA-Song-Info", "song_Info_Double_Space")
 
 
 
@@ -82,6 +74,15 @@ event = threading.Event()
 main = spotipy.Spotify(auth_manager = SpotifyOAuth(scope = "user-read-playback-state", client_id = sp_client_ID, client_secret = sp_client_secret, redirect_uri = sp_redirect))
 # handles the authentication and user identification on start
 
+spotifyURLlist = ["track", "album", "artist", "playlist", "Track", "Album", "Artist", "Playlist"]
+# makes a list of all the possible options for spotifyURL
+
+pictureBehaviorList = ["random", "sequence", "once", "none", "Random", "Sequence", "Once", "None"]
+
+
+
+### Id Writer ###
+
 
 
 def idWriter():
@@ -95,8 +96,12 @@ def idWriter():
 
 
 
+### Background Tasker ###
+
+
+
 class Background(threading.Thread):
-# a class to use background tasking, this way the pictures can cycle outside the main loop
+# a class to use background tasking, this way the pictures can cycle outside the main song loop
     def __init__(self, picCycleList, picCycleType, picCycleTime, pictureQueue):
         super().__init__()
         self.picCyclerList = picCycleList
@@ -107,6 +112,7 @@ class Background(threading.Thread):
         # "turns on" the thread
 
     def run(self):
+        # creates a starter for picCycler
         while self.running:
         # runs the picCycler while the thread is active
             self.picCycler()
@@ -115,43 +121,15 @@ class Background(threading.Thread):
     # the function used to cycle pictures (and/or set one)
         while True:
 
-            if picCycleType == "Random" and len(picCycleList) > 1:
-                # if the selected method is "Random", and the list has more than 1 element
-                i = random.randint(0,(len(picCycleList)-1))
-                # picks a random number based on list length
-                cppLargeImage = picCycleList[i] # this needs to get passed to song somehow, someway
-                # chooses the element with the random number
-                self.pictureQueue.put(cppLargeImage)
-                # sends the picture to a queue that then reaches song()
-                event.set()
-                # sends an event that tells song() to process
-                time.sleep(60 * picCycleTime)
-                # sleeps until it's time to change pictures
-        
-            elif picCycleType == "Random" and len(picCycleList) == 1:
-                # if the selected method is "Random", but the list has only 1 element
-                cppLargeImage = picCycleList[0]
-                # sets the picture to the first (only) element
-                self.pictureQueue.put(cppLargeImage)
-                # sends the picture to a queue that then reaches song()
-                event.set()
-                # sends an event that tells song() to process
-                # doesn't ever update, because there's nothing to update
-
-            elif picCycleType == "Random" and len(picCycleList) < 1:
-                # if the selected method is "Random", but the list is empty
-                cppLargeImage = ""
-                # sets the picture to nothing (this won't break Discord)
-                self.pictureQueue.put(cppLargeImage)
-                # sends the picture to a queue that then reaches song()
-                event.set()
-                # sends an event that tells song() to process
-                # doesn't ever update, because there's nothing to update
-
-            if picCycleType == "Sequence":
-                for i in range(0, (len(picCycleList)-1)):
+            if picCycleType in pictureBehaviorList and len(picCycleList) >= 1:
+                # checks if the list has more than one picture (can't cycle if not true)
+                if picCycleType == "Random" or picCycleType == "random":
+                    print(picCycleList)
+                    # if the selected method is "Random"
+                    i = random.randint(0,(len(picCycleList)-1))
+                    # picks a random number based on list length
                     cppLargeImage = picCycleList[i]
-                    # selects the picture from the list one by one
+                    # chooses the element with the random number
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
                     event.set()
@@ -159,28 +137,56 @@ class Background(threading.Thread):
                     time.sleep(60 * picCycleTime)
                     # sleeps until it's time to change pictures
 
-            if picCycleType == "RandomOnce" and len(picCycleList) >= 1:
-                i = random.randint(0,(len(picCycleList)-1))
-                # picks a random number based on list length
-                cppLargeImage = picCycleList[i]
-                # chooses the element with the random number
-                self.pictureQueue.put(cppLargeImage)
-                # sends the picture to a queue that then reaches song()
-                event.set()
-                # sends an event that tells song() to process
-                self.running = False
-                # only sets it once, so it stops the background thread
-            
-            if picCycleType == "None" or len(picCycleList) < 1:
-                # if the selected method is "None", or the list is empty
+                if picCycleType == "Sequence":
+                    # if the selected method is "Sequence"
+                    for i in range(0, (len(picCycleList)-1)):
+                    # repeats this loop for every element in the list (sleeping in between)
+                        cppLargeImage = picCycleList[i]
+                        # selects the picture from the list one by one
+                        self.pictureQueue.put(cppLargeImage)
+                        # sends the picture to a queue that then reaches song()
+                        event.set()
+                        # sends an event that tells song() to process
+                        time.sleep(60 * picCycleTime)
+                        # sleeps until it's time to change pictures
+
+                if picCycleType == "Once":
+                    i = random.randint(0,(len(picCycleList)-1))
+                    # picks a random number based on list length
+                    cppLargeImage = picCycleList[i]
+                    # chooses the element with the random number
+                    self.pictureQueue.put(cppLargeImage)
+                    # sends the picture to a queue that then reaches song()
+                    event.set()
+                    # sends an event that tells song() to process
+                    self.running = False
+                    # only sets it once, so it stops the background thread
+
+                if picCycleType == "None":
+                    # if the selected method is None ()
+                    cppLargeImage = picCycleList[0]
+                    # chooses the first picture
+                    self.pictureQueue.put(cppLargeImage)
+                    # sends the picture to a queue that then reaches song()
+                    event.set()
+                    # sends an event that tells song() to process
+                    self.running = False
+                    # only sets it once, so it stops the background thread
+
+            else:
+                # if the method field or picture list is empty
                 cppLargeImage = ""
-                # sets the picture to nothing (this won't break Discord)
+                # sets the picture to nothing (empty shouldn't break Discord)
                 self.pictureQueue.put(cppLargeImage)
                 # sends the picture to a queue that then reaches song()
                 event.set()
                 # sends an event that tells song() to process
                 self.running = False
-                # only sets it once, so it stops the background thread
+                # doesn't really set a picture, so it stops the background thread
+
+
+
+### Picture Queue ###
 
 
 
@@ -200,21 +206,21 @@ def song(pictureQueue):
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
-        csShort = csFull.get("item")
+        csItem = csFull.get("item")
         # takes the first part of the song's info (leaving out device info and various user states)
-        cs = csShort.get("album")
+        csAlbum = csItem.get("album")
         # takes a smaller part of the song's info (still contains a ton of extra)
 
-        csName = csShort.get("name")
+        csName = csItem.get("name")
         # stores the name of the song
-        csArtists = cs.get("artists")
+        csArtists = csAlbum.get("artists")
         # stores all the artists listed on the song (in case of multi-artist songs)
         csArtist = csArtists[0].get("name")
-        # stores the first artist name
-        csAlbum = cs.get("name")
+        # stores the first artist's name
+        csAlbumName = csAlbum.get("name")
         # stores the album name
 
-        csLength = csShort.get("duration_ms")
+        csLength = csItem.get("duration_ms")
         # stores the length of the song
 
         csUnixStart = csFull.get("timestamp")
@@ -222,31 +228,87 @@ def song(pictureQueue):
         csUnixEnd = (csUnixStart + csLength)
         # stores the end time of the song (by adding up the start + duration)
 
-        csRawURL = csShort.get("external_urls")
-        csURL = csRawURL.get("spotify")
-        # takes the track URL
+        cstrackURL = csItem.get("external_urls")
+        # stores the list that contains track's url
+        csAlbumURL = csAlbum.get("uri") 
+        # stores the list that contains album url
+        csArtistURL = csArtists[0].get("uri")
+        # stores the list that contains artist's url
+        csPlaylist = csFull.get("context")
+        # stores the list that contains the playlist url
+
+        if csPlaylist == None:
+            # checks if user is playing a playlist
+            onPlaylist = False
+            # if not, sets onPlaylist to false
+
+        elif not csPlaylist == None:
+            # if there is a playlist playing
+            csPlaylistURL = csPlaylist.get("external_urls")
+            # gets the list of external urls attached to that playlist
+            onPlaylist = True
+            # sets onPlaylist to true
+
+        if spotifyURL in spotifyURLlist:
+            # if the selected type of URL is in the valid set
+
+            if spotifyURL == "track" or spotifyURL == "Track":
+                # if the config option for url type is set to track
+                csURL = cstrackURL.get("spotify")
+                # takes the track's URL
+
+            elif spotifyURL == "album" or spotifyURL == "Album":
+                # if the config option for url type is set to album
+                csURL = csAlbumURL
+                # takes the album's URL
+
+            elif spotifyURL == "artist" or spotifyURL == "Artist":
+                # if the config option for url type is set to artist
+                csURL = csArtistURL
+                # takes the artist's URL
+
+            elif spotifyURL == "playlist" or spotifyURL == "Playlist":
+                # if the config option for url type is set to playlist
+                if onPlaylist == False:
+                    # the user isn't playing a playlist, but has selected the playlist url config option
+                    csURL = smallURL
+                    # sets it to my website as a fallback
+                elif onPlaylist == True:
+                    csURL = csPlaylistURL.get("spotify")
+                    # takes the playlist's URL
+
+        else:
+            # if the config option for url type is invalid, defaults to my website :)
+            csURL = "https://elleffnotelf.com"
+
+
+
+        ### Spotify (History) Analyser Addon Functionality ###
 
         if os.path.exists(devDir):
             # this is the addon part to Spotify (History) Analyser (SHA + addon = shaa)
             # this data is only entered to rich presence if used with SHA (and installed correctly)
             # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
+
             csvReader = pd.read_csv(devDir, index_col=0)
             # opens the CSV file and uses column 0 as index (track names)
             if csName in csvReader.index:
-                # checks if any appearance of the song is on the list
+                # checks if any appearance of the song is on the list 
+
                 if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
-                    # if there's exactly one instance of the current song
-                    shaaPlaycount = str((csvReader.loc[csName, "Playcount"]).astype(int))
-                    # takes the number of plays as a string
+                    # if there's exactly one instance of the current song (returns as a number)
+                    shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
+                    # finds total times the song has been played, turns into formatted string
 
                 elif isinstance(csvReader.loc[csName, "Playcount"], pd.Series):
                     # if there's more than one instance of the same song, calculates playcount for all instances
                     pcVar = csvReader.loc[csName, "Playcount"]
-                    shaaPlaycount = str(pcVar.sum())
+                    # finds all instances of total times the song has been played
+                    shaaPlaycount = f"{pcVar.sum():,.0f}"
                     # finds total number of plays for all instances of current song, turns into string
 
                 if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
-                    # if there's exactly one instance of the current song
+                    # if there's exactly one instance of the current song (returns as a number)
                     shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
                     # finds total time played (min) for current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
 
@@ -267,7 +329,7 @@ def song(pictureQueue):
 
             cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
             # joins together the playcount and time
-            # default appearance: " 1,234 plays x 5,678 minutes "
+            # default appearance: " 1,234 plays ※ 5,678 minutes "
 
         else:
             # if not installed as an addon to Spotify Analyser, will not send numbers forward, rather just configured, set fields
@@ -278,76 +340,75 @@ def song(pictureQueue):
 
             cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
             # joins together the song information without Spotify Analyser
-            # default appearance: " N/A plays x N/A minutes " , " Total Hours: N/A "
+            # default appearance: " N/A plays ※ N/A minutes " , " Total Hours: N/A "
 
 
-        ### songOrder splicing, need to set up a pre-check to see if it only contains 1, 2 or 3
-        # may also need to check if the spacers are empty and only push empty spaces if not
-        # in fact, just print one space by default (left side) and then add one to spacers if they're not empty
 
-        ### Left Spacer ###
+        ### Song Style ###
 
-        if len(songNameSpacerL) >= 1:
-            # if the left spacer has at least one character, adds a space after to ensure proper formatting
-            cppSNSL = (songNameSpacerL + " ")
-            # sets the "C++ Song Name Spacer Left" to have an extra space after
+        SNSL = True
+        # sets a temp flag
+        songNameList = []
+        # creates a list where the strings are stored
 
-        elif len(songNameSpacerL) < 1:
-            # the left spacer has nothing, ensures it doesn't print extra space
-            cppSNSL = ""
-            # sets the "C++ Song Name Spacer Left" to have nothing
+        if not preText == "":
+            # if preText has something
+            songNameList.append(preText)
+            # adds to string
 
-        ### Right Spacer ### 
+        if enableSong:
+            # if song is enabled
+            songNameList.append(csName)
+            # adds to string
+            if not songNameSpacerL == "":
 
-        if len(songNameSpacerR) >= 1:
-            # if the right spacer has at least one character, adds a space after to ensure proper formatting
-            cppSNSR = (songNameSpacerR + " ")
-            # sets the "C++ Song Name Spacer Right" to have an extra space after
+                # if songNameSpacerL(eft) has something
+                songNameList.append(songNameSpacerL)
+                SNSL = False
+                # adds to string
 
-        elif len(songNameSpacerL) < 1:
-            # the right spacer has nothing, ensures it doesn't print extra space
-            cppSNSR = ""
-            # sets the "C++ Song Name Spacer Right" to have nothing
-        
-        ### Song Order ###
+        if enableArtist:
+            # if artist is enabled
+            songNameList.append(csArtist)
+            # adds to string
 
-        if len(songOrder) > 3:
-            # more than 3 integers were given, falls back to a max of 3
-            print(">3")
-            # cppSongName = (csName + " " + songNameSpacerL + " " + csArtist + " " + songNameSpacerR + " " + csAlbum)
+            if not songNameSpacerL == "" and SNSL:
+                # if songNameSpacerL(eft) has something and isn't already in
+                songNameList.append(songNameSpacerL)
+                # adds to string
 
-        elif len(songOrder) == 3:
-            # 3 integers are given, need to make a for loop probably that takes all the 1s and spits out a song, then spacer, then next digit
-            print("3")
+        if enableAlbum or not postText == "":
+            # if there's at least one element after
+            if not enableSong and not enableArtist:
+                # if there's no other elements (pre/post texts not counting)
+                None
+                # does nothing
+            else:
+                songNameList.append(songNameSpacerR)
+                # if there's more than just album, adds the right spacer to string
 
-        elif len(songOrder) == 2:
-            # 2
-            print("2")
-        
-        elif len(songOrder) == 1:
-            # 1 integer was given, the order is just that digit
-            print("1")
-        
-        elif len(songOrder) < 1:
-            # none were given, defaults to default behavior
-            cppSongName = (csName + " " + cppSNSL + csArtist + " " + cppSNSR +  csAlbum)
+        if enableAlbum:
+            # if artist is enabled
+            songNameList.append(csAlbumName)
+            # adds to string
 
-        # after that, need to add the pre and post-text if they're not empty
+        if not postText == "":
+            # if postText has something
+            songNameList.append(postText)
+            # adds to string
 
-        cppSongName = (csName + " " + songNameSpacerL + " " + csArtist + " " + songNameSpacerR + " " + csAlbum)
-        # joins together the song name, artist and album (with customisable spacers) for C++ (CPP) text file
+        cppSongName = " ".join(songNameList)
+        # takes the list of strings from above and joins it together
 
-        print(cppSongName)
+        if songInfoHourDoubleSpace:
+            # if the space around the hour spacer is enabled on both sides
+            cppHours = (songInfoFormatHours + " " + songInfoFormatHourSpacer + " " + shaaTotalTime)
+            # creates a short string for total hours (space on both sides )
+        else:
+            cppHours = (songInfoFormatHours + songInfoFormatHourSpacer + " " + shaaTotalTime)
+            # creates a short string for total hours (space only on the right)
 
-        ### Total Hours ###
 
-        cppSIFHS = (songInfoFormatHourSpacer).replace('"', '')
-        # removes the quotation marks from the spacer (they are required to pass extra space through)
-
-        cppHours = (songInfoFormatHours + cppSIFHS + shaaTotalTime)
-        # creates a short string for total hours
-
-        print(cppHours)
 
         ### Text File Writer ###
 
@@ -370,6 +431,7 @@ def song(pictureQueue):
 
         event.clear()
         # clears the event queue
+
 
 
 currentSong = None
@@ -418,12 +480,13 @@ def looper():
         # re-runs looper, which now has the new song name
 
 
+
 ### runs at script start:
 
 songThread = threading.Thread(target=song, args=(pictureQueue,))
 # creates the song thread
 songThread.start()
-# creates the song thread
+# starts the song thread to get updated info
 
 picCyclerThread = Background(picCycleList, picCycleType, picCycleList, pictureQueue)
 # creates the picture cycler
