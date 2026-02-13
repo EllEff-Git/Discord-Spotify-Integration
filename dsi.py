@@ -1,7 +1,13 @@
 import pandas as pd
+# Required for all the CSV parsing and data grabbing
 import numpy as np
-import os, time, configparser, spotipy, random, threading, queue
+# Required for checking datatype from CSV
+import os, time, configparser, random, threading, queue
+# Required for background tasks, timestamps, config reading, directory check
+import spotipy
+# Required for basic function of Spotify data request
 from spotipy.oauth2 import SpotifyOAuth
+# Required for authorizing with Spotify
 
 
 
@@ -13,12 +19,14 @@ SHAAdir = "../Data/CSV/grouped.csv"
 
 Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
 # sets up the config reader
-Config.read('./testconfig.ini', "utf8")
+Config.read("./testconfig.ini", "utf8")
 # reads from the config, saves values below (testconfig in use for debug) <------------------------------------
 
 
 
-### Config section - Pulls config info from config.ini
+### Config section - Pulls config options from config.ini ###
+
+
 
 # [Required]
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
@@ -27,7 +35,12 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
 
 # [Function]
-refreshTime = int(Config.get("Function", "time_between_refresh"))
+refreshTime = int(Config.get("Function", "time_Between_Refresh"))
+if refreshTime < 5:
+    # if the refresh time is set too low, overrides to safe minimum of 5s
+    refreshTime = 5
+enablePause = Config.getboolean("Function", "enable_Pause_Behavior")
+pauseStateText = Config.get("Function", "pause_Behavior_Text")
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
@@ -38,18 +51,18 @@ songNameSpacerL = Config.get("Song-Style", "song_Spacer_Left")
 songNameSpacerR = Config.get("Song-Style", "song_Spacer_Right")
 
 # [Song-Format]
-preText = Config.get("Song-Format", "preText")
-postText = Config.get("Song-Format", "postText")
+preText = Config.get("Song-Format", "pre_Text")
+postText = Config.get("Song-Format", "post_Text")
 enableSong = Config.getboolean("Song-Format", "enable_Song")
 enableArtist = Config.getboolean("Song-Format", "enable_Artist")
 enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 
 # [Pictures]
-picCycleList = (Config.get("Pictures", "pictures_to_cycle").replace('"', '')).split(", ")
-picCycleTime = int(Config.get("Pictures", "picture_cycle_time"))
-picCycleType = Config.get("Pictures", "picture_cycle_behavior")
-smallPic = Config.get("Pictures", "small_picture_name").replace('"', '')
-hoverText = Config.get("Pictures", "text_on_small_hover")
+picCycleList = (Config.get("Pictures", "pictures_To_Cycle").replace('"', '')).split(", ")
+picCycleTime = int(Config.get("Pictures", "picture_Cycle_Time"))
+picCycleType = Config.get("Pictures", "picture_Cycle_Behavior")
+smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
+hoverText = Config.get("Pictures", "text_On_Small_Hover")
 
 # [SHAA-Song-Info]
 shaalessPlaycount = shaalessPlaytime = shaalessTotalTime = Config.get("SHAA-Song-Info", "song_Info_Empty_Field")
@@ -62,22 +75,25 @@ songInfoHourDoubleSpace = Config.getboolean("SHAA-Song-Info", "song_Info_Double_
 
 
 
-# Picture Queue
+# Picture Queue #
 pictureQueue = queue.Queue()
 # creates an empty queue for pictures from picCycler to get sent to
 
-# Event Thread
+# Event Thread #
 event = threading.Event()
 # creates an empty threading event list
 
-# Auth String
+# Auth String #
 main = spotipy.Spotify(auth_manager = SpotifyOAuth(scope = "user-read-playback-state", client_id = sp_client_ID, client_secret = sp_client_secret, redirect_uri = sp_redirect))
 # handles the authentication and user identification on start
 
+# URL List #
 spotifyURLlist = ["track", "album", "artist", "playlist", "Track", "Album", "Artist", "Playlist"]
-# makes a list of all the possible options for spotifyURL
+# makes a list of all the possible options for spotify URL types
 
+# Picture Cycling Methods #
 pictureBehaviorList = ["random", "sequence", "once", "none", "Random", "Sequence", "Once", "None"]
+# makes a list of all the possible options for picture cycling types
 
 
 
@@ -124,7 +140,6 @@ class Background(threading.Thread):
             if picCycleType in pictureBehaviorList and len(picCycleList) >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
                 if picCycleType == "Random" or picCycleType == "random":
-                    print(picCycleList)
                     # if the selected method is "Random"
                     i = random.randint(0,(len(picCycleList)-1))
                     # picks a random number based on list length
@@ -201,7 +216,10 @@ def song(pictureQueue):
             # checks pictureQueue to see if it has something
             cppLargeImage = pictureQueue.get()
             # stores the picture from pictureQueue as c++LargeImage
-        
+
+        songNameList = []
+        # creates an empty list for strings to get added into as the loop progresses 
+
         csFull = main.current_playback()
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
@@ -228,11 +246,22 @@ def song(pictureQueue):
         csUnixEnd = (csUnixStart + csLength)
         # stores the end time of the song (by adding up the start + duration)
 
+        csPauseState = bool(csFull.get("is_playing"))
+        # grabs the playback state (true/false)
+
+        if enablePause and not csPauseState:
+            # if the pause behavior is enabled and the playback state is false (paused)
+                csUnixStart = 0
+                csUnixEnd = 0
+                # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
+                songNameList.append(pauseStateText)
+                # adds the paused state pretext to the list of strings
+
         cstrackURL = csItem.get("external_urls")
         # stores the list that contains track's url
-        csAlbumURL = csAlbum.get("uri") 
+        csAlbumLinks = csAlbum.get("external_urls") 
         # stores the list that contains album url
-        csArtistURL = csArtists[0].get("uri")
+        csArtistLinks = csArtists[0].get("external_urls")
         # stores the list that contains artist's url
         csPlaylist = csFull.get("context")
         # stores the list that contains the playlist url
@@ -259,12 +288,12 @@ def song(pictureQueue):
 
             elif spotifyURL == "album" or spotifyURL == "Album":
                 # if the config option for url type is set to album
-                csURL = csAlbumURL
+                csURL = csAlbumLinks.get("spotify")
                 # takes the album's URL
 
             elif spotifyURL == "artist" or spotifyURL == "Artist":
                 # if the config option for url type is set to artist
-                csURL = csArtistURL
+                csURL = csArtistLinks.get("spotify")
                 # takes the artist's URL
 
             elif spotifyURL == "playlist" or spotifyURL == "Playlist":
@@ -348,8 +377,6 @@ def song(pictureQueue):
 
         SNSL = True
         # sets a temp flag
-        songNameList = []
-        # creates a list where the strings are stored
 
         if not preText == "":
             # if preText has something
@@ -410,7 +437,9 @@ def song(pictureQueue):
 
 
 
-        ### Text File Writer ###
+        ### C++ Text File Writer ###
+
+
 
         cppFull = (
                     "songName = " + cppSongName + "\n" + 
@@ -434,11 +463,15 @@ def song(pictureQueue):
 
 
 
+### Information Checking Loop ###
+
+
+
 currentSong = None
 # makes the currentSong empty outside the looper so the loop can start and not make it "None" every time its run
 
 def looper():
-    # this loop checks if the song playing is the same as the previous update, does nothing if yes, updates the song to match if not
+    # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
     info = main.current_playback()
     # picks up all the info Spotify sends in an update
     songName = (info.get("item")).get("name")
@@ -481,7 +514,10 @@ def looper():
 
 
 
-### runs at script start:
+### First Load Commands ###
+
+# debug = main.current_playback()
+# print(debug)
 
 songThread = threading.Thread(target=song, args=(pictureQueue,))
 # creates the song thread
