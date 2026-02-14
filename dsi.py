@@ -2,8 +2,8 @@ import pandas as pd
 # Required for all the CSV parsing and data grabbing
 import numpy as np
 # Required for checking datatype from CSV
-import os, time, configparser, random, threading, queue
-# Required for background tasks, timestamps, config reading, directory check
+import os, time, configparser, random, threading, queue, sys, subprocess
+# Required for background tasks, timestamps, config reading, directory checking, C++ executing
 import spotipy
 # Required for basic function of Spotify data request
 from spotipy.oauth2 import SpotifyOAuth
@@ -11,20 +11,50 @@ from spotipy.oauth2 import SpotifyOAuth
 
 
 
-# all this will be deleted and the "devDir" will be replaced by the mainDir's path below
-devDir = "S:/Spotify Analyzer/Data/CSV/grouped.csv"
-# the directory used during development (will be deleted)
-SHAAdir = "../Data/CSV/grouped.csv"
-# the directory used after installation (this addon installs into Spotify Analyzer/DSI/)  <---------------------------------------
+### Setup Section ###
+
+
+
+if getattr(sys, 'frozen', False):
+    # bundled with pyInstaller, so it's "frozen"
+    directory = os.path.dirname(sys.executable)
+    # gets the base directory of the program, where the python .exe resides
+else:
+    # if somehow not in a bundled state
+    directory = os.path.dirname(__file__)
+    # gets the base directory of the program, where the python .exe resides
 
 Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
 # sets up the config reader
-Config.read("./testconfig.ini", "utf8")
-# reads from the config, saves values below (testconfig in use for debug) <------------------------------------
+ConfigPath = os.path.join(directory, "config.ini")
+# calls the pathFinder to give the location of "config.ini"
+Config.read(ConfigPath, "utf8")
+# reads from the config, saves values below
+
+idDir = os.path.join(directory, "Discord", "ids.txt")
+# the directory where ids.txt should/will live (inside DSI\Discord\ids.txt)
+songDataDir = os.path.join(directory, "Discord", "songData.txt")
+# the directory where songData.txt should/will live (inside DSI\Discord\songData.txt)
+SHAAdir = os.path.join(directory, "..", "Data", "CSV", "grouped.csv")
+# the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)
+cppExe = "DSIdiscord.exe"
+# name of the C++ exe file
+cppPath = os.path.join(directory, "Discord", cppExe)
+# the full path to the C++ exe
+cppDir = os.path.dirname(cppPath) 
+# the directory the c++ exe lives in
+
+print("Starting DSI\n")
+# quick user update on status
+
+if os.path.isfile(SHAAdir):
+    # if the grouped.csv file exists
+    print("Spotify Analyser functionality enabled\n")
+    # informs user SHAA is enabled
 
 
 
-### Config section - Pulls config options from config.ini ###
+### Config Section ###
 
 
 
@@ -41,6 +71,7 @@ if refreshTime < 5:
     refreshTime = 5
 enablePause = Config.getboolean("Function", "enable_Pause_Behavior")
 pauseStateText = Config.get("Function", "pause_Behavior_Text")
+enableUpdates = Config.getboolean("Function", "print_Updates")
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
@@ -65,7 +96,7 @@ smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
 hoverText = Config.get("Pictures", "text_On_Small_Hover")
 
 # [SHAA-Song-Info]
-shaalessPlaycount = shaalessPlaytime = shaalessTotalTime = Config.get("SHAA-Song-Info", "song_Info_Empty_Field")
+shaalessField = Config.get("SHAA-Song-Info", "song_Info_Empty_Field")
 songInfoField1 = Config.get("SHAA-Song-Info", "song_Info_First_Field")
 songInfoField2 = Config.get("SHAA-Song-Info", "song_Info_Second_Field")
 songInfoSpacer = Config.get("SHAA-Song-Info", "song_Info_Spacer")
@@ -74,6 +105,20 @@ songInfoFormatMins = Config.get("SHAA-Song-Info", "song_Info_Format_Mins")
 songInfoFormatHours = Config.get("SHAA-Song-Info", "song_Info_Format_Hours")
 songInfoFormatHourSpacer = Config.get("SHAA-Song-Info", "song_Info_Format_Hour_Spacer")
 songInfoHourDoubleSpace = Config.getboolean("SHAA-Song-Info", "song_Info_Double_Space")
+
+
+
+print("Configuration loaded\n")
+# another quick user update
+
+if not enableUpdates:
+    # if console printing is disabled in config
+    print("Console updates disabled in config (print_Updates), working silently\n")
+    # prints a quick warning
+
+
+
+### Variable Section ###
 
 
 
@@ -105,11 +150,13 @@ pictureBehaviorList = ["random", "sequence", "once", "none", "Random", "Sequence
 
 def idWriter():
     # the function used to write the ids.txt file
-    with open("ids.txt", "w", encoding="utf-8") as txt:
+    with open(idDir, "w", encoding="utf-8") as txt:
     # opens the ids text file
         content = ("Discord Application ID = " + dc_app_ID + "\n" + "Small Image Filename = " + smallPic + "\n" + "Refresh Time = " + str(refreshTime))
         # makes a string from the relevant config options
         txt.write(content)
+        if enableUpdates:
+            print("ID file written\n")
         # writes the string to ids.txt at program launch
 
 
@@ -141,6 +188,7 @@ class Background(threading.Thread):
 
             if picCycleType in pictureBehaviorList and len(picCycleList) >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
+
                 if picCycleType == "Random" or picCycleType == "random":
                     # if the selected method is "Random"
                     i = random.randint(0,(len(picCycleList)-1))
@@ -153,6 +201,7 @@ class Background(threading.Thread):
                     # sends an event that tells song() to process
                     time.sleep(60 * picCycleTime)
                     # sleeps until it's time to change pictures
+                    print("Updating picture\n")
 
                 if picCycleType == "Sequence":
                     # if the selected method is "Sequence"
@@ -166,6 +215,7 @@ class Background(threading.Thread):
                         # sends an event that tells song() to process
                         time.sleep(60 * picCycleTime)
                         # sleeps until it's time to change pictures
+                        print("Updating picture\n")
 
                 if picCycleType == "Once":
                     i = random.randint(0,(len(picCycleList)-1))
@@ -203,6 +253,21 @@ class Background(threading.Thread):
 
 
 
+### C++ ###
+
+
+
+def runCpp():
+    # the C++ starter
+    with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as cppPrint:
+        # opens the C++ exe, passes a directory and takes output from it
+        for line in cppPrint.stdout:
+            # every time the C++ file prints something, this program takes it
+            print(line, end="")
+            # prints it after a line ends
+
+
+
 ### Picture Queue ###
 
 
@@ -220,6 +285,12 @@ def song(pictureQueue):
             # stores the picture from pictureQueue as c++LargeImage
 
         songNameList = []
+        # creates an empty list for strings to get added into as the loop progresses 
+
+        songStuffList = []
+        # creates an empty list for strings to get added into as the loop progresses
+
+        cppHoursList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
         csFull = main.current_playback()
@@ -314,14 +385,48 @@ def song(pictureQueue):
 
 
 
-        ### Spotify (History) Analyser Addon Functionality ###
+        ### Field Selection and String Merging ###
 
-        if os.path.exists(devDir):
-            # this is the addon part to Spotify (History) Analyser (SHA + addon = shaa)
+
+
+        ### SHAAless Behavior ###
+
+        if not os.path.isfile(SHAAdir):
+            # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
+            shaaPlaycount = shaalessField
+            # replaces playcount with user defined field
+            if shaalessField:
+                # only adds the playcount if it's not empty
+                songStuffList.append(shaaPlaycount)
+            # adds the playcount to list
+            if songInfoFormatPlays:
+                # only adds the format if it's not empty
+                songStuffList.append(songInfoFormatPlays)
+                # adds the user defined field 1 format to list
+            songStuffList.append(songInfoSpacer)
+            # adds the spacer to list
+            shaaPlaytime = shaalessField
+            # replaces playtime with user defined field
+            if shaalessField:
+                # only adds the playtime if it's not empty
+                songStuffList.append(shaaPlaytime)
+            # adds the playtime to list
+            if songInfoFormatMins:
+                # only adds the format if it's not empty
+                songStuffList.append(songInfoFormatMins)
+                # adds the user defined field 2 format to list
+
+            shaaTotalTime = shaalessField
+            # replaces total hours with user defined field
+
+        ### SHAA Behavior ###
+
+        if os.path.isfile(SHAAdir):
+            # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
             # this data is only entered to rich presence if used with SHA (and installed correctly)
             # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
 
-            csvReader = pd.read_csv(devDir, index_col=0)
+            csvReader = pd.read_csv(SHAAdir, index_col=0)
             # opens the CSV file and uses column 0 as index (track names)
 
             if csName in csvReader.index:
@@ -333,20 +438,37 @@ def song(pictureQueue):
                     # if the selected type for first field is Track
                     if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
+                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f} "
                         # finds total times the song has been played, turns into formatted string
+                        songStuffList.append(shaaPlaycount)
+                        # adds to string list
 
                     elif isinstance(csvReader.loc[csName, "Playcount"], pd.Series):
                         # if there's more than one instance of the same song, calculates playcount for all instances
                         pcVar = csvReader.loc[csName, "Playcount"]
                         # finds all instances of total times the song has been played
-                        shaaPlaycount = f"{pcVar.sum():,.0f}"
+                        shaaPlaycount = f"{pcVar.sum():,.0f} "
                         # finds total number of plays for all instances of current track, turns into string
+                        songStuffList.append(shaaPlaycount)
+                        # adds to string list
 
                 if songInfoField1 == "Total":
                     # if the selected type for the first field is Total
-                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f} "
                     # adds up *all* the playcounts for all tracks
+                    songStuffList.append(shaaPlaycount)
+
+                else: 
+                    # if the songInfoField1 is something else
+                    shaaPlaycount = ""
+                    songStuffList.append(shaaPlaycount)
+
+                songStuffList.append(songInfoFormatPlays)
+                # adds the first field's custom styling
+
+                ### Spacer ###
+
+                songStuffList.append(songInfoSpacer)
 
                 ### Field 2 ###
 
@@ -354,60 +476,62 @@ def song(pictureQueue):
                     # if the selected type for the second field is Track
                     if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
-                        # finds total time played (min) for current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
+                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f} "
+                        # finds total time played (min) for current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
+                        songStuffList.append(shaaPlaytime)
+                        # adds to string list
 
                     elif isinstance(csvReader.loc[csName, "Total Time"], pd.Series):
                         # if there's more than one instance of the same song, calculates playtime for all instances
                         ttVar = csvReader.loc[csName, "Total Time"]
-                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f}"
-                        # finds total time played (min) for all instances of current song (milliseconds/1000 = seconds / 60 = minutes), turns into a formatted string
-                
+                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f} "
+                        # finds total time played (min) for all instances of current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
+                        songStuffList.append(shaaPlaytime)
+                        # adds to string list
+
                 if songInfoField2 == "Total":
                     # if the selected type for the first field is Total
-                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f} "
                     # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
+                    songStuffList.append(shaaPlaytime)
+                    # adds to string list
+                else:
+                    # if it doesn't match either, makes it an empty string
+                    shaaPlaytime = ""
+                    songStuffList.append(shaaPlaytime)
+                    # adds to string list
+
+                ### Total Hours ###
+
+                shaaTotalTime =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
+                # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
 
             ### No Track Match ###
 
             else:
                 # in case the song has never been played before (or doesn't appear in the CSV)
-                shaaPlaycount = "0"
-                shaaPlaytime = "0"
+                shaaPlaycount = "0 "
+                shaaPlaytime = "0 "
                 # makes the playcount and playtime for that song 0
 
-            ### Total Hours ###
+            
 
-            shaaTotalTime =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
-            # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+        ### Song Stuff String Joiner ###
 
-            ### String Joiner ###
 
-            cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
-            # joins together the playcount and time
-            # default appearance: " 1,234 plays ※ 5,678 minutes "
 
-        ### No SHAA ###
-
-        else:
-            # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
-            shaaPlaycount = shaalessPlaycount
-            shaaPlaytime = shaalessPlaytime
-            shaaTotalTime = shaalessTotalTime
-            # gives them string values based on user configured input 
-
-            ### String Joiner SHAAless ###
-
-            cppSongStuff = (shaaPlaycount + " " + songInfoFormatPlays + " " + songInfoSpacer + " " + shaaPlaytime + " " + songInfoFormatMins)
-            # joins together the song information without Spotify Analyser
-            # default appearance: " N/A plays ※ N/A minutes " , " Total Hours: N/A "
+        cppSongStuff = " ".join(songStuffList)
+        # joins together the song information
+        # default appearance: " N/A plays ※ N/A minutes " , " Total Hours: N/A "
 
 
 
         ### Song Style ###
 
+
+
         SNSL = True
-        # sets a temp flag
+        # sets a temp flag for the left spacer, just so it can't get double printed
 
         if not preText == "":
             # if preText has something
@@ -418,18 +542,23 @@ def song(pictureQueue):
             # if song is enabled
             songNameList.append(csName)
             # adds to string
-            if not songNameSpacerL == "":
-                # if songNameSpacerL(eft) has something
-                songNameList.append(songNameSpacerL)
-                # adds to string
+            if songNameSpacerL:
+                # if songNameSpacerL(eft) isn't empty
                 SNSL = False
-                # sets the requirement to add Left Spacer to false, so that it doesn't get added again
+                # sets the requirement to add Left Spacer to false, so that it doesn't get added
+                if (enableArtist or enableAlbum) or (enableArtist and enableAlbum):
+                    # if artist OR album is enabled, OR if both are enabled (aka there's *something* after)
+                    songNameList.append(songNameSpacerL)
+                    # adds the left spacer, since there's something to the right of it
+                else:
+                    # if there's nothing after, doesn't add the spacer
+                    None
 
         if enableArtist:
             # if artist is enabled
             songNameList.append(csArtist)
             # adds to string
-            if not songNameSpacerL == "" and SNSL:
+            if songNameSpacerL and SNSL:
                 # if songNameSpacerL(eft) has something and isn't already in
                 songNameList.append(songNameSpacerL)
                 # adds to string
@@ -455,16 +584,30 @@ def song(pictureQueue):
             # adds to string
 
         cppSongName = " ".join(songNameList)
-        # takes the list of strings from above and joins it together
+        # takes the list of strings from above and joins it together 
+
+        ### Total Hours ###
+
+        if songInfoFormatHours:
+            # if the format option isn't empty
+            cppHoursList.append(songInfoFormatHours)
+            # adds to string list
 
         if songInfoHourDoubleSpace:
-            # if the space around the hour spacer is enabled on both sides
-            cppHours = (songInfoFormatHours + " " + songInfoFormatHourSpacer + " " + shaaTotalTime)
-            # creates a short string for total hours (space on both sides )
-        else:
-            cppHours = (songInfoFormatHours + songInfoFormatHourSpacer + " " + shaaTotalTime)
-            # creates a short string for total hours (space only on the right)
+            # if the double space is enabled
+            cppHoursList.append(" ")
+            # adds an empty space
 
+        if songInfoFormatHourSpacer:
+            # if the format spacer option isn't empty
+            cppHoursList.append(songInfoFormatHourSpacer + " ")
+            # adds to string list
+
+        cppHoursList.append(shaaTotalTime)
+        # total time is unavoidable, adds to end
+
+        cppHours = "".join(cppHoursList)
+        # joins together the total hours list of strings
 
 
         ### C++ Text File Writer ###
@@ -482,14 +625,16 @@ def song(pictureQueue):
                     "UNIXstart = " + str(csUnixStart) + "\n" +
                     "UNIXend = " + str(csUnixEnd)
                     )
+        # merges all the song information together
 
-        with open("songData.txt", "w", encoding="utf-8") as txt:
+        with open(songDataDir, "w", encoding="utf-8") as txt:
             # opens the songData text file
             txt.write(cppFull)
             # writes the full song information to the text file, which is read by the C++ program and then sent to Discord RPC
-
+            if enableUpdates:
+                print("Song data file updated\n")
         event.clear()
-        # clears the event queue
+        # clears the event queue, ready to get new requests
 
 
 
@@ -510,8 +655,12 @@ def looper():
     if currentSong is None:
         # when the program first starts, the currentSong will be "None", this updates it
         currentSong = songName
-        # since this only runs when the program first starts, calls the song updater right away
+        if enableUpdates:
+            print("First song processed\n")
+            # if user wants feedback, sends this
+        # calls for the C++ program to start as a subprocess of this program, passing its output
         event.set()
+        # since this only runs when the program first starts, sets an event immediately
     songProg = (info.get("progress_ms"))
     songDur = (info.get("item")).get("duration_ms")
     # grabs both the current time and length of the song (in milliseconds)
@@ -520,7 +669,8 @@ def looper():
 
     if currentSong == songName:
         # current song is the same as the last time
-        print("the song is still the same for", songLeft, "seconds")
+        if enableUpdates:
+            print("The song changes in", songLeft, "seconds", "\n")
         if songLeft > refreshTime:
             time.sleep(refreshTime)
             # sleeps for as long as the config setting sets
@@ -532,7 +682,8 @@ def looper():
 
     if currentSong != songName:
         # song is not the same as it was last time it was checked
-        print("new song - re-running")
+        if enableUpdates:
+            print("New song found, writing file\n")
         event.set()
         # starts the song status updater
         currentSong = songName
@@ -544,21 +695,43 @@ def looper():
 
 
 
-### First Load Commands ###
+### Load Commands ###
+
+
+
+idWriter()
+# runs the idWriter, which writes the ids.txt file
 
 songThread = threading.Thread(target=song, args=(pictureQueue,))
 # creates the song thread
 songThread.start()
 # starts the song thread to get updated info
 
+cppThread = threading.Thread(target = runCpp)
+# creates a thread for the C++ program
+
 picCyclerThread = Background(picCycleList, picCycleType, picCycleList, pictureQueue)
 # creates the picture cycler
 
-idWriter()
-# runs the idWriter, which writes the ids.txt file
-
 picCyclerThread.start()
 # runs the picture cycler thread
+
+if dc_app_ID and sp_client_ID:
+    # if both the Application ID and Spotify Client ID are found (only these 2 because the odds of user adding only 1 Spotify argument of 3 seems low)
+    print("Found Application ID and Spotify Client ID, starting Discord RPC process\n")
+    # user inform
+    time.sleep(2)
+    # waits a couple seconds
+    cppThread.start()
+    # starts the C++ thread
+elif not dc_app_ID and not sp_client_ID:
+    # if discord and/or spotify client ids not found
+    print("Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...")
+    # user inform
+    time.sleep(5)
+    # wait 5 seconds
+    raise SystemExit
+    # end the program, can't really do much without AppID/Spotify Client ID
 
 looper()
 # runs the looper, which manages the song refresh cycles
