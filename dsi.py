@@ -6,7 +6,7 @@ import os, time, configparser, random, threading, queue, sys, subprocess
 # Required for background tasks, timestamps, config reading, directory checking, C++ executing
 import spotipy
 # Required for basic function of Spotify data request
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyPKCE
 # Required for authorizing with Spotify
 
 
@@ -60,7 +60,6 @@ if os.path.isfile(SHAAdir):
 
 # [Required]
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
-sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
 sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
 
@@ -127,11 +126,16 @@ pictureQueue = queue.Queue()
 # creates an empty queue for pictures from picCycler to get sent to
 
 # Event Thread #
-event = threading.Event()
-# creates an empty threading event list
+songEvent = threading.Event()
+# creates an empty threading event list for song
 
-# Auth String #
-main = spotipy.Spotify(auth_manager = SpotifyOAuth(scope = "user-read-playback-state", client_id = sp_client_ID, client_secret = sp_client_secret, redirect_uri = sp_redirect))
+picEvent = threading.Event()
+# creates an empty threading event list for picturecycler 
+
+# Auth #
+authorization = SpotifyPKCE(scope = "user-read-playback-state", client_id = sp_client_ID, redirect_uri = sp_redirect, open_browser=True)
+# the argument for auth_manager, containing the variables from config and scope
+main = spotipy.Spotify(auth_manager = authorization)
 # handles the authentication and user identification on start
 
 # URL List #
@@ -142,6 +146,12 @@ spotifyURLlist = ["track", "album", "artist", "playlist", "Track", "Album", "Art
 pictureBehaviorList = ["random", "sequence", "once", "none", "Random", "Sequence", "Once", "None"]
 # makes a list of all the possible options for picture cycling types
 
+pauseStart = None
+# makes a starter variable for when a pause occurred
+
+cppLargeImage = ""
+# makes an empty image string, in case it fails to make first load
+
 
 
 ### Id Writer ###
@@ -149,6 +159,7 @@ pictureBehaviorList = ["random", "sequence", "once", "none", "Random", "Sequence
 
 
 def idWriter():
+    """Function for writing the ids.txt file"""
     # the function used to write the ids.txt file
     with open(idDir, "w", encoding="utf-8") as txt:
     # opens the ids text file
@@ -166,6 +177,7 @@ def idWriter():
 
 
 class Background(threading.Thread):
+    """Background thread for picture selection"""
 # a class to use background tasking, this way the pictures can cycle outside the main song loop
     def __init__(self, picCycleList, picCycleType, picCycleTime, pictureQueue):
         super().__init__()
@@ -177,55 +189,71 @@ class Background(threading.Thread):
         # "turns on" the thread
 
     def run(self):
-        # creates a starter for picCycler
-        while self.running:
-        # runs the picCycler while the thread is active
-            self.picCycler()
+        # starts up the function
+        picEvent.set
+        # runs once at start up, giving the event queue 1 task to start with
+
+    def resumePic(self):
+        """Function that adds an event to picturecycler's work queue"""
+        picEvent.set()
 
     def picCycler(self):
-    # the function used to cycle pictures (and/or set one)
-        while True:
+        """Tthe function used to cycle pictures (and/or set one)"""
+
+        while True:     
+        # this function only runs if true, some of the methods below will end it after one cycle
+
+            picEvent.wait()
+            # waits for an event in the picture queue (just makes sure there's a task to be done)
 
             if picCycleType in pictureBehaviorList and len(picCycleList) >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
 
                 if picCycleType == "Random" or picCycleType == "random":
                     # if the selected method is "Random"
-                    i = random.randint(0,(len(picCycleList)-1))
-                    # picks a random number based on list length
+                    i = random.randint(0, (len(picCycleList) -1))
+                    # picks a random number based on list length (lists start at 0, so -1 to length for position)
                     cppLargeImage = picCycleList[i]
                     # chooses the element with the random number
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
-                    event.set()
+                    songEvent.set()
                     # sends an event that tells song() to process
+                    if enableUpdates:
+                        print("Picture set\n")
                     time.sleep(60 * picCycleTime)
                     # sleeps until it's time to change pictures
-                    print("Updating picture\n")
+                    picEvent.clear()
+                    # removes the queue
 
                 if picCycleType == "Sequence":
                     # if the selected method is "Sequence"
-                    for i in range(0, (len(picCycleList)-1)):
-                    # repeats this loop for every element in the list (sleeping in between)
+                    for i in range(0, (len(picCycleList) -1)):
+                    # repeats this loop for every element in the list (lists start at 0, so -1 to length for position)
                         cppLargeImage = picCycleList[i]
                         # selects the picture from the list one by one
                         self.pictureQueue.put(cppLargeImage)
                         # sends the picture to a queue that then reaches song()
-                        event.set()
+                        songEvent.set()
                         # sends an event that tells song() to process
+                        if enableUpdates:
+                            print("Picture set\n")
                         time.sleep(60 * picCycleTime)
                         # sleeps until it's time to change pictures
-                        print("Updating picture\n")
+                        picEvent.clear()
+                        # removes the queue
 
                 if picCycleType == "Once":
-                    i = random.randint(0,(len(picCycleList)-1))
+                    i = random.randint(0, (len(picCycleList) -1))
                     # picks a random number based on list length
                     cppLargeImage = picCycleList[i]
                     # chooses the element with the random number
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
-                    event.set()
+                    songEvent.set()
                     # sends an event that tells song() to process
+                    if enableUpdates:
+                        print("Random picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -235,8 +263,10 @@ class Background(threading.Thread):
                     # chooses the first picture
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
-                    event.set()
+                    songEvent.set()
                     # sends an event that tells song() to process
+                    if enableUpdates:
+                        print("Picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -246,10 +276,35 @@ class Background(threading.Thread):
                 # sets the picture to nothing (empty shouldn't break Discord)
                 self.pictureQueue.put(cppLargeImage)
                 # sends the picture to a queue that then reaches song()
-                event.set()
+                songEvent.set()
                 # sends an event that tells song() to process
+                if enableUpdates:
+                    print("Invalid picture cycle behavior or no picture set\n")
                 self.running = False
-                # doesn't really set a picture, so it stops the background thread
+                # doesn't set a picture, doesn't need to - so it stops the background thread
+
+
+
+
+### Spotify Auth Check ###
+
+
+
+def spotifyAuth(func, *args, **kwargs):
+    """Function to check token validity and pass API calls"""
+    try:
+        # if the token works
+        return func(*args, **kwargs)
+        # calls the given function (spotify main) with original arguments
+    except spotipy.exceptions.SpotifyException as fail:
+        # if the "try" fails
+        if fail.http_status == 401:
+            # if it failed because of a 401 error (token expiration)
+            return func(*args, **kwargs)
+            # calls the given function (spotify main) with original arguments
+        else:
+            raise
+            
 
 
 
@@ -258,7 +313,7 @@ class Background(threading.Thread):
 
 
 def runCpp():
-    # the C++ starter
+    """Function to start the C++ .exe"""
     with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as cppPrint:
         # opens the C++ exe, passes a directory and takes output from it
         for line in cppPrint.stdout:
@@ -273,10 +328,10 @@ def runCpp():
 
 
 def song(pictureQueue):
-# the function used to handle all the song data gathering and parsing, as well as pushing to C++ via text
+    """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
     while True:
 
-        event.wait()
+        songEvent.wait()
         # waits for looper() (or picCycler) to set an event
 
         if not pictureQueue.empty():
@@ -293,7 +348,7 @@ def song(pictureQueue):
         cppHoursList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
-        csFull = main.current_playback()
+        csFull = spotifyAuth(main.current_playback)
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
@@ -319,16 +374,35 @@ def song(pictureQueue):
         csUnixEnd = (csUnixStart + csLength)
         # stores the end time of the song (by adding up the start + duration)
 
-        csPauseState = bool(csFull.get("is_playing"))
+        csPlayState = bool(csFull.get("is_playing"))
         # grabs the playback state (true/false)
 
-        if enablePause and not csPauseState:
-            # if the pause behavior is enabled and the playback state is false (paused)
-                csUnixStart = 0
-                csUnixEnd = 0
-                # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
-                songNameList.append(pauseStateText)
-                # adds the paused state pretext to the list of strings
+        if not csPlayState:
+            # if the song is paused
+            global pauseStart
+            # takes the pauseStart from global variable to local
+            if pauseStart is None:
+                # if there's no set pause time
+                pauseStart = time.time()
+                # sets the pause time to current time
+            csUnixStart = 0
+            csUnixEnd = 0
+            # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
+        else:
+            # song is playing
+            if pauseStart is not None:
+                # if there's a set pause time from before
+                pauseDuration = time.time() - pauseStart
+                # calculates the time spent on pause
+                csUnixStart += (pauseDuration * 1000)
+                csUnixEnd += (pauseDuration * 1000)
+                # sets the start and end times to match the time spent paused
+                pauseStart = None
+                # resets the pauseStart to None, so it can get checked again
+        if enablePause and not csPlayState:
+            # if the pause behavior is enabled and song paused
+            songNameList.append(pauseStateText)
+            # adds the pause text as the first string in the list (since it goes first)
 
         cstrackURL = csItem.get("external_urls")
         # stores the list that contains track's url
@@ -374,7 +448,7 @@ def song(pictureQueue):
                 if onPlaylist == False:
                     # the user isn't playing a playlist, but has selected the playlist url config option
                     csURL = smallURL
-                    # sets it to my website as a fallback
+                    # sets it to smallURL as a fallback
                 elif onPlaylist == True:
                     csURL = csPlaylistURL.get("spotify")
                     # takes the playlist's URL
@@ -438,7 +512,7 @@ def song(pictureQueue):
                     # if the selected type for first field is Track
                     if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f} "
+                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
                         # finds total times the song has been played, turns into formatted string
                         songStuffList.append(shaaPlaycount)
                         # adds to string list
@@ -447,14 +521,14 @@ def song(pictureQueue):
                         # if there's more than one instance of the same song, calculates playcount for all instances
                         pcVar = csvReader.loc[csName, "Playcount"]
                         # finds all instances of total times the song has been played
-                        shaaPlaycount = f"{pcVar.sum():,.0f} "
+                        shaaPlaycount = f"{pcVar.sum():,.0f}"
                         # finds total number of plays for all instances of current track, turns into string
                         songStuffList.append(shaaPlaycount)
                         # adds to string list
 
                 if songInfoField1 == "Total":
                     # if the selected type for the first field is Total
-                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f} "
+                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
                     # adds up *all* the playcounts for all tracks
                     songStuffList.append(shaaPlaycount)
 
@@ -476,7 +550,7 @@ def song(pictureQueue):
                     # if the selected type for the second field is Track
                     if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f} "
+                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
                         # finds total time played (min) for current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
                         songStuffList.append(shaaPlaytime)
                         # adds to string list
@@ -484,14 +558,14 @@ def song(pictureQueue):
                     elif isinstance(csvReader.loc[csName, "Total Time"], pd.Series):
                         # if there's more than one instance of the same song, calculates playtime for all instances
                         ttVar = csvReader.loc[csName, "Total Time"]
-                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f} "
+                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f}"
                         # finds total time played (min) for all instances of current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
                         songStuffList.append(shaaPlaytime)
                         # adds to string list
 
                 if songInfoField2 == "Total":
                     # if the selected type for the first field is Total
-                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f} "
+                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
                     # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
                     songStuffList.append(shaaPlaytime)
                     # adds to string list
@@ -501,6 +575,11 @@ def song(pictureQueue):
                     songStuffList.append(shaaPlaytime)
                     # adds to string list
 
+                if songInfoFormatMins:
+                    # only adds the format if it's not empty
+                    songStuffList.append(songInfoFormatMins)
+                    # adds the user defined field 2 format to list
+                    
                 ### Total Hours ###
 
                 shaaTotalTime =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
@@ -510,8 +589,8 @@ def song(pictureQueue):
 
             else:
                 # in case the song has never been played before (or doesn't appear in the CSV)
-                shaaPlaycount = "0 "
-                shaaPlaytime = "0 "
+                shaaPlaycount = "0"
+                shaaPlaytime = "0"
                 # makes the playcount and playtime for that song 0
 
             
@@ -633,8 +712,12 @@ def song(pictureQueue):
             # writes the full song information to the text file, which is read by the C++ program and then sent to Discord RPC
             if enableUpdates:
                 print("Song data file updated\n")
-        event.clear()
+        songEvent.clear()
         # clears the event queue, ready to get new requests
+
+
+
+
 
 
 
@@ -646,52 +729,81 @@ currentSong = None
 # makes the currentSong empty outside the looper so the loop can start and not make it "None" every time its run
 
 def looper():
-    # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
-    info = main.current_playback()
-    # picks up all the info Spotify sends in an update
-    songName = (info.get("item")).get("name")
-    # grabs the name of the currently playing song
+    """Function that checks song info on a loop"""
     global currentSong
-    if currentSong is None:
-        # when the program first starts, the currentSong will be "None", this updates it
-        currentSong = songName
-        if enableUpdates:
-            print("First song processed\n")
-            # if user wants feedback, sends this
-        # calls for the C++ program to start as a subprocess of this program, passing its output
-        event.set()
-        # since this only runs when the program first starts, sets an event immediately
-    songProg = (info.get("progress_ms"))
-    songDur = (info.get("item")).get("duration_ms")
-    # grabs both the current time and length of the song (in milliseconds)
-    songLeft = ((songDur-songProg) / 1000)
-    # calculates the time left on the song (in seconds)
+    while True:
+        # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
+        info = spotifyAuth(main.current_playback)
+        # picks up all the info Spotify sends in an update
 
-    if currentSong == songName:
-        # current song is the same as the last time
-        if enableUpdates:
-            print("The song changes in", songLeft, "seconds", "\n")
-        if songLeft > refreshTime:
-            time.sleep(refreshTime)
-            # sleeps for as long as the config setting sets
-            looper()
-        if songLeft <= refreshTime:
-            time.sleep(songLeft)
-            # if the song has less than the refresh time, only waits the remainder of the song
-            looper()
+        songName = (info.get("item")).get("name")
+        # grabs the name of the song, stores it
+        playing = info.get("is_playing")
+        # checks the pause state (True if playing, False if not)
 
-    if currentSong != songName:
-        # song is not the same as it was last time it was checked
+        if currentSong is None:
+            # when the program first starts, the currentSong will be "None", this updates it
+            currentSong = songName
+            if enableUpdates:
+                print("First song processed\n")
+                # if user wants feedback, sends this
+            # calls for the C++ program to start as a subprocess of this program, passing its output
+            picEvent.set()
+            # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture (breaks if none is set)
+            time.sleep(3)
+            # sometimes, the picture took more time than it had to pass to song, this gives it slightly more time
+            songEvent.set()
+            # since this only runs when the program first starts, sets an event immediately to song, to refresh data
+
+        songProg = (info.get("progress_ms"))
+        songDur = (info.get("item")).get("duration_ms")
+        # grabs both the current time and length of the song (in milliseconds)
+        songLeft = ((songDur-songProg) / 1000)
+        # calculates the time left on the song (in seconds)
+
+        if currentSong != songName:
+        # if there's a song change
+            if enableUpdates:
+                # if console updates are enabled
+                print(f"New song found: {songName}\n")
+                # user update
+                currentSong = songName
+                # changes the internal variable to match new song
+                songEvent.set()
+                # sets an event to make song() update the text file
+
+        songEvent.set()
+        # tells song() to update regardless
+
+        if not playing:
+        # if the song is paused
+            sleepfor = max(refreshTime, 5)
+            # sets the sleep timer to the higher of the two (never lets it go <5s)
+
+        else:
+        # if the current song is the same, and is not paused
+            if songLeft > refreshTime:
+                # checks if there's more song left than the refresh time is set to
+                sleepfor = min(songLeft, refreshTime)
+                # sleeps for the smaller amount of time between (time left in song) and (config set refresh time)
+                sleepfor = max(sleepfor, 5)
+                # makes sure the sleep doesn't go under 5 seconds (prevents crazy API pull rates and usage spikes)
+            else:
+                # if there's less song time left than refresh time (if refreshTime = 15, song will have to be <15)
+                sleepfor = max(songLeft, 5)
+                # sleeps for the minimum of 5 seconds
+
         if enableUpdates:
-            print("New song found, writing file\n")
-        event.set()
-        # starts the song status updater
-        currentSong = songName
-        # updates the current song to match
-        time.sleep(3)
-        # sleeps for a few seconds to let other parts work
-        looper()
-        # re-runs looper, which now has the new song name
+            # if config option for updates is on
+            if not playing:
+                # if the song is paused, informs user
+                print(f"Paused on: {songName}, checking again in {sleepfor} seconds\n")
+            else:
+                # if song is not paused, informs user
+                print(f"Song unchanged, checking again in {sleepfor} seconds\n")
+
+        time.sleep(sleepfor)
+        # sleeps for the determined time
 
 
 
@@ -702,7 +814,21 @@ def looper():
 idWriter()
 # runs the idWriter, which writes the ids.txt file
 
-songThread = threading.Thread(target=song, args=(pictureQueue,))
+bg = Background(picCycleList, picCycleType, picCycleTime, pictureQueue)
+# defines the background thread as the class containing all the picture function
+# passes the list, type, time and queue
+
+bg.start()
+# runs the "background" class, which handles the picture updates
+
+picThread = threading.Thread(target = bg.picCycler)
+# creates a thread for the picture changer
+picThread.start()
+# starts the thread
+
+
+
+songThread = threading.Thread(target = song, args=(pictureQueue,))
 # creates the song thread
 songThread.start()
 # starts the song thread to get updated info
@@ -710,23 +836,17 @@ songThread.start()
 cppThread = threading.Thread(target = runCpp)
 # creates a thread for the C++ program
 
-picCyclerThread = Background(picCycleList, picCycleType, picCycleList, pictureQueue)
-# creates the picture cycler
-
-picCyclerThread.start()
-# runs the picture cycler thread
-
 if dc_app_ID and sp_client_ID:
-    # if both the Application ID and Spotify Client ID are found (only these 2 because the odds of user adding only 1 Spotify argument of 3 seems low)
+    # if both the Application ID and Spotify Client ID are found
     print("Found Application ID and Spotify Client ID, starting Discord RPC process\n")
     # user inform
-    time.sleep(2)
-    # waits a couple seconds
+    time.sleep(3)
+    # waits a couple seconds to make sure all details are set before calling
     cppThread.start()
     # starts the C++ thread
-elif not dc_app_ID and not sp_client_ID:
-    # if discord and/or spotify client ids not found
-    print("Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...")
+else:
+    # if both aren't found
+    print("Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...\n")
     # user inform
     time.sleep(5)
     # wait 5 seconds
