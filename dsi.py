@@ -6,7 +6,7 @@ import os, time, configparser, random, threading, queue, sys, subprocess
 # Required for background tasks, timestamps, config reading, directory checking, C++ executing
 import spotipy
 # Required for basic function of Spotify data request
-from spotipy.oauth2 import SpotifyPKCE
+from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
 
 
@@ -16,11 +16,11 @@ from spotipy.oauth2 import SpotifyPKCE
 
 
 if getattr(sys, 'frozen', False):
-    # bundled with pyInstaller, so it's "frozen"
+    # since the program bundled with pyInstaller, it's "frozen"
     directory = os.path.dirname(sys.executable)
     # gets the base directory of the program, where the python .exe resides
 else:
-    # if somehow not in a bundled state
+    # if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
     # gets the base directory of the program, where the python .exe resides
 
@@ -44,15 +44,15 @@ cppPath = os.path.join(directory, "Discord", cppExe)
 cppDir = os.path.dirname(cppPath) 
 """the directory the c++ exe lives in"""
 
-print("Starting DSI\n")
+print("[INFO] Starting DSI\n")
 # quick user update on status
 
 if os.path.isfile(SHAAdir):
     # if the grouped.csv file exists
-    print("Spotify Analyser functionality enabled\n")
+    print("[SHAA] Spotify Analyser functionality enabled\n")
     # informs user SHAA is enabled
-
-
+    csvReader = pd.read_csv(SHAAdir, index_col=0, encoding="utf-8")
+    # opens the CSV file and uses column 0 as index (track names)
 
 ### Config Section ###
 
@@ -61,6 +61,8 @@ if os.path.isfile(SHAAdir):
 # [Required]
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
 """spotify client ID, string"""
+sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
+"""spotify client secret, string"""
 sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """spotify redirect URL, string"""
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
@@ -78,6 +80,8 @@ pauseStateText = Config.get("Function", "pause_Behavior_Text")
 """pause text, string"""
 enableUpdates = Config.getboolean("Function", "print_Updates")
 """print updates, boolean"""
+enableErrors = Config.getboolean("Function", "print_Errors")
+"""print errors, boolean"""
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
@@ -144,13 +148,17 @@ songInfoDetailsDoubleSpace = Config.getboolean("SHAA-Details-Format", "song_Info
 dsiShoutout = Config.getboolean("SHAA-Details-Format", "dsi_Shoutout")
 """whether to add a shoutout to DSI at the end of the details section, boolean"""
 
-print("Configuration loaded\n")
+print("[CFG] Configuration loaded\n")
 # another quick user update
 
 if not enableUpdates:
     # if console printing is disabled in config
-    print("Console updates disabled in config (print_Updates), working silently\n")
+    print("[CFG] Console updates disabled in config (print_Updates), working silently\n")
     # prints a quick warning
+
+if not enableErrors:
+    # if error printing is disabled in config
+    print("[CFG] Error printing disabled in config (print_Errors)\n")
 
 
 
@@ -163,7 +171,7 @@ stateOptions = ["Track", "track", "Total", "total"]
 # all possible choices for fields 1 and 2 of song details (plays/minutes)
 
 # Detail Field Options #
-detailOptions = ["Hours", "hours", "Volume", "volume", "Popularity", "popularity", "Shuffle", "shuffle"]
+detailOptions = ["Hours", "hours", "Volume", "volume", "Popularity", "popularity", "Repeat", "repeat", "Shuffle", "shuffle"]
 # all possible choices for detail field (hours)
 
 # Picture Queue #
@@ -178,7 +186,7 @@ picEvent = threading.Event()
 # creates an empty threading event list for picturecycler 
 
 # Auth #
-authorization = SpotifyPKCE(scope = "user-read-playback-state", client_id = sp_client_ID, redirect_uri = sp_redirect, open_browser=True)
+authorization = SpotifyOAuth(scope = "user-read-playback-state", client_id = sp_client_ID, client_secret=sp_client_secret, redirect_uri = sp_redirect)
 # the argument for auth_manager, containing the variables from config and scope
 main = spotipy.Spotify(auth_manager = authorization)
 # handles the authentication and user identification on start
@@ -215,7 +223,7 @@ def idWriter():
         # makes a string from the relevant config options
         txt.write(content)
         if enableUpdates:
-            print("ID file written\n")
+            print("[INFO] ID file written\n")
         # writes the string to ids.txt at program launch
 
 
@@ -238,7 +246,7 @@ class Background(threading.Thread):
 
     def run(self):
         # starts up the function
-        picEvent.set
+        picEvent.set()
         # runs once at start up, giving the event queue 1 task to start with
 
     def resumePic(self):
@@ -246,7 +254,7 @@ class Background(threading.Thread):
         picEvent.set()
 
     def picCycler(self):
-        """Tthe function used to cycle pictures (and/or set one)"""
+        """The function used to cycle pictures (and/or set one)"""
 
         while True:     
         # this function only runs if true, some of the methods below will end it after one cycle
@@ -268,7 +276,7 @@ class Background(threading.Thread):
                     songEvent.set()
                     # sends an event that tells song() to process
                     if enableUpdates:
-                        print("Random picture set\n")
+                        print("[INFO] Random picture set\n")
                     time.sleep(60 * picCycleTime)
                     # sleeps until it's time to change pictures
                     picEvent.clear()
@@ -285,7 +293,7 @@ class Background(threading.Thread):
                         songEvent.set()
                         # sends an event that tells song() to process
                         if enableUpdates:
-                            print("Picture set\n")
+                            print("[INFO] Picture set\n")
                         time.sleep(60 * picCycleTime)
                         # sleeps until it's time to change pictures
                         picEvent.clear()
@@ -301,7 +309,7 @@ class Background(threading.Thread):
                     songEvent.set()
                     # sends an event that tells song() to process
                     if enableUpdates:
-                        print("Random picture set\n")
+                        print("[INFO] Random picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -314,7 +322,7 @@ class Background(threading.Thread):
                     songEvent.set()
                     # sends an event that tells song() to process
                     if enableUpdates:
-                        print("Picture set\n")
+                        print("[INFO] Picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -326,33 +334,10 @@ class Background(threading.Thread):
                 # sends the picture to a queue that then reaches song()
                 songEvent.set()
                 # sends an event that tells song() to process
-                if enableUpdates:
-                    print("Invalid picture cycle behavior or no picture set\n")
+                if enableErrors:
+                    print("[WARN] Invalid picture cycle behavior or no picture set\nProceeding without a picture\n")
                 self.running = False
                 # doesn't set a picture, doesn't need to - so it stops the background thread
-
-
-
-
-### Spotify Auth Check ###
-
-
-
-def spotifyAuth(func, *args, **kwargs):
-    """Function to check token validity and pass API calls"""
-    try:
-        # if the token works
-        return func(*args, **kwargs)
-        # calls the given function (spotify main) with original arguments
-    except spotipy.exceptions.SpotifyException as fail:
-        # if the "try" fails
-        if fail.http_status == 401:
-            # if it failed because of a 401 error (token expiration)
-            return func(*args, **kwargs)
-            # calls the given function (spotify main) with original arguments
-        else:
-            raise
-            
 
 
 
@@ -364,10 +349,11 @@ def runCpp():
     """Function to start the C++ .exe"""
     with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as cppPrint:
         # opens the C++ exe, passes a directory and takes output from it
-        for line in cppPrint.stdout:
-            # every time the C++ file prints something, this program takes it
-            print(line, end="")
-            # prints it after a line ends
+        if enableUpdates:
+            for line in cppPrint.stdout:
+                # every time the C++ file prints something, this program takes it
+                print("[C++]", line, end="")
+                # prints it after a line ends
 
 
 
@@ -377,6 +363,9 @@ def runCpp():
 
 def song(pictureQueue):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
+    global cppLargeImage
+    # pulls the LargeImage as a local variable from global
+
     while True:
 
         songEvent.wait()
@@ -396,9 +385,15 @@ def song(pictureQueue):
         cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
-        csFull = spotifyAuth(main.current_playback)
+        csFull = main.current_playback()
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
+
+        if not csFull or not csFull.get("item"):
+            # checks if the dictionary is valid and can be called
+            time.sleep(5)
+            # waits for a few seconds
+            continue
 
         csItem = csFull.get("item")
         # takes the first part of the song's info (leaving out device info and various user states)
@@ -470,7 +465,7 @@ def song(pictureQueue):
             onPlaylist = False
             # if not, sets onPlaylist to false
 
-        elif not csPlaylist == None:
+        else:
             # if there is a playlist playing
             csPlaylistURL = csPlaylist.get("external_urls")
             # gets the list of external urls attached to that playlist
@@ -565,9 +560,6 @@ def song(pictureQueue):
             # this data is only entered to rich presence if used with SHA (and installed correctly)
             # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
             
-            csvReader = pd.read_csv(SHAAdir, index_col=0)
-            # opens the CSV file and uses column 0 as index (track names)
-
             if csName in csvReader.index:
                 # checks if any appearance of the track is on the list 
 
@@ -667,7 +659,7 @@ def song(pictureQueue):
                     if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
                         # if the config calls for volume
                         try:
-                            shaaDetailField = (csDevice.get("volume_percent")+"%")
+                            shaaDetailField = f"{csDevice.get("volume_percent")}%"
                             # takes the volume and makes it a percentage
                         except:
                             shaaDetailField = "some volume"
@@ -723,13 +715,15 @@ def song(pictureQueue):
                 if dsiShoutout:
                     cppLargeHoverList.append(dsiShoutoutStr)
 
+
             ### No Track Match ###
+
 
             else:
                 # if the track wasn't found in CSV
                 if enableUpdates:
                     # if the updates are enabled, lets user know the song wasn't found in CSV
-                    print(f"{csName} not found in CSV, using fallback values.\n")
+                    print(f"[WARN] {csName} not found in CSV, using fallback values.\n")
                 
                 ### Field 1 / Field 2 ###
                 if shaaFallback == "Total" or shaaFallback == "total":
@@ -742,7 +736,7 @@ def song(pictureQueue):
                     # if the selected fallback isn't total
                         shaaPlaycount = shaaFallback
                         shaaPlaytime = shaaFallback
-                        # takes the custom string 
+                        # takes the custom string and replaces playcount/time variables with that
 
                 # string constructor
                 songStuffList.append(shaaPlaycount)
@@ -848,19 +842,18 @@ def song(pictureQueue):
                 if dsiShoutout:
                     cppLargeHoverList.append(dsiShoutoutStr)
 
-            cppLargeHover = "".join(cppLargeHoverList)
+            cppLargeHover = " ".join(cppLargeHoverList)
             # joins together the detail list of strings (SHAA-only)
             
 
         ### Song Stuff String Joiner ###
 
+
         cppState = " ".join(songStuffList)
         # joins together the song information
 
 
-
         ### Song Style ###
-
 
 
         SNSL = True
@@ -920,9 +913,7 @@ def song(pictureQueue):
         # takes the list of strings from above and joins it together 
 
 
-
         ### C++ Text File Writer ###
-
 
 
         cppFull = (
@@ -943,7 +934,7 @@ def song(pictureQueue):
             txt.write(cppFull)
             # writes the full song information to the text file, which is read by the C++ program and then sent to Discord RPC
             if enableUpdates:
-                print("Song data file updated\n")
+                print("[INFO] Song data file updated\n")
         songEvent.clear()
         # clears the event queue, ready to get new requests
 
@@ -961,9 +952,15 @@ def looper():
     global currentSong
     while True:
         # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
-        info = spotifyAuth(main.current_playback)
+        info = main.current_playback()
         # picks up all the info Spotify sends in an update
-
+        if not info or not info.get("item"):
+            # checks if the info has something and if it can be called
+            if enableErrors:
+                print("[WARN] No playing state detected, re-checking in 5 seconds\n")
+            time.sleep(5)
+            # waits for a few seconds
+            continue
         songName = (info.get("item")).get("name")
         # grabs the name of the song, stores it
         playing = info.get("is_playing")
@@ -972,16 +969,14 @@ def looper():
         if currentSong is None:
             # when the program first starts, the currentSong will be "None", this updates it
             currentSong = songName
-            if enableUpdates:
-                print("First song processed\n")
-                # if user wants feedback, sends this
             # calls for the C++ program to start as a subprocess of this program, passing its output
             picEvent.set()
             # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture (breaks if none is set)
-            time.sleep(3)
-            # sometimes, the picture took more time than it had to pass to song, this gives it slightly more time
             songEvent.set()
             # since this only runs when the program first starts, sets an event immediately to song, to refresh data
+            if enableUpdates:
+                print("[INFO] First song processed\n")
+                # if user wants feedback, sends this
 
         songProg = (info.get("progress_ms"))
         songDur = (info.get("item")).get("duration_ms")
@@ -993,15 +988,12 @@ def looper():
         # if there's a song change
             if enableUpdates:
                 # if console updates are enabled
-                print(f"New song found: {songName}\n")
+                print(f"[INFO] New song found: {songName}\n")
                 # user update
                 currentSong = songName
                 # changes the internal variable to match new song
                 songEvent.set()
                 # sets an event to make song() update the text file
-
-        songEvent.set()
-        # tells song() to update regardless
 
         if not playing:
         # if the song is paused
@@ -1025,18 +1017,16 @@ def looper():
             # if config option for updates is on
             if not playing:
                 # if the song is paused, informs user
-                print(f"Paused on: {songName}, checking again in {sleepfor} seconds\n")
+                print(f"[INFO] Paused on: {songName}, checking again in {sleepfor} seconds\n")
             else:
                 # if song is not paused, informs user
-                print(f"Song unchanged, checking again in {sleepfor} seconds\n")
+                print(f"[INFO] Song unchanged, checking again in {sleepfor} seconds\n")
 
         time.sleep(sleepfor)
         # sleeps for the determined time
 
 
-
 ### Load Commands ###
-
 
 
 idWriter()
@@ -1064,7 +1054,7 @@ cppThread = threading.Thread(target = runCpp)
 
 if dc_app_ID and sp_client_ID:
     # if both the Application ID and Spotify Client ID are found
-    print("Found Application ID and Spotify Client ID, starting Discord RPC process\n")
+    print("[START] Found Application ID and Spotify Client ID, starting Discord RPC process\n")
     # user inform
     time.sleep(3)
     # waits a couple seconds to make sure all details are set before calling
@@ -1072,7 +1062,7 @@ if dc_app_ID and sp_client_ID:
     # starts the C++ thread
 else:
     # if both aren't found
-    print("Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...\n")
+    print("[CRITICAL] Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...\n")
     # user inform
     time.sleep(5)
     # wait 5 seconds
