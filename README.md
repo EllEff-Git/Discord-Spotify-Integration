@@ -1,17 +1,22 @@
-DSI (Discord Spotify Integration) is a program that adds a customisable activity to Discord, displaying Spotify activity 
+DSI (Discord Spotify Integration) is a program that adds a customisable activity to Discord, displaying Spotify activity. 
 
 
 DSI is a lightweight, terminal-based program with effectively no resource requirements (less than a blank Chrome tab). 
-It's easy to run, even easier to configure, and features over 20 customisation options. 
+It's easy to run, even easier to configure and features over a dozen simple, but vast customisation options.
 
 
 Examples:
+Note that the "Spotify Activity" string is determined by your Discord Application's name, and the "Activity" part is not set in stone
 
 ![Imgur Image](https://i.imgur.com/T4fMekk.png)
 
 ![Imgur Image](https://i.imgur.com/gHpGlSy.png)
 
 ![Imgur Image](https://i.imgur.com/OmcJm5c.png)
+
+![Imgur Image]()
+
+![Imgur Image]()
 
 
 Installation is as easy as unzipping a file, and the total setup shouldn't take more than 5 minutes.
