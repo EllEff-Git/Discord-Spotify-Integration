@@ -32,17 +32,17 @@ Config.read(ConfigPath, "utf8")
 # reads from the config, saves values below
 
 idDir = os.path.join(directory, "Discord", "ids.txt")
-# the directory where ids.txt should/will live (inside DSI\Discord\ids.txt)
+"""the directory where ids.txt should/will live (inside DSI\Discord\ids.txt)"""
 songDataDir = os.path.join(directory, "Discord", "songData.txt")
-# the directory where songData.txt should/will live (inside DSI\Discord\songData.txt)
+"""the directory where songData.txt should/will live (inside DSI\Discord\songData.txt)"""
 SHAAdir = os.path.join(directory, "..", "Data", "CSV", "grouped.csv")
-# the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)
+"""the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
 cppExe = "DSIdiscord.exe"
-# name of the C++ exe file
+"""name of the C++ exe file"""
 cppPath = os.path.join(directory, "Discord", cppExe)
-# the full path to the C++ exe
+"""the full path to the C++ exe"""
 cppDir = os.path.dirname(cppPath) 
-# the directory the c++ exe lives in
+"""the directory the c++ exe lives in"""
 
 print("Starting DSI\n")
 # quick user update on status
@@ -60,52 +60,89 @@ if os.path.isfile(SHAAdir):
 
 # [Required]
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
+"""spotify client ID, string"""
 sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
+"""spotify redirect URL, string"""
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
+"""discord application ID, string"""
 
 # [Function]
 refreshTime = int(Config.get("Function", "time_Between_Refresh"))
+"""program update cycle interval time, integer"""
 if refreshTime < 5:
     # if the refresh time is set too low, overrides to safe minimum of 5s
     refreshTime = 5
 enablePause = Config.getboolean("Function", "enable_Pause_Behavior")
+"""pause text enabler, boolean"""
 pauseStateText = Config.get("Function", "pause_Behavior_Text")
+"""pause text, string"""
 enableUpdates = Config.getboolean("Function", "print_Updates")
+"""print updates, boolean"""
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
+"""small picture URL, string"""
 spotifyURL = Config.get("URL", "spotify_URL")
+"""large image URL, string (Track, Artist, Album, Playlist)"""
 
 # [Song-Style]
 songNameSpacerL = Config.get("Song-Style", "song_Spacer_Left")
+"""spacer between 1st and 2nd field, string"""
 songNameSpacerR = Config.get("Song-Style", "song_Spacer_Right")
+"""spacer between 2nd and 3rd field, string"""
 
 # [Song-Format]
 preText = Config.get("Song-Format", "pre_Text")
+"""optional text before the first field, string"""
 postText = Config.get("Song-Format", "post_Text")
+"""optional text after the last field, string"""
 enableSong = Config.getboolean("Song-Format", "enable_Song")
+"""song's state, boolean"""
 enableArtist = Config.getboolean("Song-Format", "enable_Artist")
+"""artist's state, boolean"""
 enableAlbum = Config.getboolean("Song-Format", "enable_Album")
+"""album's state, boolean"""
 
 # [Pictures]
 picCycleList = (Config.get("Pictures", "pictures_To_Cycle").replace('"', '')).split(", ")
+"""list of pictures, list"""
 picCycleTime = int(Config.get("Pictures", "picture_Cycle_Time"))
+"""time to wait between picture cycling, int"""
 picCycleType = Config.get("Pictures", "picture_Cycle_Behavior")
+"""type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
 smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
+"""name/URL of small picture, string"""
 hoverText = Config.get("Pictures", "text_On_Small_Hover")
+"""text to show on small picture hover, string"""
 
-# [SHAA-Song-Info]
-shaalessField = Config.get("SHAA-Song-Info", "song_Info_Empty_Field")
-songInfoField1 = Config.get("SHAA-Song-Info", "song_Info_First_Field")
-songInfoField2 = Config.get("SHAA-Song-Info", "song_Info_Second_Field")
-songInfoSpacer = Config.get("SHAA-Song-Info", "song_Info_Spacer")
-songInfoFormatPlays = Config.get("SHAA-Song-Info", "song_Info_Format_Plays")
-songInfoFormatMins = Config.get("SHAA-Song-Info", "song_Info_Format_Mins")
-songInfoFormatHours = Config.get("SHAA-Song-Info", "song_Info_Format_Hours")
-songInfoFormatHourSpacer = Config.get("SHAA-Song-Info", "song_Info_Format_Hour_Spacer")
-songInfoHourDoubleSpace = Config.getboolean("SHAA-Song-Info", "song_Info_Double_Space")
+# [SHAA-Song-Function]
+songInfoField1 = Config.get("SHAA-Song-Function", "song_Info_First_Field")
+"""first state field type, string (Track, Total)"""
+songInfoField2 = Config.get("SHAA-Song-Function", "song_Info_Second_Field")
+"""second state field type, string (Track, Total)"""
+shaaFallback = Config.get("SHAA-Song-Function", "song_Info_Fallback")
+"""fallback type for both state fields, string (Total, custom)"""
+shaaInfoDetails = Config.get("SHAA-Song-Function", "song_Info_Detail_Field")
+"""details field type, string (Hours, Volume, Popularity, Repeat, Shuffle, custom)"""
 
+# [SHAA-State-Format]
+songInfoFormatPlays = Config.get("SHAA-State-Format", "song_Info_Format_First_Field")
+"""text format of the first field, string"""
+songInfoSpacer = Config.get("SHAA-State-Format", "song_Info_Spacer")
+"""spacer to place between first and second field, string"""
+songInfoFormatMins = Config.get("SHAA-State-Format", "song_Info_Format_Second_Field")
+"""text format of the second field, string"""
+songInfoFallback = Config.get("SHAA-State-Format", "song_Info_Fallback_Format")
+"""fallback text for missing song data for both state fields, string"""
 
+songInfoFormatDetails = Config.get("SHAA-Details-Format", "song_Info_Format_Details")
+"""text format of the details field, string"""
+songInfoFormatDetailsSpacer = Config.get("SHAA-Details-Format", "song_Info_Format_Details_Spacer")
+"""spacer to place between details field data and string, string"""
+songInfoDetailsDoubleSpace = Config.getboolean("SHAA-Details-Format", "song_Info_Double_Space")
+"""whether to add space on either side of the spacer, boolean"""
+dsiShoutout = Config.getboolean("SHAA-Details-Format", "dsi_Shoutout")
+"""whether to add a shoutout to DSI at the end of the details section, boolean"""
 
 print("Configuration loaded\n")
 # another quick user update
@@ -120,6 +157,14 @@ if not enableUpdates:
 ### Variable Section ###
 
 
+
+# Field 1 & 2 Options #
+stateOptions = ["Track", "track", "Total", "total"]
+# all possible choices for fields 1 and 2 of song details (plays/minutes)
+
+# Detail Field Options #
+detailOptions = ["Hours", "hours", "Volume", "volume", "Popularity", "popularity", "Shuffle", "shuffle"]
+# all possible choices for detail field (hours)
 
 # Picture Queue #
 pictureQueue = queue.Queue()
@@ -151,6 +196,9 @@ pauseStart = None
 
 cppLargeImage = ""
 # makes an empty image string, in case it fails to make first load
+
+dsiShoutoutStr = "// Data by DSI"
+# a shoutout string to DSI, disabled by default in config
 
 
 
@@ -220,7 +268,7 @@ class Background(threading.Thread):
                     songEvent.set()
                     # sends an event that tells song() to process
                     if enableUpdates:
-                        print("Picture set\n")
+                        print("Random picture set\n")
                     time.sleep(60 * picCycleTime)
                     # sleeps until it's time to change pictures
                     picEvent.clear()
@@ -228,7 +276,7 @@ class Background(threading.Thread):
 
                 if picCycleType == "Sequence":
                     # if the selected method is "Sequence"
-                    for i in range(0, (len(picCycleList) -1)):
+                    for i in range(0, (len(picCycleList)-1)):
                     # repeats this loop for every element in the list (lists start at 0, so -1 to length for position)
                         cppLargeImage = picCycleList[i]
                         # selects the picture from the list one by one
@@ -244,7 +292,7 @@ class Background(threading.Thread):
                         # removes the queue
 
                 if picCycleType == "Once":
-                    i = random.randint(0, (len(picCycleList) -1))
+                    i = random.randint(0,(len(picCycleList)-1))
                     # picks a random number based on list length
                     cppLargeImage = picCycleList[i]
                     # chooses the element with the random number
@@ -345,7 +393,7 @@ def song(pictureQueue):
         songStuffList = []
         # creates an empty list for strings to get added into as the loop progresses
 
-        cppHoursList = []
+        cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
         csFull = spotifyAuth(main.current_playback)
@@ -356,6 +404,9 @@ def song(pictureQueue):
         # takes the first part of the song's info (leaving out device info and various user states)
         csAlbum = csItem.get("album")
         # takes a smaller part of the song's info (still contains a ton of extra)
+
+        csDevice = csFull.get("device")
+        # gets a list of device information
 
         csName = csItem.get("name")
         # stores the name of the song
@@ -399,6 +450,7 @@ def song(pictureQueue):
                 # sets the start and end times to match the time spent paused
                 pauseStart = None
                 # resets the pauseStart to None, so it can get checked again
+
         if enablePause and not csPlayState:
             # if the pause behavior is enabled and song paused
             songNameList.append(pauseStateText)
@@ -465,50 +517,63 @@ def song(pictureQueue):
 
         ### SHAAless Behavior ###
 
+
         if not os.path.isfile(SHAAdir):
             # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
-            shaaPlaycount = shaalessField
-            # replaces playcount with user defined field
-            if shaalessField:
-                # only adds the playcount if it's not empty
-                songStuffList.append(shaaPlaycount)
-            # adds the playcount to list
-            if songInfoFormatPlays:
-                # only adds the format if it's not empty
-                songStuffList.append(songInfoFormatPlays)
-                # adds the user defined field 1 format to list
+
+            ### Field 1 / Field 2 ###
+
+            songStuffList.append(songInfoField1)
+            # adds the user-defined first field to list
             songStuffList.append(songInfoSpacer)
             # adds the spacer to list
-            shaaPlaytime = shaalessField
-            # replaces playtime with user defined field
-            if shaalessField:
-                # only adds the playtime if it's not empty
-                songStuffList.append(shaaPlaytime)
-            # adds the playtime to list
-            if songInfoFormatMins:
-                # only adds the format if it's not empty
-                songStuffList.append(songInfoFormatMins)
-                # adds the user defined field 2 format to list
+            songStuffList.append(songInfoField2)
+            # adds the user-defined second field to list
+                
+            ### Details / Field 3 ###
 
-            shaaTotalTime = shaalessField
-            # replaces total hours with user defined field
+            if songInfoFormatDetails:
+                # if the format option isn't empty
+                cppLargeHoverList.append(songInfoFormatDetails)
+                # adds to string list
+
+            if songInfoDetailsDoubleSpace:
+                # if the double space is enabled
+                cppLargeHoverList.append(" ")
+                # adds an empty space
+
+            if songInfoFormatDetailsSpacer:
+                # if the format spacer option isn't empty
+                cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                # adds to string list
+            
+            cppLargeHoverList.append(shaaInfoDetails)
+            # adds the detail field (from config)
+
+            if dsiShoutout:
+                cppLargeHoverList.append(dsiShoutoutStr)
+
+        cppLargeHover = " ".join(cppLargeHoverList)
+        # joins together the details list to one string
+
 
         ### SHAA Behavior ###
+
 
         if os.path.isfile(SHAAdir):
             # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
             # this data is only entered to rich presence if used with SHA (and installed correctly)
             # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
-
+            
             csvReader = pd.read_csv(SHAAdir, index_col=0)
             # opens the CSV file and uses column 0 as index (track names)
 
             if csName in csvReader.index:
                 # checks if any appearance of the track is on the list 
 
-                ### Field 1 ###
+                ### Plays / Field 1 ###
 
-                if songInfoField1 == "Track":
+                if songInfoField1 == "Track" or songInfoField1 == "track":
                     # if the selected type for first field is Track
                     if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
@@ -526,27 +591,28 @@ def song(pictureQueue):
                         songStuffList.append(shaaPlaycount)
                         # adds to string list
 
-                if songInfoField1 == "Total":
+                elif songInfoField1 == "Total" or songInfoField1 == "total":
                     # if the selected type for the first field is Total
                     shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
                     # adds up *all* the playcounts for all tracks
                     songStuffList.append(shaaPlaycount)
 
                 else: 
-                    # if the songInfoField1 is something else
-                    shaaPlaycount = ""
-                    songStuffList.append(shaaPlaycount)
+                    # if it doesn't match either
+                    songStuffList.append(songInfoField1)
+                    # appends with the user-defined custom text
 
                 songStuffList.append(songInfoFormatPlays)
-                # adds the first field's custom styling
+                # adds the first field's custom end styling
 
                 ### Spacer ###
 
                 songStuffList.append(songInfoSpacer)
+                # adds the spacer to the list
 
-                ### Field 2 ###
+                ### Minutes / Field 2 ###
 
-                if songInfoField2 == "Track":
+                if songInfoField2 == "Track" or songInfoField2 == "track":
                     # if the selected type for the second field is Track
                     if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
                         # if there's exactly one instance of the current song (returns as a number)
@@ -563,45 +629,233 @@ def song(pictureQueue):
                         songStuffList.append(shaaPlaytime)
                         # adds to string list
 
-                if songInfoField2 == "Total":
+                elif songInfoField2 == "Total" or songInfoField2 == "total":
                     # if the selected type for the first field is Total
                     shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
                     # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
                     songStuffList.append(shaaPlaytime)
                     # adds to string list
                 else:
-                    # if it doesn't match either, makes it an empty string
-                    shaaPlaytime = ""
-                    songStuffList.append(shaaPlaytime)
-                    # adds to string list
+                    # if it doesn't match either
+                    songStuffList.append(songInfoField2)
+                    # appends with the user-defined custom text
 
-                if songInfoFormatMins:
-                    # only adds the format if it's not empty
-                    songStuffList.append(songInfoFormatMins)
-                    # adds the user defined field 2 format to list
+                songStuffList.append(songInfoFormatMins)
+                # adds the second field's custom end styling
                     
-                ### Total Hours ###
+                ### Details / Field 3 / Total Hours ###
 
-                shaaTotalTime =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
-                # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+                cppLargeHoverList.append(songInfoFormatDetails)
+                # adds the field 3 format (start string, default is Total Hours)
+                if songInfoDetailsDoubleSpace:
+                    # if the double space is enabled
+                    cppLargeHoverList.append(" ")
+                    # adds a space to the left side of the spacer
+                if songInfoFormatDetailsSpacer:
+                    # if the spacer isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                    # adds the spacer and a space on the right side
+
+                if shaaInfoDetails in detailOptions:
+                    # if the config option matches one of the set defaults
+
+                    if shaaInfoDetails == "Hours" or shaaInfoDetails == "hours":
+                        # if the config calls for total hours
+                        shaaDetailField =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
+                        # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+
+                    if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
+                        # if the config calls for volume
+                        try:
+                            shaaDetailField = (csDevice.get("volume_percent")+"%")
+                            # takes the volume and makes it a percentage
+                        except:
+                            shaaDetailField = "some volume"
+                            # if it fails, puts a fallback string
+                    
+                    if shaaInfoDetails == "Popularity" or shaaInfoDetails == "popularity":
+                        # if the config calls for popularity
+                        try:
+                            shaaDetailField = csItem.get("popularity")
+                            # takes the popularity rating
+                        except:
+                            shaaDetailField = "somewhat popular"
+                            # if it fails, puts a fallback string
+
+                    if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
+                        # if the config calls for repeat state
+                        try:
+                            repeatState = csFull.get("repeat_state")
+                            if repeatState:
+                                # if repeat state returns True
+                                shaaDetailField = "on Repeat"
+                                # adds string form
+                            else:
+                                # if repeat state doesn't return True
+                                shaaDetailField = "not on Repeat"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Repeat"
+                            # if it fails, puts a fallback string
+
+                    if shaaInfoDetails == "Shuffle" or shaaInfoDetails == "shuffle":
+                        # if the config calls for shuffle state
+                        try:
+                            shuffleState = csFull.get("shuffle_state")
+                            if shuffleState:
+                                # if shuffle state returns True
+                                shaaDetailField = "on Shuffle"
+                            else:
+                                # if shuffle state doesn't return True
+                                shaaDetailField = "not on Shuffle"
+                        except:
+                            shaaDetailField = "may be on Shuffle"
+                            # if it fails, puts a fallback string
+
+                else:
+                    # if the config option doesn't match any of the set defaults
+                    shaaDetailField = shaaInfoDetails
+                    # sets the total time to match custom string instead
+
+                cppLargeHoverList.append(shaaDetailField)
+                # joins together the list 
+
+                if dsiShoutout:
+                    cppLargeHoverList.append(dsiShoutoutStr)
 
             ### No Track Match ###
 
             else:
-                # in case the song has never been played before (or doesn't appear in the CSV)
-                shaaPlaycount = "0"
-                shaaPlaytime = "0"
-                # makes the playcount and playtime for that song 0
+                # if the track wasn't found in CSV
+                if enableUpdates:
+                    # if the updates are enabled, lets user know the song wasn't found in CSV
+                    print(f"{csName} not found in CSV, using fallback values.\n")
+                
+                ### Field 1 / Field 2 ###
+                if shaaFallback == "Total" or shaaFallback == "total":
+                    # if the selected fallback is Total/total
+                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                    # uses the total playcount for all songs
+                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+                    # uses the total amount of playtime for all songs
+                else:
+                    # if the selected fallback isn't total
+                        shaaPlaycount = shaaFallback
+                        shaaPlaytime = shaaFallback
+                        # takes the custom string 
 
+                # string constructor
+                songStuffList.append(shaaPlaycount)
+                # adds to list
+                if songInfoFallback:
+                    # if the fallback isn't empty
+                    songStuffList.append(songInfoFallback)
+                    # adds the custom field to string
+                songStuffList.append(songInfoFormatPlays)
+                # adds the first field end text to list
+                songStuffList.append(songInfoSpacer)
+                # adds the spacer
+                songStuffList.append(shaaPlaytime)
+                # adds to list
+                if songInfoFallback:
+                    # if the fallback isn't empty
+                    songStuffList.append(songInfoFallback)
+                    # adds the custom field to string
+                songStuffList.append(songInfoFormatMins)
+                # adds the second field end text to list
+                
+                ### Details / Field 3 ###
+
+                if songInfoFormatDetails:
+                    # if the format option isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # adds to string list
+
+                if songInfoDetailsDoubleSpace:
+                    # if the double space is enabled
+                    cppLargeHoverList.append(" ")
+                    # adds an empty space
+
+                if songInfoFormatDetailsSpacer:
+                    # if the format spacer option isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                    # adds to string list
+
+                if shaaInfoDetails in detailOptions:
+                    # if the config option matches one of the set defaults
+
+                    if shaaInfoDetails == "Hours" or shaaInfoDetails == "hours":
+                        # if the config calls for total hours
+                        shaaDetailField =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
+                        # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+
+                    if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
+                        # if the config calls for volume
+                        try:
+                            shaaDetailField = (csDevice.get("volume_percent")+"%")
+                            # takes the volume and makes it a percentage
+                        except:
+                            shaaDetailField = "some volume"
+                            # if it fails, puts a fallback string
+
+                    if shaaInfoDetails == "Popularity" or shaaInfoDetails == "popularity":
+                        # if the config calls for popularity
+                        try:
+                            shaaDetailField = csItem.get("popularity")
+                            # takes the popularity rating
+                        except:
+                            shaaDetailField = "somewhat popular"
+                            # if it fails, puts a fallback string
+
+                    if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
+                        # if the config calls for repeat state
+                        try:
+                            repeatState = csFull.get("repeat_state")
+                            if repeatState:
+                                # if repeat state returns True
+                                shaaDetailField = "on Repeat"
+                                # adds string form
+                            else:
+                                # if repeat state doesn't return True
+                                shaaDetailField = "not on Repeat"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Repeat"
+                            # if it fails, puts a fallback string
+
+                    if shaaInfoDetails == "Shuffle" or shaaInfoDetails == "shuffle":
+                        # if the config calls for shuffle state
+                        try:
+                            shuffleState = csFull.get("shuffle_state")
+                            if shuffleState:
+                                # if shuffle state returns True
+                                shaaDetailField = "on Shuffle"
+                            else:
+                                # if shuffle state doesn't return True
+                                shaaDetailField = "not on Shuffle"
+                        except:
+                            shaaDetailField = "may be on Shuffle"
+                            # if it fails, puts a fallback string
+
+                    else:
+                        # if the config option doesn't match any of the set defaults
+                        shaaDetailField = shaaInfoDetails
+                        # sets the total time to match custom string instead
+
+                cppLargeHoverList.append(shaaDetailField)
+                # adds the detail field to the list
+
+                if dsiShoutout:
+                    cppLargeHoverList.append(dsiShoutoutStr)
+
+            cppLargeHover = "".join(cppLargeHoverList)
+            # joins together the detail list of strings (SHAA-only)
             
 
         ### Song Stuff String Joiner ###
 
-
-
-        cppSongStuff = " ".join(songStuffList)
+        cppState = " ".join(songStuffList)
         # joins together the song information
-        # default appearance: " N/A plays ※ N/A minutes " , " Total Hours: N/A "
 
 
 
@@ -612,7 +866,7 @@ def song(pictureQueue):
         SNSL = True
         # sets a temp flag for the left spacer, just so it can't get double printed
 
-        if not preText == "":
+        if preText:
             # if preText has something
             songNameList.append(preText)
             # adds to string
@@ -657,7 +911,7 @@ def song(pictureQueue):
             songNameList.append(csAlbumName)
             # adds to string
 
-        if not postText == "":
+        if postText:
             # if postText has something
             songNameList.append(postText)
             # adds to string
@@ -665,28 +919,6 @@ def song(pictureQueue):
         cppSongName = " ".join(songNameList)
         # takes the list of strings from above and joins it together 
 
-        ### Total Hours ###
-
-        if songInfoFormatHours:
-            # if the format option isn't empty
-            cppHoursList.append(songInfoFormatHours)
-            # adds to string list
-
-        if songInfoHourDoubleSpace:
-            # if the double space is enabled
-            cppHoursList.append(" ")
-            # adds an empty space
-
-        if songInfoFormatHourSpacer:
-            # if the format spacer option isn't empty
-            cppHoursList.append(songInfoFormatHourSpacer + " ")
-            # adds to string list
-
-        cppHoursList.append(shaaTotalTime)
-        # total time is unavoidable, adds to end
-
-        cppHours = "".join(cppHoursList)
-        # joins together the total hours list of strings
 
 
         ### C++ Text File Writer ###
@@ -695,9 +927,9 @@ def song(pictureQueue):
 
         cppFull = (
                     "songName = " + cppSongName + "\n" + 
-                    "songStuff = " + cppSongStuff + "\n" +
+                    "songStuff = " + cppState + "\n" +
                     "LargeImage = " + cppLargeImage + "\n" +
-                    "LargeText = " + cppHours + "\n" +
+                    "LargeText = " + cppLargeHover + "\n" +
                     "SmallText = " + hoverText + "\n" +
                     "SpotifyURL = " + csURL + "\n" +
                     "SmallURL = " + smallURL + "\n" +
@@ -714,10 +946,6 @@ def song(pictureQueue):
                 print("Song data file updated\n")
         songEvent.clear()
         # clears the event queue, ready to get new requests
-
-
-
-
 
 
 
@@ -825,8 +1053,6 @@ picThread = threading.Thread(target = bg.picCycler)
 # creates a thread for the picture changer
 picThread.start()
 # starts the thread
-
-
 
 songThread = threading.Thread(target = song, args=(pictureQueue,))
 # creates the song thread
