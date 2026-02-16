@@ -1,13 +1,17 @@
 import pandas as pd
 # Required for all the CSV parsing and data grabbing
 import numpy as np
-# Required for checking datatype from CSV
-import os, time, configparser, random, threading, queue, sys, subprocess
-# Required for background tasks, timestamps, config reading, directory checking, C++ executing
-import spotipy
-# Required for basic function of Spotify data request
+# Required to check datatypes from CSV
+import configparser, random, subprocess
+# Required to read config, choose random pictures and to start the C++ file
+import os, sys, time, threading, queue
+# Required for system information, background tasking and queueing
+import spotipy, requests, json
+# Required for basic function of Spotify data requests and storing
 from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
+from spotipy.exceptions import SpotifyException
+# Required to check for token exceptions (errors)
 
 
 
@@ -32,10 +36,10 @@ Config.read(ConfigPath, "utf8")
 # reads from the config, saves values below
 
 idDir = os.path.join(directory, "Discord", "ids.txt")
-"""the directory where ids.txt should/will live (inside DSI\Discord\ids.txt)"""
+"""the directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
 songDataDir = os.path.join(directory, "Discord", "songData.txt")
-"""the directory where songData.txt should/will live (inside DSI\Discord\songData.txt)"""
-SHAAdir = os.path.join(directory, "..", "Data", "CSV", "grouped.csv")
+"""the directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
+SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
 """the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
 cppExe = "DSIdiscord.exe"
 """name of the C++ exe file"""
@@ -47,12 +51,7 @@ cppDir = os.path.dirname(cppPath)
 print("[INFO] Starting DSI\n")
 # quick user update on status
 
-if os.path.isfile(SHAAdir):
-    # if the grouped.csv file exists
-    print("[SHAA] Spotify Analyser functionality enabled\n")
-    # informs user SHAA is enabled
-    csvReader = pd.read_csv(SHAAdir, index_col=0, encoding="utf-8")
-    # opens the CSV file and uses column 0 as index (track names)
+
 
 ### Config Section ###
 
@@ -185,10 +184,20 @@ songEvent = threading.Event()
 picEvent = threading.Event()
 # creates an empty threading event list for picturecycler 
 
+spotifyLock = threading.Lock()
+# creates a locking method to prevent redundant API calls (or 2 calls at once)
+
 # Auth #
-authorization = SpotifyOAuth(scope = "user-read-playback-state", client_id = sp_client_ID, client_secret=sp_client_secret, redirect_uri = sp_redirect)
+authorisation = SpotifyOAuth(
+    scope = "user-read-playback-state user-library-read", 
+    client_id = sp_client_ID, 
+    client_secret = sp_client_secret, 
+    redirect_uri = sp_redirect,
+    cache_path = os.path.join(directory, "spotifycache.json")
+    )
 # the argument for auth_manager, containing the variables from config and scope
-main = spotipy.Spotify(auth_manager = authorization)
+
+main = spotipy.Spotify(auth_manager = authorisation)
 # handles the authentication and user identification on start
 
 # URL List #
@@ -225,6 +234,64 @@ def idWriter():
         if enableUpdates:
             print("[INFO] ID file written\n")
         # writes the string to ids.txt at program launch
+
+
+
+### Authentication Method ###
+
+
+
+def authPlayback():
+    """Function to more "safely" handle API requests/errors"""
+    global main, authorisation
+    # takes the global variables and makes them local
+    with spotifyLock:
+        try:
+            # first tries to send an API request to Spotify
+            return main.current_playback()
+            # if it works, returns the Spotify playback package (dictionary)
+
+        except SpotifyException as error:
+            # if it fails to acquire a Spotify package
+            if enableErrors:
+                # if the error updates are on, prints an error message
+                print(f"[ERROR] Spotify token errored, attempting to re-authorize...\nError name: {error}")
+        
+            token_info = authorisation.get_cached_token()
+            # tries to use the cached token to get a new one
+
+            if token_info:
+                # if there's a valid cached token to use
+                authorisation.refresh_access_token(token_info["refresh_token"])
+                # uses the token info to get a refresh token
+        
+            main = spotipy.Spotify(auth_manager=authorisation)
+            # passes the new token to the authorisation manager
+            return main.current_playback()
+            # returns the Spotify package
+
+        except (requests.exceptions.RequestException, ConnectionResetError) as error:
+            # if it still fails
+            print(f"[CRITICAL] Spotify connection forcibly closed due to:\n{error}\nExiting in 5 seconds...")
+            # prints the critical error
+            time.sleep(5)
+            # waits 5 seconds
+            return None
+            # closes 
+
+
+
+### Spotify History Analyser ### 
+
+
+if os.path.isfile(SHAAdir):
+    # if the grouped.csv file exists
+    print("[SHAA] Spotify Analyser functionality enabled\n")
+    # informs user SHAA is enabled
+    csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
+    # opens the CSV file and uses utf-8 encoding to ensure compatibility
+    csvReader = csvReader.set_index("URL")
+    # sets the track URL as the index
 
 
 
@@ -385,7 +452,7 @@ def song(pictureQueue):
         cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
-        csFull = main.current_playback()
+        csFull = authPlayback()
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
@@ -405,6 +472,10 @@ def song(pictureQueue):
 
         csName = csItem.get("name")
         # stores the name of the song
+
+        csURI = csItem.get("uri")
+        # grabs the URI of the song - which is what determines the song matching
+
         csArtists = csAlbum.get("artists")
         # stores all the artists listed on the song (in case of multi-artist songs)
         csArtist = csArtists[0].get("name")
@@ -560,39 +631,47 @@ def song(pictureQueue):
             # this data is only entered to rich presence if used with SHA (and installed correctly)
             # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
             
-            if csName in csvReader.index:
-                # checks if any appearance of the track is on the list 
+
+            if csURI in csvReader.index:
+                # checks if any appearance of the track('s URI) is on the list 
 
                 ### Plays / Field 1 ###
+                
+                playcount = csvReader.loc[csURI, "Playcount"]
+                playtime = csvReader.loc[csURI, "Total Time"]
+                # sets temp variables that lookup the cells based on the track and columns
 
                 if songInfoField1 == "Track" or songInfoField1 == "track":
                     # if the selected type for first field is Track
-                    if isinstance(csvReader.loc[csName, "Playcount"], np.int64):
-                        # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaycount = f"{(csvReader.loc[csName, "Playcount"]):,.0f}"
-                        # finds total times the song has been played, turns into formatted string
-                        songStuffList.append(shaaPlaycount)
-                        # adds to string list
 
-                    elif isinstance(csvReader.loc[csName, "Playcount"], pd.Series):
-                        # if there's more than one instance of the same song, calculates playcount for all instances
-                        pcVar = csvReader.loc[csName, "Playcount"]
-                        # finds all instances of total times the song has been played
-                        shaaPlaycount = f"{pcVar.sum():,.0f}"
-                        # finds total number of plays for all instances of current track, turns into string
-                        songStuffList.append(shaaPlaycount)
-                        # adds to string list
+                    if isinstance(playcount, pd.Series):
+                        # if there's more than one instance of the current song
+                        playcountTotal = playcount.sum()
+                        # saves the playcount total based on calculated playcounts
+
+                    else:
+                        # if there's only one instance of the current song
+                        playcountTotal = playcount
+                        # saves the total as the playcount of the song
+
+                    shaaPlaycount = f"{playcountTotal:,.0f}"
+                    # formats the string properly
+                    songStuffList.append(shaaPlaycount)
+                    # adds the total playcount to the list
 
                 elif songInfoField1 == "Total" or songInfoField1 == "total":
                     # if the selected type for the first field is Total
+
                     shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
                     # adds up *all* the playcounts for all tracks
                     songStuffList.append(shaaPlaycount)
 
                 else: 
-                    # if it doesn't match either
+                    # if the setting doesn't match either
                     songStuffList.append(songInfoField1)
                     # appends with the user-defined custom text
+
+                ### Field 1 Format ###
 
                 songStuffList.append(songInfoFormatPlays)
                 # adds the first field's custom end styling
@@ -606,31 +685,38 @@ def song(pictureQueue):
 
                 if songInfoField2 == "Track" or songInfoField2 == "track":
                     # if the selected type for the second field is Track
-                    if isinstance(csvReader.loc[csName, "Total Time"], np.int64):
-                        # if there's exactly one instance of the current song (returns as a number)
-                        shaaPlaytime = f"{( ( (csvReader.loc[csName, "Total Time"]) / 1000) / 60):,.1f}"
-                        # finds total time played (min) for current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
-                        songStuffList.append(shaaPlaytime)
-                        # adds to string list
 
-                    elif isinstance(csvReader.loc[csName, "Total Time"], pd.Series):
-                        # if there's more than one instance of the same song, calculates playtime for all instances
-                        ttVar = csvReader.loc[csName, "Total Time"]
-                        shaaPlaytime = f"{((ttVar.sum() / 1000 )/ 60):,.1f}"
-                        # finds total time played (min) for all instances of current song (milliseconds / 1000 = seconds / 60 = minutes), turns into a formatted string
-                        songStuffList.append(shaaPlaytime)
-                        # adds to string list
+                    if isinstance(playtime, pd.Series):
+                        # if there's more than one instance of the current song
+
+                        playtimeTotal = (((playtime.sum()) / 1000 ) / 60)
+                        # calculates the total playtime
+                    
+                    else:
+                        # if there's only one instance of the current song
+                        playtimeTotal = ((playtime / 1000) / 60 )
+                        # saves the total as the playtime of the song 
+
+                    shaaPlaytime = f"{playtimeTotal:,.1f}"
+                    # formats the string properly
+                    songStuffList.append(shaaPlaytime)
+                    # adds the total playcount to the list
 
                 elif songInfoField2 == "Total" or songInfoField2 == "total":
                     # if the selected type for the first field is Total
-                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+
+                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.1f}"
                     # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
+
                     songStuffList.append(shaaPlaytime)
                     # adds to string list
+
                 else:
-                    # if it doesn't match either
+                    # if the setting doesn't match either
                     songStuffList.append(songInfoField2)
                     # appends with the user-defined custom text
+
+                ### Field 2 Format ###
 
                 songStuffList.append(songInfoFormatMins)
                 # adds the second field's custom end styling
@@ -952,7 +1038,7 @@ def looper():
     global currentSong
     while True:
         # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
-        info = main.current_playback()
+        info = authPlayback()
         # picks up all the info Spotify sends in an update
         if not info or not info.get("item"):
             # checks if the info has something and if it can be called
