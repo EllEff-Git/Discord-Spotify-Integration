@@ -39,6 +39,8 @@ idDir = os.path.join(directory, "Discord", "ids.txt")
 """the directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
 songDataDir = os.path.join(directory, "Discord", "songData.txt")
 """the directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
+uriDir = os.path.join(directory, "Discord", "URImap.json")
+"""the directory where URImap.json should/will live (inside DSI/Discord/URImap.json)"""
 SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
 """the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
 cppExe = "DSIdiscord.exe"
@@ -475,7 +477,7 @@ def song(pictureQueue):
 
         csURI = csItem.get("uri")
         # grabs the URI of the song - which is what determines the song matching
-
+        
         csArtists = csAlbum.get("artists")
         # stores all the artists listed on the song (in case of multi-artist songs)
         csArtist = csArtists[0].get("name")
