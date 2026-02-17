@@ -362,6 +362,9 @@ int main() {
                   
                     // updates user rich presence with given info
                     client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
+                        
+                        // makes a quick boolean to check if the message is sent to Python
+                        static std::atomic<bool> printed = false;
 
                         // if it goes through fine
                         if(result.Successful()) {
@@ -370,18 +373,19 @@ int main() {
                             // sets the error states both to false, so they can go through next time
                             ::LargeImageFail = false;
                             ::SmallImageFail = false;
+                            printed = true;
                         }
                         // if it fails, prints out the error for debug (likely wrong format or missing filenames, etc)
                         else std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl; {
 
-                            // if the error message contains "large" (as in large image)
-                            if ((result.Error().find("large")!=std::string::npos) && !LargeImageFail) {
+                            // if the error message contains "LargeImage"
+                            if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {
                                 // sets the fail state to true
                                ::LargeImageFail = true;
                                std::cout << "Attempting to fix large image error, please wait for the next data push\n" << std::endl;
                             }
-                            // if the error message contains "small" (as in small image)
-                            if (result.Error().find("small")!=std::string::npos && !SmallImageFail) {
+                            // if the error message contains "SmallImage"
+                            if (result.Error().find("SmallImage")!=std::string::npos && !SmallImageFail) {
                                 // sets the fail state to true
                                ::SmallImageFail = true;
                                std::cout << "Attempting to fix small image error, please wait for the next data push\n" << std::endl;
