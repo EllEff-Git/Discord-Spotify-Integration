@@ -51,7 +51,7 @@ Fully custom fields in both state and details, repeat state: <br/>
 <br/>
 
 
-Installation is as easy as unzipping a file, and the total setup shouldn't take more than 5 minutes. <br/>
+Installation is as easy as unzipping, and the total setup shouldn't take more than 5 minutes. <br/>
 
 <br/>
 
@@ -64,6 +64,14 @@ Once started, the program automatically re-authenticates with both Discord and S
 <br/>
 
 To access more information inside Discord activity (total playtime, total playtime per current song, total playcount and more), you'll need to use [Spotify Analyser](https://github.com/EllEff-Git/Spotify-Analyzer) and install DSI as an "addon" (DSI will run fully independently, but will use the CSV data from Spotify Analyser). <br/>
+
+<br/>
+
+Quick note on Track URIs: <br/>
+Spotify assigns URIs on a per-market basis, meaning sometimes, you may stumble across the same song from 2 different markets. <br/>
+While they're functionally same, they'll have different Track URIs. This obviously makes it impossible to check for, unless... <br/>
+The program allows for "mapping", where it collects the Track URIs from songs you listen to, and turns them into keys when you run the included URImap program. <br/>
+(Basically, they'll look like: "URI:URI2", and the program can check for both keys, if the first doesn't match records) <br/>
 
 <br/>
 

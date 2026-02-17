@@ -151,7 +151,7 @@ if picCycleList == "File":
 
     if enableUpdates:
         # if the update config option is enabled
-        print(f"{Time()} [PIC]: Picture list loaded from file\n")
+        print(f"{Time()} [PICT]: Picture list loaded from file\n")
 else:
     # if the option isn't set to file
     picCycleList.replace('"', '').split(", ")
@@ -322,14 +322,11 @@ def authPlayback():
             return main.current_playback()
             # returns the Spotify package
 
-        except (requests.exceptions.RequestException, ConnectionResetError) as error:
+        except (requests.exceptions.RequestException, ConnectionResetError, ConnectionAbortedError, ConnectionResetError, ConnectionRefusedError) as error:
             # if it still fails
-            print(f"{Time()} [CRITICAL]: Spotify connection forcibly closed due to:\n{error}\nExiting in 5 seconds...")
-            # prints the critical error (critical means no need to check for error/update setting)
-            time.sleep(5)
-            # waits 5 seconds
-            return None
-            # closes 
+            if enableErrors:
+                print(f"{Time()} [ERROR]: {error}")
+                # prints error
 
 
 
@@ -399,11 +396,12 @@ class Background(threading.Thread):
             # waits for an event in the picture queue (just makes sure there's a task to be done)
 
             picLength = (len(self.picCycleList) - 1)
+            # calculates the length of the picture list (since it's a list, -1)
 
             if self.picCycleType in pictureBehaviorList and picLength >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
 
-                self.picCycleTime = (self.picCycleTime * 60)
+                self.picCycleTime = (picCycleTime * 60)
                 # takes the config time and turns into minutes
 
                 if self.picCycleType == "Random" or self.picCycleType == "random":
@@ -412,13 +410,12 @@ class Background(threading.Thread):
                     # picks a random number based on list length (lists start at 0, so -1 to length for position)
                     cppLargeImage = self.picCycleList[i]
                     # chooses the element with the random number
-
                     if self.pictureQueue.empty():
                         # ensures the queue doesn't already have a picture
                         self.pictureQueue.put(cppLargeImage)
                         # sends the picture to a queue that then reaches song()
                         if enableUpdates:
-                            print(f"{Time()} [PIC]: Random picture set")
+                            print(f"{Time()} [PICT]: Random picture set")
                             # informs user a new picture is set
 
                     time.sleep(self.picCycleTime)
@@ -440,7 +437,7 @@ class Background(threading.Thread):
                             self.pictureQueue.put(cppLargeImage)
                             # sends the picture to a queue that then reaches song()
                             if enableUpdates:
-                                print(f"{Time()} [PIC]: Sequential picture set")
+                                print(f"{Time()} [PICT]: Sequential picture set")
                                 # informs user a new picture is set
 
                         time.sleep(self.picCycleTime)
@@ -458,7 +455,7 @@ class Background(threading.Thread):
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
                     if enableUpdates:
-                        print(f"{Time()} [PIC]: Random picture set")
+                        print(f"{Time()} [PICT]: Random picture set")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -469,7 +466,7 @@ class Background(threading.Thread):
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
                     if enableUpdates:
-                        print(f"{Time()} [PIC]: Picture set")
+                        print(f"{Time()} [PICT]: Picture set")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -480,7 +477,7 @@ class Background(threading.Thread):
                 self.pictureQueue.put(cppLargeImage)
                 # sends the picture to a queue that then reaches song()
                 if enableErrors:
-                    print(f"{Time()} [PIC]: Invalid picture cycle behavior or no picture set - proceeding without a picture")
+                    print(f"{Time()} [PICT]: Invalid picture cycle behavior or no picture set - proceeding without a picture")
                 self.running = False
                 # doesn't set a picture, doesn't need to - so it stops the background thread
 
@@ -500,7 +497,7 @@ def runCpp():
                 # ensures there's no empty prints
                 if line:
                     # every time the C++ file prints something, this program takes it
-                    print(f"{Time()} [C++]: {line.rstrip()}")
+                    print(f"{Time()} [C++ ]: {line.rstrip()}")
                     # prints it after a line ends
 
 
@@ -968,7 +965,7 @@ def song(pictureQueue):
                 # if the track wasn't found in CSV
                 if enableUpdates:
                     # if the updates are enabled, lets user know the song wasn't found in CSV
-                    print(f"{Time()} [WARN]: {csName} not found in CSV, using fallback values.\n")
+                    print(f"{Time()} [WARN]: {csName} not found in CSV, using fallback values")
                 
                 ### Field 1 / Field 2 ###
 
@@ -1239,8 +1236,8 @@ def looper():
         # if there's a song change
             if enableUpdates:
                 # if console updates are enabled
-                print(f"{Time()} [SONG]: New song detected: {songName}")
-                # user update
+                print(f"{Time()} [SONG]: New song detected: {songName}, duration: {songLeft}")
+                # user update on new song
                 currentSong = songName
                 # changes the internal variable to match new song
                 songEvent.set()

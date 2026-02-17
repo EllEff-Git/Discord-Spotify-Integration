@@ -18,7 +18,6 @@ else:
     # gets the base directory of the program, where the python .exe resides
 
 
-
 # Directory Definitions
 uriDir = os.path.join(directory, "URImap.json")
 """the directory where URImap.json should/will live (inside DSI/Data/URImap.json)"""
@@ -37,7 +36,6 @@ Config.read(ConfigPath, "utf8")
 # reads from the config, saves values below
 
 
-
 # Required
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
 """spotify client ID, string"""
@@ -47,7 +45,6 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """spotify redirect URL, string"""
 MarketArea = Config.get("Function", "market_Area")
 """The 2-letter country identifier passed to spotify"""
-batchSize = Config.get("Function", "batchsize")
 
 
 # Auth
@@ -64,8 +61,14 @@ main = spotipy.Spotify(auth_manager = authorisation)
 # handles the authentication and user identification on start
 
 
+# Timestamp
+def Time():
+    """Function that returns the current time, formatted"""
+    return datetime.datetime.now().strftime("%H:%M:%S")
+    # shortens the time call into a function with 00:00:00 format
 
-# URI directory checkers
+
+# URI Prerequisites
 
 if os.path.exists(uriDir):
     # checks if the uri mapping file (URImap.json) exists
@@ -82,21 +85,50 @@ with open(noURIdir, "r") as uris:
     uriList = json.load(uris)
     # stores the list in a variable
 
-def Time():
-    """Function that returns the current time, formatted"""
-    return datetime.datetime.now().strftime("%H:%M:%S")
-    # shortens the variable used to call the current timestamp
+uriLength = (len(uriList) - 1)
+# stores the total length of the URI list
+
+currentLength = len(uriMap)
+# stores the total length of the URI mapping
+
+if (uriLength - currentLength) < 1:
+    # if the URImap is longer than or equal to the uriList
+    print(f"{Time()} [EXIT]: The URI mapping already equals the URI list, nothing to map. Exiting in 10 seconds")
+    time.sleep(10)
+    raise SystemExit
 
 if not MarketArea:
     # if the config option is empty
-    print(f"{Time()} [ERROR]: No market area. Please input it in the config.ini file and try again")
+    print(f"{Time()} [ERROR]: No market area. Please input it in the config.ini file and try again. Exiting in 10 seconds")
+    # user inform, wait -> exit
+    time.sleep(10)
+    raise SystemExit
+
+
+
+
+# Mapper Variables
+
+length = (uriLength - currentLength)
+# calculates the length the batch worker has to do
+
+maxLength = 51
+# sets a max worker size of 51
+
+taskLength = min(length, maxLength)
+# uses the shorter amount between the length to do and maxLength (meaning it'll have a cap of 51)
+
+endNum = (currentLength + taskLength)
+# calculates an end point based on the length of the URImap and the task left to do
+
+print(f"{Time()} [INFO]: {uriLength} URIs stored, {currentLength} already mapped")
+# user inform, short stop
+time.sleep(2)
+
 
 
 ### URI JSON Mapper ###
 
-#endNum = (batchSize * batchNum)
-endNum = (batchSize * 1)
-# end is the batch
 
 for num, uri in enumerate(uriList[0:endNum]):
     # gets the URI (track ID) for every unique entry in the CSV
@@ -105,9 +137,13 @@ for num, uri in enumerate(uriList[0:endNum]):
         # prints on the very first one of the batch
         print(f"{Time()} [INFO]: URI mapping started")
 
-    if num % 50 == 0:
-        # prints every 50 tracks
-        print(f"{Time()} [INFO]: Mapped {num} out of {endNum}")
+    if num % 25 == 0:
+        # prints every 25 tracks
+        print(f"{Time()} [INFO]: Mapping process: {num} out of {endNum}")
+
+    if num == (endNum-1):
+        # prints on the last one of the batch
+        print(f"{Time()} [INFO]: Mapping complete")
 
     if uri not in uriMap:
         # for every track URI not found in the pre-existing URI mapped JSON file
@@ -127,40 +163,29 @@ for num, uri in enumerate(uriList[0:endNum]):
             if error.http_status == 429:
                 # if the error is exactly 429 (rate limit)
 
-                print(f"{Time()} [INFO]: Rate limit exceeded, waiting for cooldown")
+                print(f"{Time()} [WARN]: Rate limit exceeded, waiting for cooldown")
                 # prints the rate limit info
                 retryTimer = int(error.headers["Retry-After"])
-                # takes the given retry after timer and saves it
-
-                print(f"{Time()} [INFO]: Cooldown is {retryTimer}")
+                # takes the given "retry after" timer and saves it
+                returnTime = datetime.datetime.fromtimestamp(int(retryTimer + time.time() + 3)).strftime("%H:%M:%S")
+                # gets the return time (time the cooldown expires)
+                print(f"{Time()} [WARN]: Spotify rate limit exceeded, cooldown is {retryTimer} ({returnTime})")
                 # prints the cooldown info
+                print(f"{Time()} [EXIT]: Exiting app in 10 minutes automatically...")
+                time.sleep(600)
+                # sleeps for 600 seconds (10 minutes) to ensure user sees prompt
+                raise SystemExit
 
-                time.sleep(retryTimer + 5)
-                # sleeps for the duration of the cooldown (+5 seconds to ensure the time has passed)
-
-                try:
-                    # tries to find it via Spotify (again)
-                    trackInfo = main.track(uri, MarketArea)
-                    # requests the track data from Spotify with the ID and market ID
-                    altURI = f"spotify:track:{trackInfo["id"]}"
-                    # it stores the "canonical URI" (the ID spotify returns for your market) as a string
-                    uriMap[uri] = altURI
-                    # and then stores that inside the URI map file
-
-                except:
-                    # if trying again fails
-                    print(f"{Time()} [ERROR]: Encountered an error after rate limit. Exiting in 5 seconds\n")
-                    time.sleep(5)
-                    raise SystemExit
             else:
                 print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{error}")
                 uriMap[uri] = uri
                 # uses the original URI for the current URI
 
         time.sleep(0.2)
-        # waits for half a second per track, to keep the limit low
+        # waits for 0.2 seconds per track, to keep the limit low
 
-print(f"{Time()} [INFO]: Batch processing done")
+
+
 
 
 ### URI Map Storing ###
@@ -171,4 +196,12 @@ with open(uriDir, "w", encoding="utf-8") as newUri:
     json.dump(uriMap, newUri, ensure_ascii=False, indent=2)
     # pushes the data from newUri to the JSON file
 
-time.sleep(5)
+
+
+print(f"{Time()} [INFO]: Batch processing done")
+# user update
+time.sleep(2)
+print(f"{Time()} [EXIT]: Exiting app in one minute")
+# user update
+time.sleep(60)
+# wait so it doesn't look like crash
