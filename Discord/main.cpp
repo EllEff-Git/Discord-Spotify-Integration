@@ -299,6 +299,8 @@ int main() {
                     activity.SetState(songStuff);
                     // sets the "details" (song name) - in games, equivalent is "Competitive"
                     activity.SetDetails(songName);
+                    // stateURL only works when a party size is set - which isn't available with this program
+                    // activity.SetStateUrl("https://discord.com");
 
                     // sets up the rich presence assets (pictures)
                     discordpp::ActivityAssets assets;
@@ -310,20 +312,19 @@ int main() {
                     }
                     else {
                         // if the large image has failed once, doesn't try to push a new one
-                        if (LargeImageFail) {
+                        if (LargeImageFail) {   
                         }
-
-                        else{
                         // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
-                        assets.SetLargeImage(LargeImage);
+                        else {
+                            assets.SetLargeImage(LargeImage);
                         }
                     }
-
-
+        
                     // Large text appears on hovering the large image (and under the song info)
                     assets.SetLargeText(LargeText);
-                    // URL is the Spotify link to the song currently playing
+                    // Large URL is the Spotify link to the selected type (Artist, Song, Album, Playlist) of the currently playing track
                     assets.SetLargeUrl(SpotifyURL);
+
 
                     // Small URL is the link when you click the smaller picture
                     assets.SetSmallUrl(SmallURL);
@@ -334,7 +335,7 @@ int main() {
                         std::cout << "Small Image field is empty or faulty, not pushing\n" << std::endl;
                     }
                     else {
-                        // if the large image has failed once, doesn't try to push a new one
+                        // if the small image has failed once, doesn't try to push a new one
                         if (SmallImageFail) {
                         }
 
@@ -362,9 +363,14 @@ int main() {
                     // updates user rich presence with given info
                     client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
 
-                        // updates user
-                        if(result.Successful()) std::cout << "Rich Presence updated\n" << std::endl;
-
+                        // if it goes through fine
+                        if(result.Successful()) {
+                            // updates user
+                            std::cout << "Rich Presence updated\n" << std::endl;
+                            // sets the error states both to false, so they can go through next time
+                            ::LargeImageFail = false;
+                            ::SmallImageFail = false;
+                        }
                         // if it fails, prints out the error for debug (likely wrong format or missing filenames, etc)
                         else std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl; {
 

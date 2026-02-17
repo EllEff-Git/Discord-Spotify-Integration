@@ -1,0 +1,5 @@
+# Enter links or names of pictures, one link/picture per line 
+# Empty lines are ignored, as are comment lines (start with #)
+
+https://picturelink.com/picture.png
+picture2

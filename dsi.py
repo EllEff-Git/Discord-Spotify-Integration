@@ -28,6 +28,7 @@ else:
     directory = os.path.dirname(__file__)
     # gets the base directory of the program, where the python .exe resides
 
+
 Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
 # sets up the config reader
 ConfigPath = os.path.join(directory, "config.ini")
@@ -35,20 +36,26 @@ ConfigPath = os.path.join(directory, "config.ini")
 Config.read(ConfigPath, "utf8")
 # reads from the config, saves values below
 
+
+spCache = os.path.join(directory, "spotifycache.json")
+"""The directory where the spotify cache (token) sits in"""
 idDir = os.path.join(directory, "Discord", "ids.txt")
-"""the directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
+"""The directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
 songDataDir = os.path.join(directory, "Discord", "songData.txt")
-"""the directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
+"""The directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
 uriDir = os.path.join(directory, "Discord", "URImap.json")
-"""the directory where URImap.json should/will live (inside DSI/Discord/URImap.json)"""
+"""The directory where URImap.json should/will live (inside DSI/Discord/URImap.json)"""
+picDir = os.path.join(directory, "pictureList.txt")
+"""The directory where pictureList.txt lives (inside DSI/pictureList.txt)"""
 SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
-"""the directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
+"""The directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
 cppExe = "DSIdiscord.exe"
-"""name of the C++ exe file"""
+"""The name of the C++ exe file"""
 cppPath = os.path.join(directory, "Discord", cppExe)
-"""the full path to the C++ exe"""
+"""The full path to the C++ exe"""
 cppDir = os.path.dirname(cppPath) 
-"""the directory the c++ exe lives in"""
+"""The directory the C++ Exe lives in"""
+
 
 print("[INFO] Starting DSI\n")
 # quick user update on status
@@ -61,34 +68,36 @@ print("[INFO] Starting DSI\n")
 
 # [Required]
 sp_client_ID = Config.get("Required", "Spotify_Client_ID")
-"""spotify client ID, string"""
+"""Spotify Client ID, string"""
 sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
-"""spotify client secret, string"""
+"""Spotify Client Secret, string"""
 sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
-"""spotify redirect URL, string"""
+"""Spotify redirect URL, string"""
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
-"""discord application ID, string"""
+"""Discord Application ID, string"""
 
 # [Function]
 refreshTime = int(Config.get("Function", "time_Between_Refresh"))
 """program update cycle interval time, integer"""
+
 if refreshTime < 5:
     # if the refresh time is set too low, overrides to safe minimum of 5s
     refreshTime = 5
+
 enablePause = Config.getboolean("Function", "enable_Pause_Behavior")
-"""pause text enabler, boolean"""
+"""The "paused on" text enabler, boolean"""
 pauseStateText = Config.get("Function", "pause_Behavior_Text")
-"""pause text, string"""
+"""The string used for paused status, string"""
 enableUpdates = Config.getboolean("Function", "print_Updates")
-"""print updates, boolean"""
+"""Whether to print updates, boolean"""
 enableErrors = Config.getboolean("Function", "print_Errors")
-"""print errors, boolean"""
+"""Whether to print errors, boolean"""
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
-"""small picture URL, string"""
+"""The small picture URL, string"""
 spotifyURL = Config.get("URL", "spotify_URL")
-"""large image URL, string (Track, Artist, Album, Playlist)"""
+"""The type of large image URL to use, string of: (Track, Artist, Album, Playlist)"""
 
 # [Song-Style]
 songNameSpacerL = Config.get("Song-Style", "song_Spacer_Left")
@@ -109,8 +118,37 @@ enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 """album's state, boolean"""
 
 # [Pictures]
-picCycleList = (Config.get("Pictures", "pictures_To_Cycle").replace('"', '')).split(", ")
+picCycleList = Config.get("Pictures", "pictures_To_Cycle")
 """list of pictures, list"""
+
+if picCycleList == "File":
+    # checks if the config option is set to "File"
+    picCycleList = []
+    # empties the variable 
+    with open(picDir, "r", encoding="utf-8") as file:
+    # opens the pictureList.txt file
+        for pics in file:
+        # for every picture (line) in the file
+
+            pic = pics.strip()
+            # stores one line
+            
+            if pic.startswith("#") or not pic:
+                # if the line starts with # (meaning it's a comment line) or it's empty
+                continue
+                # skips that line and goes to next one
+            
+            picCycleList.append(pic)
+            # adds the picture to the list
+
+    if enableUpdates:
+        # if the update config option is enabled
+        print("[PIC] Picture list loaded from file")
+else:
+    # if the option isn't set to file
+    picCycleList.replace('"', '').split(", ")
+    # replaces quotation marks and splits them into a list with commas
+
 picCycleTime = int(Config.get("Pictures", "picture_Cycle_Time"))
 """time to wait between picture cycling, int"""
 picCycleType = Config.get("Pictures", "picture_Cycle_Behavior")
@@ -128,7 +166,7 @@ songInfoField2 = Config.get("SHAA-Song-Function", "song_Info_Second_Field")
 shaaFallback = Config.get("SHAA-Song-Function", "song_Info_Fallback")
 """fallback type for both state fields, string (Total, custom)"""
 shaaInfoDetails = Config.get("SHAA-Song-Function", "song_Info_Detail_Field")
-"""details field type, string (Hours, Volume, Popularity, Repeat, Shuffle, custom)"""
+"""details field type, string (Hours, Volume, Repeat, Shuffle, custom)"""
 
 # [SHAA-State-Format]
 songInfoFormatPlays = Config.get("SHAA-State-Format", "song_Info_Format_First_Field")
@@ -172,7 +210,7 @@ stateOptions = ["Track", "track", "Total", "total"]
 # all possible choices for fields 1 and 2 of song details (plays/minutes)
 
 # Detail Field Options #
-detailOptions = ["Hours", "hours", "Volume", "volume", "Popularity", "popularity", "Repeat", "repeat", "Shuffle", "shuffle"]
+detailOptions = ["Hours", "hours", "Volume", "volume", "Repeat", "repeat", "Shuffle", "shuffle"]
 # all possible choices for detail field (hours)
 
 # Picture Queue #
@@ -195,9 +233,9 @@ authorisation = SpotifyOAuth(
     client_id = sp_client_ID, 
     client_secret = sp_client_secret, 
     redirect_uri = sp_redirect,
-    cache_path = os.path.join(directory, "spotifycache.json")
+    cache_path = spCache
     )
-# the argument for auth_manager, containing the variables from config and scope
+# the argument for auth_manager, containing the variables from config + scope of data request
 
 main = spotipy.Spotify(auth_manager = authorisation)
 # handles the authentication and user identification on start
@@ -247,7 +285,10 @@ def authPlayback():
     """Function to more "safely" handle API requests/errors"""
     global main, authorisation
     # takes the global variables and makes them local
+
     with spotifyLock:
+        # uses a threading lock, to prevent multiple requests at once
+
         try:
             # first tries to send an API request to Spotify
             return main.current_playback()
@@ -269,13 +310,14 @@ def authPlayback():
         
             main = spotipy.Spotify(auth_manager=authorisation)
             # passes the new token to the authorisation manager
+            
             return main.current_playback()
             # returns the Spotify package
 
         except (requests.exceptions.RequestException, ConnectionResetError) as error:
             # if it still fails
             print(f"[CRITICAL] Spotify connection forcibly closed due to:\n{error}\nExiting in 5 seconds...")
-            # prints the critical error
+            # prints the critical error (critical means no need to check for error/update setting)
             time.sleep(5)
             # waits 5 seconds
             return None
@@ -296,8 +338,7 @@ if os.path.isfile(SHAAdir):
     # sets the track URL as the index
 
 
-
-### Background Tasker ###
+### Background Picture Tasker ###
 
 
 
@@ -314,13 +355,9 @@ class Background(threading.Thread):
         # "turns on" the thread
 
     def run(self):
-        # starts up the function
+        """Function that starts picCycler"""
         picEvent.set()
         # runs once at start up, giving the event queue 1 task to start with
-
-    def resumePic(self):
-        """Function that adds an event to picturecycler's work queue"""
-        picEvent.set()
 
     def picCycler(self):
         """The function used to cycle pictures (and/or set one)"""
@@ -331,67 +368,76 @@ class Background(threading.Thread):
             picEvent.wait()
             # waits for an event in the picture queue (just makes sure there's a task to be done)
 
-            if picCycleType in pictureBehaviorList and len(picCycleList) >= 1:
+            if self.picCyclerType in pictureBehaviorList and len(self.picCyclerList) >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
 
-                if picCycleType == "Random" or picCycleType == "random":
-                    # if the selected method is "Random"
-                    i = random.randint(0, (len(picCycleList) -1))
-                    # picks a random number based on list length (lists start at 0, so -1 to length for position)
-                    cppLargeImage = picCycleList[i]
-                    # chooses the element with the random number
-                    self.pictureQueue.put(cppLargeImage)
-                    # sends the picture to a queue that then reaches song()
-                    songEvent.set()
-                    # sends an event that tells song() to process
-                    if enableUpdates:
-                        print("[INFO] Random picture set\n")
-                    time.sleep(60 * picCycleTime)
-                    # sleeps until it's time to change pictures
-                    picEvent.clear()
-                    # removes the queue
+                self.picCyclerTime = (self.picCyclerTime * 60)
+                # takes the config time and turns into minutes
 
-                if picCycleType == "Sequence":
-                    # if the selected method is "Sequence"
-                    for i in range(0, (len(picCycleList)-1)):
-                    # repeats this loop for every element in the list (lists start at 0, so -1 to length for position)
-                        cppLargeImage = picCycleList[i]
-                        # selects the picture from the list one by one
+                if self.picCyclerType == "Random" or self.picCyclerType == "random":
+                    # if the selected method is "Random"
+                    i = random.randint(0, (len(self.picCyclerList) - 1))
+                    # picks a random number based on list length (lists start at 0, so -1 to length for position)
+                    cppLargeImage = self.picCyclerList[i]
+                    # chooses the element with the random number
+
+                    if pictureQueue.empty():
+                        # ensures the queue doesn't already have a picture
                         self.pictureQueue.put(cppLargeImage)
                         # sends the picture to a queue that then reaches song()
-                        songEvent.set()
-                        # sends an event that tells song() to process
                         if enableUpdates:
-                            print("[INFO] Picture set\n")
-                        time.sleep(60 * picCycleTime)
+                            print("[PIC] Random picture set\n")
+                            # informs user a new picture is set
+
+                    time.sleep(self.picCyclerTime)
+                    # sleeps until it's time to change pictures
+                    picEvent.clear()
+                    # empties the picture event queue
+                    self.run()
+                    # runs the starter (could also just be picEvent.set(), but might as well use function)
+
+                if self.picCyclerType == "Sequence":
+                    # if the selected method is "Sequence"
+                    for i in range(0, (len(picCycleList) - 1)):
+                    # repeats this loop for every element in the list (lists start at 0, so -1 to length for position)
+                        cppLargeImage = self.picCyclerList[i]
+                        # selects the picture from the list one by one
+
+                        if pictureQueue.empty():
+                            # ensures the queue doesn't already have a picture
+                            self.pictureQueue.put(cppLargeImage)
+                            # sends the picture to a queue that then reaches song()
+                            if enableUpdates:
+                                print("[PIC] Sequential picture set\n")
+                                # informs user a new picture is set
+
+                        time.sleep(self.picCyclerTime)
                         # sleeps until it's time to change pictures
                         picEvent.clear()
-                        # removes the queue
+                        # empties the picture event queue
+                        self.run()
+                        # runs the starter
 
-                if picCycleType == "Once":
-                    i = random.randint(0,(len(picCycleList)-1))
+                if self.picCyclerType == "Once":
+                    i = random.randint(0, (len(picCycleList) - 1))
                     # picks a random number based on list length
-                    cppLargeImage = picCycleList[i]
+                    cppLargeImage = self.picCyclerList[i]
                     # chooses the element with the random number
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
-                    songEvent.set()
-                    # sends an event that tells song() to process
                     if enableUpdates:
-                        print("[INFO] Random picture set\n")
+                        print("[PIC] Random picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
-                if picCycleType == "None":
+                if self.picCyclerType == "None":
                     # if the selected method is None ()
-                    cppLargeImage = picCycleList[0]
+                    cppLargeImage = self.picCyclerList[0]
                     # chooses the first picture
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
-                    songEvent.set()
-                    # sends an event that tells song() to process
                     if enableUpdates:
-                        print("[INFO] Picture set\n")
+                        print("[PIC] Picture set\n")
                     self.running = False
                     # only sets it once, so it stops the background thread
 
@@ -401,10 +447,8 @@ class Background(threading.Thread):
                 # sets the picture to nothing (empty shouldn't break Discord)
                 self.pictureQueue.put(cppLargeImage)
                 # sends the picture to a queue that then reaches song()
-                songEvent.set()
-                # sends an event that tells song() to process
                 if enableErrors:
-                    print("[WARN] Invalid picture cycle behavior or no picture set\nProceeding without a picture\n")
+                    print("[PIC] Invalid picture cycle behavior or no picture set\nProceeding without a picture\n")
                 self.running = False
                 # doesn't set a picture, doesn't need to - so it stops the background thread
 
@@ -438,12 +482,12 @@ def song(pictureQueue):
     while True:
 
         songEvent.wait()
-        # waits for looper() (or picCycler) to set an event
+        # waits for looper() to set an event
 
         if not pictureQueue.empty():
             # checks pictureQueue to see if it has something
             cppLargeImage = pictureQueue.get()
-            # stores the picture from pictureQueue as c++LargeImage
+            # stores the picture from pictureQueue as the picture to send to C++
 
         songNameList = []
         # creates an empty list for strings to get added into as the loop progresses 
@@ -477,11 +521,12 @@ def song(pictureQueue):
 
         csURI = csItem.get("uri")
         # grabs the URI of the song - which is what determines the song matching
-        
+
         csArtists = csAlbum.get("artists")
-        # stores all the artists listed on the song (in case of multi-artist songs)
+        # stores all the artists listed on the song
         csArtist = csArtists[0].get("name")
-        # stores the first artist's name
+        # stores the first artist's name (in case there's multiple artists, only grabs first)
+
         csAlbumName = csAlbum.get("name")
         # stores the album name
 
@@ -500,15 +545,18 @@ def song(pictureQueue):
             # if the song is paused
             global pauseStart
             # takes the pauseStart from global variable to local
+
             if pauseStart is None:
                 # if there's no set pause time
                 pauseStart = time.time()
                 # sets the pause time to current time
+
             csUnixStart = 0
             csUnixEnd = 0
             # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
         else:
             # song is playing
+
             if pauseStart is not None:
                 # if there's a set pause time from before
                 pauseDuration = time.time() - pauseStart
@@ -615,8 +663,60 @@ def song(pictureQueue):
                 cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
                 # adds to string list
             
-            cppLargeHoverList.append(shaaInfoDetails)
-            # adds the detail field (from config)
+            if shaaInfoDetails in detailOptions:
+                # if the config option matches one of the set defaults
+
+                if shaaInfoDetails == "Hours" or shaaInfoDetails == "hours":
+                    # if the config calls for total hours
+                    shaaDetailField =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
+                    # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
+
+                if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
+                    # if the config calls for volume
+                    try:
+                        shaaDetailField = f"{csDevice.get("volume_percent")}%"
+                        # takes the volume and makes it a percentage
+                    except:
+                        shaaDetailField = "some volume"
+                        # if it fails, puts a fallback string
+                    
+                if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
+                    # if the config calls for repeat state
+                    try:
+                        repeatState = csFull.get("repeat_state")
+                        if repeatState:
+                            # if repeat state returns True
+                            shaaDetailField = "on Repeat"
+                                # adds string form
+                        else:
+                            # if repeat state doesn't return True
+                            shaaDetailField = "not on Repeat"
+                            # adds string form
+                    except:
+                        shaaDetailField = "may be on Repeat"
+                         # if it fails, puts a fallback string
+
+                if shaaInfoDetails == "Shuffle" or shaaInfoDetails == "shuffle":
+                    # if the config calls for shuffle state
+                    try:
+                        shuffleState = csFull.get("shuffle_state")
+                        if shuffleState:
+                            # if shuffle state returns True
+                            shaaDetailField = "on Shuffle"
+                        else:
+                            # if shuffle state doesn't return True
+                            shaaDetailField = "not on Shuffle"
+                    except:
+                        shaaDetailField = "may be on Shuffle"
+                        # if it fails, puts a fallback string
+
+            else:
+                # if the config option doesn't match any of the set defaults
+                shaaDetailField = shaaInfoDetails
+                # sets the total time to match custom string instead
+
+            cppLargeHoverList.append(shaaDetailField)
+            # joins together the list 
 
             if dsiShoutout:
                 cppLargeHoverList.append(dsiShoutoutStr)
@@ -753,15 +853,6 @@ def song(pictureQueue):
                             shaaDetailField = "some volume"
                             # if it fails, puts a fallback string
                     
-                    if shaaInfoDetails == "Popularity" or shaaInfoDetails == "popularity":
-                        # if the config calls for popularity
-                        try:
-                            shaaDetailField = csItem.get("popularity")
-                            # takes the popularity rating
-                        except:
-                            shaaDetailField = "somewhat popular"
-                            # if it fails, puts a fallback string
-
                     if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
                         # if the config calls for repeat state
                         try:
@@ -814,6 +905,7 @@ def song(pictureQueue):
                     print(f"[WARN] {csName} not found in CSV, using fallback values.\n")
                 
                 ### Field 1 / Field 2 ###
+
                 if shaaFallback == "Total" or shaaFallback == "total":
                     # if the selected fallback is Total/total
                     shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
@@ -878,15 +970,6 @@ def song(pictureQueue):
                             # takes the volume and makes it a percentage
                         except:
                             shaaDetailField = "some volume"
-                            # if it fails, puts a fallback string
-
-                    if shaaInfoDetails == "Popularity" or shaaInfoDetails == "popularity":
-                        # if the config calls for popularity
-                        try:
-                            shaaDetailField = csItem.get("popularity")
-                            # takes the popularity rating
-                        except:
-                            shaaDetailField = "somewhat popular"
                             # if it fails, puts a fallback string
 
                     if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
@@ -1138,7 +1221,7 @@ songThread.start()
 # starts the song thread to get updated info
 
 cppThread = threading.Thread(target = runCpp)
-# creates a thread for the C++ program
+# creates a thread for the C++ program to run in - this way it won't stop the main process
 
 if dc_app_ID and sp_client_ID:
     # if both the Application ID and Spotify Client ID are found
@@ -1150,7 +1233,7 @@ if dc_app_ID and sp_client_ID:
     # starts the C++ thread
 else:
     # if both aren't found
-    print("[CRITICAL] Application ID/Spotify ID missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...\n")
+    print("[CRITICAL] Required fields missing, please enter them in the config.ini file before starting the application\nExiting in 5 seconds...\n")
     # user inform
     time.sleep(5)
     # wait 5 seconds
