@@ -2,9 +2,8 @@ import os, sys, json, time, datetime
 import spotipy, configparser
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
-import pandas as pd
 
-URIver = "v0.18.2.0235"
+URIver = "v0.18.2.0540"
 
 # Directory Grabber
 if getattr(sys, 'frozen', False):
@@ -45,7 +44,6 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """spotify redirect URL, string"""
 MarketArea = Config.get("Function", "market_Area")
 """The 2-letter country identifier passed to spotify"""
-batchSize = Config.get("Function", "batchsize")
 
 
 # Auth
@@ -87,10 +85,10 @@ with open(noURIdir, "r") as uris:
     # stores the list in a variable
 
 uriLength = (len(uriList) - 1)
-# stores the total length of the URI list
+"""stores the total length of the URI list"""
 
 currentLength = len(uriMap)
-# stores the total length of the URI mapping
+"""stores the total length of the URI mapping"""
 
 if (uriLength - currentLength) < 1:
     # if the URImap is longer than or equal to the uriList
@@ -112,10 +110,10 @@ print(f"{Time()} [START]: Starting URImapper {URIver}")
 # Mapper Variables
 
 length = (uriLength - currentLength)
-# calculates the length the batch worker has to do
+"""calculates the length the batch worker has to do"""
 
-maxLength = 51
-# sets a max worker size of 51
+maxLength = 101
+"""sets a max worker size of 101"""
 
 if length > maxLength:
     # if the URI list queue exceeds maximum allowed size
@@ -129,7 +127,7 @@ else:
     # sets the queue length as the max
 
 endNum = (currentLength + taskLength)
-# calculates an end point based on the length of the URImap and the task left to do
+"""calculates an end point based on the length of the URImap and the task left to do"""
 
 print(f"{Time()} [INFO]: {uriLength} URIs stored, {currentLength} already mapped")
 # user inform, short stop
@@ -211,7 +209,24 @@ with open(uriDir, "w", encoding="utf-8") as newUri:
 print(f"{Time()} [INFO]: Batch processing done")
 # user update
 time.sleep(2)
+
+
+newLength = len(uriMap)
+"""the length of the URI map after processing"""
+
+undoneLength = (uriLength - newLength)
+"""the length of the undone URIs"""
+
+if newLength + maxLength < uriLength:
+    # if there's more than one batch's worth of URIs left to map, allows user to continue with a prompt
+
+    print(f"{Time()} [INFO]: There are {undoneLength} more URIs to process, please restart the program to map more")
+    # user prompt to continue
+    time.sleep(3)
+    
+
 print(f"{Time()} [EXIT]: Exiting app in one minute (feel free to close)")
 # user update
+
 time.sleep(60)
 # wait so it doesn't look like crash

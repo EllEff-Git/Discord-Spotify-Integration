@@ -1,7 +1,5 @@
 import pandas as pd
 # Required for all the CSV parsing and data grabbing
-import numpy as np
-# Required to check datatypes from CSV
 import configparser, random, subprocess
 # Required to read config, choose random pictures and to start the C++ file
 import os, sys, time, threading, queue, datetime
@@ -18,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.18.2.0514"
+DSIver = "v0.18.2.2247"
 # the program version (literally just date/time)
 # very useful for debug when I accidentally compile the wrong fucking file
 
@@ -40,10 +38,7 @@ ConfigPath = os.path.join(directory, "config.ini")
 Config.read(ConfigPath, "utf8")
 # reads from the config, saves values below
 
-def Time():
-    """Function that returns the current time, formatted"""
-    return datetime.datetime.now().strftime("%H:%M:%S")
-    # shortens the variable used to call the current timestamp
+
 
 spCache = os.path.join(directory, "Data", "spotifycache.json")
 """The directory where the spotify cache (token) sits in"""
@@ -67,10 +62,6 @@ cppDir = os.path.dirname(cppPath)
 """The directory the C++ Exe lives in"""
 
 
-print(f"{Time()} [INFO]: Starting DSI {DSIver}\n")
-# quick user update on status
-
-
 
 ### Config Section ###
 
@@ -85,6 +76,7 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """Spotify redirect URL, string"""
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
 """Discord Application ID, string"""
+
 
 # [Function]
 refreshTime = int(Config.get("Function", "time_Between_Refresh"))
@@ -104,6 +96,37 @@ enableErrors = Config.getboolean("Function", "print_Errors")
 """Whether to print errors, boolean"""
 enableMapping = Config.getboolean("Function", "enable_URI_Mapping")
 """Whether to enable the URI mapping functionality, boolean"""
+timestampStyle = Config.get("Function", "timestamp_Style").lower()
+"""The timestamp format for system prints, string (Clock/Uptime)"""
+
+startTime = int(datetime.datetime.now().timestamp())
+"""The program start time in UNIX"""
+
+
+
+def Time():
+    """Function that returns the current time, formatted"""
+    if timestampStyle == "uptime":
+        # if the config option is set to uptime
+        currentTime = int(datetime.datetime.now().timestamp())
+        # takes the current time when Time() is called
+        uptime = currentTime - startTime
+        # calculates the seconds apart between current and startup time
+        uptimeHr, remainderHr = divmod(uptime, 3600)
+        # takes the hours and the remainders
+        uptimeMin, uptimeSec = divmod(remainderHr, 60)
+        # takes the minutes and seconds from the remainders
+        uptimeStr = ("{:02}:{:02}:{:02}".format(int(uptimeHr), int(uptimeMin), int(uptimeSec)))
+        return uptimeStr
+        # shortens the call to system uptime
+    else:
+        # if the config option is set to something else
+        return datetime.datetime.now().strftime("%H:%M:%S")
+    # shortens the call to current system timestamp
+
+print(f"{Time()} [INFO]: Starting DSI {DSIver}\n")
+# quick user update on status
+
 
 # [URL]
 smallURL = Config.get("URL", "small_URL")
@@ -111,11 +134,13 @@ smallURL = Config.get("URL", "small_URL")
 spotifyURL = Config.get("URL", "spotify_URL")
 """The type of large image URL to use, string of: (Track, Artist, Album, Playlist)"""
 
+
 # [Song-Style]
 songNameSpacerL = Config.get("Song-Style", "song_Spacer_Left")
 """spacer between 1st and 2nd field, string"""
 songNameSpacerR = Config.get("Song-Style", "song_Spacer_Right")
 """spacer between 2nd and 3rd field, string"""
+
 
 # [Song-Format]
 preText = Config.get("Song-Format", "pre_Text")
@@ -132,6 +157,7 @@ albumDrop = Config.getboolean("Song-Format", "enable_Album_Dropping")
 """whether the album dropping is enabled, boolean"""
 albumFallback = Config.get("Song-Format", "album_Fallback_Text")
 """the text to fall back to in case the album gets dropped, string"""
+
 
 # [Pictures]
 picCycleList = Config.get("Pictures", "pictures_To_Cycle")
@@ -166,13 +192,14 @@ else:
     # replaces quotation marks and splits them into a list with commas
 
 picCycleTime = (int(Config.get("Pictures", "picture_Cycle_Time")) * 60)
-"""time to wait between picture cycling, converted to minutes, int"""
+"""time to wait between picture cycling (minutes), int"""
 picCycleType = Config.get("Pictures", "picture_Cycle_Behavior")
 """type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
 smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
 """name/URL of small picture, string"""
 hoverText = Config.get("Pictures", "text_On_Small_Hover")
 """text to show on small picture hover, string"""
+
 
 # [SHAA-Song-Function]
 songInfoField1 = Config.get("SHAA-Song-Function", "song_Info_First_Field")
@@ -183,6 +210,7 @@ shaaFallback = Config.get("SHAA-Song-Function", "song_Info_Fallback")
 """fallback type for both state fields, string (Total, custom)"""
 shaaInfoDetails = Config.get("SHAA-Song-Function", "song_Info_Detail_Field")
 """details field type, string (Hours, Volume, Repeat, Shuffle, custom)"""
+
 
 # [SHAA-State-Format]
 songInfoFormatPlays = Config.get("SHAA-State-Format", "song_Info_Format_First_Field")
@@ -203,8 +231,10 @@ songInfoDetailsDoubleSpace = Config.getboolean("SHAA-Details-Format", "song_Info
 dsiShoutout = Config.getboolean("SHAA-Details-Format", "dsi_Shoutout")
 """whether to add a shoutout to DSI at the end of the details section, boolean"""
 
+
 print(f"{Time()} [CFG]: Configuration loaded\n")
 # another quick user update
+
 
 if not enableUpdates:
     # if console printing is disabled in config
@@ -332,6 +362,9 @@ def authPlayback():
 
         except (requests.exceptions.RequestException, ConnectionResetError, ConnectionAbortedError, ConnectionResetError, ConnectionRefusedError) as error:
             # if it still fails
+            if error.errno == 10054 & enableErrors:
+                print(f"{Time()} [WARN]: Disconnected, attempting reconnect...")
+                # if the error is 10054 (forcibly disconnected)
             if enableErrors:
                 print(f"{Time()} [ERROR]: {error}")
                 # prints error
@@ -423,13 +456,13 @@ class Background(threading.Thread):
                         if enableUpdates:
                             print(f"{Time()} [PICT]: Random picture set")
                             # informs user a new picture is set
-
+            
                     time.sleep(self.picCycleTime)
                     # sleeps until it's time to change pictures
                     picEvent.clear()
                     # empties the picture event queue
                     self.run()
-                    # runs the starter (could also just be picEvent.set(), but might as well use function)
+                    # runs the starter
 
                 if self.picCycleType == "Sequence":
                     # if the selected method is "Sequence"
@@ -1250,7 +1283,7 @@ def looper():
             songEvent.set()
             # since this only runs when the program first starts, sets an event immediately to song, to refresh data
             if enableUpdates:
-                print(f"{Time()} [INFO]: First song, {songName}, successfully processed\n")
+                print(f"{Time()} [INFO]: First song: {songName} has been successfully processed\n")
                 # if user wants feedback, sends this
 
         songProg = (info.get("progress_ms"))
