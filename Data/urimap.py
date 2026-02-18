@@ -4,7 +4,7 @@ from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 import pandas as pd
 
-
+URIver = "v0.18.2.0235"
 
 # Directory Grabber
 if getattr(sys, 'frozen', False):
@@ -45,6 +45,7 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """spotify redirect URL, string"""
 MarketArea = Config.get("Function", "market_Area")
 """The 2-letter country identifier passed to spotify"""
+batchSize = Config.get("Function", "batchsize")
 
 
 # Auth
@@ -105,6 +106,7 @@ if not MarketArea:
     raise SystemExit
 
 
+print(f"{Time()} [START]: Starting URImapper {URIver}")
 
 
 # Mapper Variables
@@ -115,8 +117,16 @@ length = (uriLength - currentLength)
 maxLength = 51
 # sets a max worker size of 51
 
-taskLength = min(length, maxLength)
-# uses the shorter amount between the length to do and maxLength (meaning it'll have a cap of 51)
+if length > maxLength:
+    # if the URI list queue exceeds maximum allowed size
+    print(f"{Time()} [INFO]: Currently allowed batch size is {maxLength}, but there are more unprocessed URIs. Only processing max batch size")
+    # informs user
+    taskLength = maxLength
+    # sets the task length to the maximum allowed batch size
+else:
+    # if the URI list queue is shorter than max allowed batch size
+    taskLength = length
+    # sets the queue length as the max
 
 endNum = (currentLength + taskLength)
 # calculates an end point based on the length of the URImap and the task left to do
@@ -201,7 +211,7 @@ with open(uriDir, "w", encoding="utf-8") as newUri:
 print(f"{Time()} [INFO]: Batch processing done")
 # user update
 time.sleep(2)
-print(f"{Time()} [EXIT]: Exiting app in one minute")
+print(f"{Time()} [EXIT]: Exiting app in one minute (feel free to close)")
 # user update
 time.sleep(60)
 # wait so it doesn't look like crash

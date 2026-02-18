@@ -18,7 +18,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.18.2.0213"
+DSIver = "v0.18.2.0514"
 # the program version (literally just date/time)
 # very useful for debug when I accidentally compile the wrong fucking file
 
@@ -128,6 +128,10 @@ enableArtist = Config.getboolean("Song-Format", "enable_Artist")
 """artist's state, boolean"""
 enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 """album's state, boolean"""
+albumDrop = Config.getboolean("Song-Format", "enable_Album_Dropping")
+"""whether the album dropping is enabled, boolean"""
+albumFallback = Config.get("Song-Format", "album_Fallback_Text")
+"""the text to fall back to in case the album gets dropped, string"""
 
 # [Pictures]
 picCycleList = Config.get("Pictures", "pictures_To_Cycle")
@@ -161,8 +165,8 @@ else:
     picCycleList.replace('"', '').split(", ")
     # replaces quotation marks and splits them into a list with commas
 
-picCycleTime = int(Config.get("Pictures", "picture_Cycle_Time"))
-"""time to wait between picture cycling, int"""
+picCycleTime = (int(Config.get("Pictures", "picture_Cycle_Time")) * 60)
+"""time to wait between picture cycling, converted to minutes, int"""
 picCycleType = Config.get("Pictures", "picture_Cycle_Behavior")
 """type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
 smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
@@ -380,7 +384,7 @@ class Background(threading.Thread):
         super().__init__()
         self.picCycleList = picCycleList
         self.picCycleType = picCycleType
-        self.picCycleTime = (picCycleTime * 60)
+        self.picCycleTime = picCycleTime
         # makes the background variable and turns into minutes
         self.pictureQueue = pictureQueue
         self.running = True
@@ -405,9 +409,6 @@ class Background(threading.Thread):
 
             if self.picCycleType in pictureBehaviorList and picLength >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
-
-                self.picCycleTime = (picCycleTime * 60)
-                # takes the config time and turns into minutes
 
                 if self.picCycleType == "Random" or self.picCycleType == "random":
                     # if the selected method is "Random"
@@ -516,7 +517,9 @@ def song(pictureQueue):
     global uriList
     # pulls the uriList as a local variable from global
     global cppLargeImage
-    # pulls the LargeImage as a local variable from global
+    # pulls the LargeImage as a local variable from global (this is only used as a fallback, in case picCycler fails)
+    global uriMap
+    # pulls the uriMap as a local variable from global
 
     while True:
 
@@ -782,6 +785,7 @@ def song(pictureQueue):
                 if finalURI not in csvReader.index and altURI in csvReader.index:
                     # if the URI is not found in the CSV index, but the alt URI is
                     finalURI = altURI
+                    print(f"{Time()} [SHAA]: URI not found in CSV, but the mapped URI is. Using mapped URI")
                     # sets the URI to use the alternate instead
 
                 if finalURI not in uriList:
@@ -1085,7 +1089,7 @@ def song(pictureQueue):
             # joins together the detail list of strings (SHAA-only)
             
 
-        ### Song State String Joiner ###
+        ### Song State String Joiner (SHAA and non) ###
 
 
         if songStuffList:
@@ -1146,8 +1150,21 @@ def song(pictureQueue):
 
         if enableAlbum:
             # if artist is enabled
-            songNameList.append(csAlbumName)
-            # adds to string
+            tempState = " ".join(songNameList)
+            # temporarily makes a string out of the list
+            if len(tempState) > 108:
+                # if the total length of the song state is > 108 characters (10 off from the cutoff)
+                if albumDrop:
+                    # if album dropping is enabled
+                    songNameList.append(albumFallback)
+                    # puts the album fallback text in the list instead
+                else:
+                    songNameList.append(csAlbumName)
+                    # uses the album anyway (may get cut off)
+            else:
+                # if the total length is less than 108
+                songNameList.append(csAlbumName)
+                # adds to string
 
         if postText:
             # if postText has something
@@ -1227,13 +1244,13 @@ def looper():
         if currentSong is None:
             # when the program first starts, the currentSong will be "None", this updates it
             currentSong = songName
-            # calls for the C++ program to start as a subprocess of this program, passing its output
+            # sets the current song to match 
             picEvent.set()
-            # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture (breaks if none is set)
+            # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture
             songEvent.set()
             # since this only runs when the program first starts, sets an event immediately to song, to refresh data
             if enableUpdates:
-                print(f"{Time()} [INFO]: First song processed\n")
+                print(f"{Time()} [INFO]: First song, {songName}, successfully processed\n")
                 # if user wants feedback, sends this
 
         songProg = (info.get("progress_ms"))

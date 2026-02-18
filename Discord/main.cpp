@@ -13,7 +13,7 @@
 #include <codecvt>
 
 // version number
-std::string DSIDver = "v0.18.2.0152";
+std::string DSIDver = "v0.18.2.0448";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -215,7 +215,7 @@ int main() {
     std::signal(SIGINT, signalHandler);
 
     // informs when DSI has successfully launched
-    std::cout << "Discord RPC started via DSIdiscord" << DSIDver << "\n" << std::endl;
+    std::cout << "Discord RPC started via DSIdiscord " << DSIDver << "\n" << std::endl;
 
     // creates a Discord Client
     auto client = std::make_shared<discordpp::Client>();
@@ -225,11 +225,16 @@ int main() {
       // std::cout << "[" << EnumToString(severity) << "] " << message << std::endl;
     }, discordpp::LoggingSeverity::Info);
 
+    std::atomic<bool> RPCrunning = false;
+
     // sets up status callback to check client connection
-    client->SetStatusChangedCallback([client](discordpp::Client::Status status, discordpp::Client::Error error, int32_t errorDetail) {
+    client->SetStatusChangedCallback([client, &RPCrunning](discordpp::Client::Status status, discordpp::Client::Error error, int32_t errorDetail) {
 
       // if discord succeeds at finding client, gets ready to change activity info
       if (status == discordpp::Client::Status::Ready) {
+
+        // checks if the RPC has already been started and is already running
+        if (!RPCrunning.exchange(true)) {
 
         // updates user
         std::cout << "Loading Discord Status\n" << std::endl;
@@ -457,15 +462,17 @@ int main() {
 
                 } // if(success) close
                 
-            // pauses the update loop for as long as RefreshTime is set to
-            std::this_thread::sleep_for(std::chrono::seconds(RefreshTime));
+                // pauses the update loop for as long as RefreshTime is set to
+                std::this_thread::sleep_for(std::chrono::seconds(RefreshTime));
+                
+                } // while(running) close bracket
 
-          } // while(running) close bracket
+                // detaches itself from the main thread so as to not stop the discord communications updates
+                }).detach(); // thread close bracket
+            }
 
-        // detaches itself from the main thread so as to not stop the discord communications updates
-        }).detach(); // thread close bracket
+    } // closes the "if status connection good" 
 
-      } // closes the "if status connection good" 
       else if (error != discordpp::Client::Error::None) {
         //std::cerr << "Connection Error: " << discordpp::Client::ErrorToString(error) << " - Details: " << errorDetail << std::endl;
         std::cerr << "Failed to connect\n" << std::endl;
