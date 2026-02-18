@@ -12,7 +12,8 @@
 #include <Windows.h>
 #include <codecvt>
 
-
+// version number
+std::string DSIDver = "v0.18.2.0152";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -50,22 +51,85 @@ std::string pathFinder() {
 
 
 
-// function used later to trim any potentially long fields, to fit Discord's max of 128 characters
-std::string utfTrim(const std::string& input)
-{
-    if (input.empty())
-        return input;
+// function used later to trim any potentially long fields, to fit Discord's max of 128 UTF-16 units
+std::string utfTrim(const std::string& input, size_t maxUnits = 118) {
+    // if there's nothing, falls back to default
+    if (input.empty()) return "Listening to Spotify // Data via DSI";
 
-    // takes the UTF-8 encoded field and converts it to UTF-16 (what discord apparently uses to measure)
+    // converter takes UTF-8 and turns into UTF-16
     std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    std::wstring utf16 = converter.from_bytes(input);
 
-    // trims the field down to 128 (if it's >128)
-    if (utf16.size() > 128)
-        utf16.resize(128);
+    // utf16 stores the field as as UTF-16 ()
+    std::wstring utf16;
 
-    // returns the UTF-16 string as UTF-8 bytes
-    return converter.to_bytes(utf16);
+    // attempts to turn the string into UTF-16
+    try {
+        utf16 = converter.from_bytes(input);
+    } 
+    // if it fails, uses fallback string
+    catch (...) {
+        return "Listening to Spotify // Data via DSI";
+    }
+
+    // variable to count units
+    size_t units = 0;
+    // variable to store the trimmed name
+    std::wstring trimmed;
+
+    // goes through every character in the string
+    for (size_t i = 0; i < utf16.size(); ++i) {
+        wchar_t wc = utf16[i];
+
+        // goes through "surrogate pairs" (non-standard characters, emojis, etc)
+        // "high" surrogates = 0xD800-0xDBFF, "lows" = 0xDC00-0xDFFF
+        if (wc >= 0xD800 && wc <= 0xDBFF) {
+            // if the pairs fit in maxUnits
+            if (i + 1 < utf16.size()) {
+                wchar_t low = utf16[i + 1];
+                if (low >= 0xDC00 && low <= 0xDFFF) {
+                    // they get added to trimmed string and add +2
+                    if (units + 2 > maxUnits) break;
+                    trimmed += wc;
+                    trimmed += low;
+                    units += 2;
+                    ++i;
+                    continue;
+                }
+            }
+            // if they're invalid, they get skipped
+            continue;
+        }
+
+        // anything else just gets counted normally
+        // they'll only get added until that character + 1 is > than the safe max
+        if (units + 1 > maxUnits) break;
+        // adds the character to the trimmed string
+        trimmed += wc;
+        ++units;
+    }
+
+    // a function that trims trailing space/invisible characters
+    auto trailTrim = [](wchar_t c) {
+        return c == L' ' || c == L'\t' || c == L'\r' || c == 0x200B || c == 0xFEFF;
+    };
+    while (!trimmed.empty() && trailTrim(trimmed.back())) {
+        trimmed.pop_back();
+    }
+
+    // makes sure the string is at least 2 (discord needs 2 =< x =< 128 characters)
+    if (trimmed.size() < 2) {
+        // if it's not, uses fallback string
+        trimmed = L"Listening to Spotify // Data via DSI";
+    }
+
+    // tries to convert back to utf-8 (which is what Discord wants the text in, for some damn reason)
+    try {
+        return converter.to_bytes(trimmed);
+    }
+    // if it fails, reverts back to fallback string 
+    catch (...) {
+        return "Listening to Spotify // Data via DSI";
+    }
 }
 
 
@@ -74,9 +138,13 @@ int main() {
 
     // gets the path to the current directory
     std::string cppDir = pathFinder();
+
     // sets the path for each file this program accesses
+    // ids.txt contains the Discord Application ID, the refreshTime and small picture name/link (written once by DSI at start)
     std::string idDir = cppDir + "\\" + "ids.txt";
+    // songData.txt gets automatically updated by DSI with song name, time, custom fields, everything
     std::string sdDir = cppDir + "\\" + "songData.txt";
+    // token.txt is used to (re-)authenticate with Discord
     std::string tokenDir = cppDir + "\\" + "token.txt";
 
     // makes sure the output console prints in UTF-8 encoding (allows for non-ANSI alphabet, special characters, etc)
@@ -112,7 +180,7 @@ int main() {
             if (lineNum == 0) AppID = value;
             // second line is Small Image
             else if (lineNum == 1) SIMG = value;
-            // third (last) line is the Refresh Time, aka how often the program sends data
+            // third (last) line is the Refresh Time, aka how often the program should send data
             else if (lineNum == 2) rfT = value;
             // adds 1 to lineNum so it moves to next line
             ++lineNum;
@@ -125,7 +193,7 @@ int main() {
     // replaces placeholder image key with the ones from ids.txt
     SmallImage = SIMG;
 
-    // tries to replace APPLICATION_ID with AppID (the number from ids.txt)
+    // tries to replace the temp variable APPLICATION_ID with AppID (the "real" (live) number from ids.txt)
     try {
         APPLICATION_ID = std::stoull(AppID);
     } 
@@ -147,7 +215,7 @@ int main() {
     std::signal(SIGINT, signalHandler);
 
     // informs when DSI has successfully launched
-    std::cout << "Discord RPC started\n" << std::endl;
+    std::cout << "Discord RPC started via DSIdiscord" << DSIDver << "\n" << std::endl;
 
     // creates a Discord Client
     auto client = std::make_shared<discordpp::Client>();
@@ -284,12 +352,7 @@ int main() {
                     songStuff = utfTrim(songStuff);
                     LargeText = utfTrim(LargeText);
                     SmallText = utfTrim(SmallText);
-                    
-                    if (songStuff.size() < 2) {
-                        // this field has random issues, ensures it doesn't ship empty
-                        songStuff = "Listening to Spotify // Data via DSI";
-                    }               
-
+  
                     // sets up rich presence details
                     discordpp::Activity activity;
 
@@ -362,9 +425,6 @@ int main() {
                   
                     // updates user rich presence with given info
                     client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
-                        
-                        // makes a quick boolean to check if the message is sent to Python
-                        static std::atomic<bool> printed = false;
 
                         // if it goes through fine
                         if(result.Successful()) {
@@ -373,10 +433,11 @@ int main() {
                             // sets the error states both to false, so they can go through next time
                             ::LargeImageFail = false;
                             ::SmallImageFail = false;
-                            printed = true;
                         }
-                        // if it fails, prints out the error for debug (likely wrong format or missing filenames, etc)
-                        else std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl; {
+                        // if it fails to push user RPC update
+                        else { 
+                            // prints out the error for debug (likely wrong format or missing filenames, etc)
+                            std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl; 
 
                             // if the error message contains "LargeImage"
                             if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {
@@ -391,6 +452,7 @@ int main() {
                                std::cout << "Attempting to fix small image error, please wait for the next data push\n" << std::endl;
                             }
                         } // else close
+                        
                   }); // UpdateRichPresence close
 
                 } // if(success) close

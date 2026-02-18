@@ -18,6 +18,10 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
+DSIver = "v0.18.2.0213"
+# the program version (literally just date/time)
+# very useful for debug when I accidentally compile the wrong fucking file
+
 
 if getattr(sys, 'frozen', False):
     # since the program bundled with pyInstaller, it's "frozen"
@@ -63,7 +67,7 @@ cppDir = os.path.dirname(cppPath)
 """The directory the C++ Exe lives in"""
 
 
-print(f"{Time()} [INFO]: Starting DSI\n")
+print(f"{Time()} [INFO]: Starting DSI {DSIver}\n")
 # quick user update on status
 
 
@@ -376,7 +380,8 @@ class Background(threading.Thread):
         super().__init__()
         self.picCycleList = picCycleList
         self.picCycleType = picCycleType
-        self.picCycleTime = picCycleTime
+        self.picCycleTime = (picCycleTime * 60)
+        # makes the background variable and turns into minutes
         self.pictureQueue = pictureQueue
         self.running = True
         # "turns on" the thread
@@ -387,7 +392,7 @@ class Background(threading.Thread):
         # runs once at start up, giving the event queue 1 task to start with
 
     def picCycler(self):
-        """The function used to cycle pictures (and/or set one)"""
+        """The function used to cycle pictures (or set one)"""
 
         while True:     
         # this function only runs if true, some of the methods below will end it after one cycle
@@ -800,7 +805,7 @@ def song(pictureQueue):
                 ### Plays / Field 1 ###
 
                 if enableUpdates:
-                    print(f"{Time()} [INFO]: Current song found in CSV")
+                    print(f"{Time()} [SHAA]: Current song found in CSV")
 
                 playcount = csvReader.loc[finalURI, "Playcount"]
                 playtime = csvReader.loc[finalURI, "Total Time"]
@@ -965,7 +970,7 @@ def song(pictureQueue):
                 # if the track wasn't found in CSV
                 if enableUpdates:
                     # if the updates are enabled, lets user know the song wasn't found in CSV
-                    print(f"{Time()} [WARN]: {csName} not found in CSV, using fallback values")
+                    print(f"{Time()} [SHAA]: {csName} not found in CSV, using fallback values")
                 
                 ### Field 1 / Field 2 ###
 
@@ -1080,12 +1085,13 @@ def song(pictureQueue):
             # joins together the detail list of strings (SHAA-only)
             
 
-        ### Song Stuff String Joiner ###
+        ### Song State String Joiner ###
+
 
         if songStuffList:
             # if there's anything in songStuffList (not empty)
             cppState = " ".join(songStuffList)
-            # takes the list of strings from above and joins it together 
+
         else:
             # if the list *is* empty
             cppState = "An amount of time spent listening"
@@ -1148,32 +1154,36 @@ def song(pictureQueue):
             songNameList.append(postText)
             # adds to string
 
+
+        ### Song Details Joiner ###
+
+
         if songNameList:
             # if there's anything in songNameList (not empty)
             cppSongName = " ".join(songNameList)
-            # takes the list of strings from above and joins it together 
+
         else:
             # if the list *is* empty
-            cppSongName = "A song by an artist on an album"
+            cppSongName = "A song, by an artist, on an album"
             # puts a fallback string instead
-        
+
 
 
         ### C++ Text File Writer ###
 
 
         cppFull = (
-                    "songName = " + cppSongName + "\n" + 
-                    "songStuff = " + cppState + "\n" +
-                    "LargeImage = " + cppLargeImage + "\n" +
-                    "LargeText = " + cppLargeHover + "\n" +
-                    "SmallText = " + hoverText + "\n" +
-                    "SpotifyURL = " + csURL + "\n" +
-                    "SmallURL = " + smallURL + "\n" +
-                    "UNIXstart = " + str(csUnixStart) + "\n" +
-                    "UNIXend = " + str(csUnixEnd)
+                    f"songName = {cppSongName}\n"
+                    f"songStuff = {cppState}\n"
+                    f"LargeImage = {cppLargeImage}\n"
+                    f"LargeText = {cppLargeHover}\n"
+                    f"SmallText = {hoverText}\n"
+                    f"SpotifyURL = {csURL}\n"
+                    f"SmallURL = {smallURL}\n"
+                    f"UNIXstart = {str(csUnixStart)}\n"
+                    f"UNIXend = {str(csUnixEnd)}\n"
                     )
-        # merges all the song information together
+        # merges all the song information together and removes empty space
 
         with open(songDataDir, "w", encoding="utf-8") as txt:
             # opens the songData text file
@@ -1236,7 +1246,7 @@ def looper():
         # if there's a song change
             if enableUpdates:
                 # if console updates are enabled
-                print(f"{Time()} [SONG]: New song detected: {songName}, duration: {songLeft}")
+                print(f"{Time()} [SONG]: New song detected: {songName}, duration: {songLeft:,.0f} seconds")
                 # user update on new song
                 currentSong = songName
                 # changes the internal variable to match new song
@@ -1265,10 +1275,10 @@ def looper():
             # if config option for updates is on
             if not playing:
                 # if the song is paused, informs user
-                print(f"{Time()} [INFO]: Paused on: {songName}, checking again in {sleepfor} seconds")
+                print(f"{Time()} [INFO]: Paused on: {songName}, checking again in {sleepfor:,.0f} seconds")
             else:
                 # if song is not paused, informs user
-                print(f"{Time()} [INFO]: Song unchanged, checking again in {sleepfor} seconds")
+                print(f"{Time()} [INFO]: Song unchanged, checking again in {sleepfor:,.0f} seconds")
 
         time.sleep(sleepfor)
         # sleeps for the determined time
