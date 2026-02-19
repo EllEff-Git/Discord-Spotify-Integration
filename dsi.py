@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.18.2.2247"
+DSIver = "v0.19.2.0634"
 # the program version (literally just date/time)
 # very useful for debug when I accidentally compile the wrong fucking file
 
@@ -360,12 +360,14 @@ def authPlayback():
             return main.current_playback()
             # returns the Spotify package
 
-        except (requests.exceptions.RequestException, ConnectionResetError, ConnectionAbortedError, ConnectionResetError, ConnectionRefusedError) as error:
+        except SpotifyException as error:
             # if it still fails
-            if error.errno == 10054 & enableErrors:
-                print(f"{Time()} [WARN]: Disconnected, attempting reconnect...")
+            if error.headers["Connection Aborted"] & enableErrors:
                 # if the error is 10054 (forcibly disconnected)
-            if enableErrors:
+                print(f"{Time()} [WARN]: Disconnected, attempting reconnect...")
+
+            elif enableErrors:
+                # if it's not exactly the type
                 print(f"{Time()} [ERROR]: {error}")
                 # prints error
 
@@ -380,7 +382,7 @@ if os.path.isfile(SHAAdir):
     # informs user SHAA is enabled
     csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
     # opens the CSV file and uses utf-8 encoding to ensure compatibility
-    csvReader = csvReader.set_index("URL")
+    csvReader = csvReader.set_index("URI")
     # sets the track URL as the index
 
     if os.path.exists(noURIdir):
@@ -418,8 +420,8 @@ class Background(threading.Thread):
         self.picCycleList = picCycleList
         self.picCycleType = picCycleType
         self.picCycleTime = picCycleTime
-        # makes the background variable and turns into minutes
         self.pictureQueue = pictureQueue
+        # takes all the call variables and initialises them in the class
         self.running = True
         # "turns on" the thread
 
@@ -1185,8 +1187,8 @@ def song(pictureQueue):
             # if artist is enabled
             tempState = " ".join(songNameList)
             # temporarily makes a string out of the list
-            if len(tempState) > 108:
-                # if the total length of the song state is > 108 characters (10 off from the cutoff)
+            if len(tempState) > 113:
+                # if the total length of the song state is > 113 characters (5 off from the cutoff)
                 if albumDrop:
                     # if album dropping is enabled
                     songNameList.append(albumFallback)
@@ -1195,7 +1197,7 @@ def song(pictureQueue):
                     songNameList.append(csAlbumName)
                     # uses the album anyway (may get cut off)
             else:
-                # if the total length is less than 108
+                # if the total length is less than 113
                 songNameList.append(csAlbumName)
                 # adds to string
 
@@ -1258,6 +1260,7 @@ currentSong = None
 def looper():
     """Function that checks song info on a loop"""
     global currentSong
+    # grabs the "global" (outside the function) as a local variable
     while True:
         # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
         info = authPlayback()
@@ -1302,6 +1305,19 @@ def looper():
                 # changes the internal variable to match new song
                 songEvent.set()
                 # sets an event to make song() update the text file
+                time.sleep(5)
+                # waits 5 seconds
+                info = authPlayback()
+                # re-runs the check (in case the song is skipped)
+                songName = (info.get("item")).get("name")
+                # gets the new song name
+                if currentSong != songName:
+                    # if the song has changed in 5 seconds
+                    time.sleep(5)
+                    # waits another 5 seconds, then sends back to start (this way it does 2 checks in the first 10 seconds after a song change)
+                    continue
+                    # sends back to start of looper
+
 
         if not playing:
         # if the song is paused

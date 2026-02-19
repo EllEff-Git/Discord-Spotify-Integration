@@ -3,7 +3,7 @@ import spotipy, configparser
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 
-URIver = "v0.18.2.0540"
+URIver = "v0.19.2.0622"
 
 # Directory Grabber
 if getattr(sys, 'frozen', False):
