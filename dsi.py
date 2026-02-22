@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.21.2.0014"
+DSIver = "v0.22.2.0553"
 # the program version (literally just date/time)
 # very useful for debug when I accidentally compile the wrong fucking file
 
@@ -170,7 +170,7 @@ albumFallback = Config.get("Song-Format", "album_Fallback_Text")
 
 # [Pictures]
 picCycleList = Config.get("Pictures", "pictures_To_Cycle")
-"""List of pictures for large image, list"""
+"""Pictures for large image, list/string/option (File, Spotify)"""
 
 if picCycleList == "File" or picCycleList == "file":
     # checks if the config option is set to "File"
@@ -195,10 +195,11 @@ if picCycleList == "File" or picCycleList == "file":
     if enableUpdates:
         # if the update config option is enabled
         print(f"{Time()}[PICT]: Picture list loaded from file\n")
+
 else:
-    # if the option isn't set to file
-    picCycleList.replace('"', '').split(", ")
-    # replaces quotation marks and splits them into a list with commas
+    # if the list is on Spotify (or empty), doesn't modify it
+    None
+
 
 picCycleTime = (int(Config.get("Pictures", "picture_Cycle_Time")) * 60)
 """Time to wait between picture cycling (minutes), int"""
@@ -247,7 +248,7 @@ print(f"{Time()}[CFG]: Configuration loaded\n")
 
 if not enableUpdates:
     # if console printing is disabled in config
-    print(f"{Time()}[CFG]: Console updates disabled in config (print_Updates), working silently\n")
+    print(f"{Time()}[CFG]: Console updates disabled in config (print_Updates)\n")
     # prints a quick warning
 
 if not enableErrors:
@@ -387,7 +388,7 @@ def authPlayback():
 
                 if attempt != 0 & enableErrors:
                     # if it's not the first attempt, meaning the reconnect attempt print has already been pushed once
-                    print(f"{Time()}[INFO]: Reconnection successful!")
+                    print(f"{Time()}[INFO]: Reconnect successful!")
                     # prints user update
 
                 return main.current_playback()
@@ -400,7 +401,7 @@ def authPlayback():
                     # if the error updates are on, prints an error message
 
                         # if the header is anything else
-                    print(f"{Time()}[ERROR]: Spotify connection error due to {error}.\n{Time()}[INFO]: Attempting to reconnect ({attempt}/3)")
+                    print(f"{Time()}[ERROR]: Spotify connection error due to {error}.\n{Time()}[INFO]: Attempting to reconnect ({attempt+1}/3)")
 
                 time.sleep(3)
                 # waits 3 seconds just in case
@@ -465,11 +466,13 @@ class Background(threading.Thread):
 # a class to use background tasking, this way the pictures can cycle outside the main song loop
     def __init__(self, picCycleList, picCycleType, picCycleTime, pictureQueue):
         super().__init__()
+
         self.picCycleList = picCycleList
         self.picCycleType = picCycleType
         self.picCycleTime = picCycleTime
         self.pictureQueue = pictureQueue
         # takes all the call variables and initialises them in the class
+
         self.running = True
         # "turns on" the thread
 
@@ -484,6 +487,15 @@ class Background(threading.Thread):
         while True:     
         # this function only runs if true, some of the methods below will end it after one cycle
 
+            if self.picCycleList == "Spotify" or self.picCycleList == "spotify":
+                # if the cycle type is "Spotify" (in which case the song handles the pictures)
+                self.running = False
+                False
+                if enableUpdates:
+                    print(f"{Time()}[PICT]: Selected picture method is Spotify covers, disabling picture cycler")
+                break
+                # kills the picture cycler
+                
             picEvent.wait()
             # waits for an event in the picture queue (just makes sure there's a task to be done)
 
@@ -506,9 +518,12 @@ class Background(threading.Thread):
                         if enableUpdates:
                             print(f"{Time()}[PICT]: Random picture set")
                             # informs user a new picture is set
-            
-                    time.sleep(self.picCycleTime)
-                    # sleeps until it's time to change pictures
+                        time.sleep(self.picCycleTime)
+                        # sleeps until it's time to change pictures
+                    else:
+                        time.sleep(10)
+                        # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
+
                     picEvent.clear()
                     # empties the picture event queue
                     self.run()
@@ -528,9 +543,12 @@ class Background(threading.Thread):
                             if enableUpdates:
                                 print(f"{Time()}[PICT]: Sequential picture set")
                                 # informs user a new picture is set
-
-                        time.sleep(self.picCycleTime)
-                        # sleeps until it's time to change pictures
+                            time.sleep(self.picCycleTime)
+                            # sleeps until it's time to change pictures
+                        else:
+                            time.sleep(10)
+                            # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
+                        
                         picEvent.clear()
                         # empties the picture event queue
                         self.run()
@@ -644,6 +662,11 @@ def song(pictureQueue):
         csURI = csItem.get("uri")
         # grabs the URI of the song - which is what determines the song matching
 
+        csImages = csAlbum.get("images")
+        # gets the information about the album's images
+        csCover = csImages[0].get("url")
+        # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
+
         csArtists = csAlbum.get("artists")
         # stores all the artists listed on the song
         csArtist = csArtists[0].get("name")
@@ -652,11 +675,13 @@ def song(pictureQueue):
         csAlbumName = csAlbum.get("name")
         # stores the album name
 
-        csLength = csItem.get("duration_ms")
-        # stores the length of the song
+        csLength = int(csItem.get("duration_ms")/1000)
+        # stores the length of the song in seconds
+        csProgress = int(csFull.get("progress_ms")/1000)
+        # saves the current song progress in seconds
 
-        csUnixStart = csFull.get("timestamp")
-        # stores the start time of the song
+        csUnixStart = int(time.time() - csProgress)
+        # stores the start time of the song by taking current time and subtracting progress
         csUnixEnd = (csUnixStart + csLength)
         # stores the end time of the song (by adding up the start + duration)
 
@@ -1274,6 +1299,10 @@ def song(pictureQueue):
 
         ### C++ Text File Writer ###
 
+        if picCycleList == "Spotify" or picCycleList == "spotify":
+            # checks if the picture list is set to send pictures from Spotify covers
+            cppLargeImage = csCover
+            # replaces the image link with the spotify album cover if so
 
         cppFull = (
                     f"songName = {cppSongName}\n"
@@ -1329,11 +1358,15 @@ def looper():
         # stores name for display purposes
         playing = info.get("is_playing")
         # checks the pause state (True if playing, False if not)
+        songProg = ((info.get("progress_ms"))/1000)
+        # grabs the progress of the song at the time
 
         if currentURI is None:
             # when the program first starts, the currentSong will be "None", this updates it
             currentURI = songURI
             # sets the current song to match 
+            currentProg = songProg
+            # updates the current progress 
             picEvent.set()
             # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture
             songEvent.set()
@@ -1342,35 +1375,29 @@ def looper():
                 print(f"{Time()}[INFO]: First song: {songName}, has been successfully processed\n")
                 # if user wants feedback, sends this
 
-        songProg = ((info.get("progress_ms"))/1000)
+        
         songDur = ((info.get("item")).get("duration_ms")/1000)
         # grabs both the current time and length of the song (in seconds)
         songLeft = (songDur-songProg)
         # calculates the time left on the song
 
-        if currentURI != songURI:
-        # if there's a song change
+        if currentURI != songURI or songProg < currentProg:
+        # if there's a song change (if the URI or there's somehow less time left than previously)
+
             if enableUpdates:
                 # if console updates are enabled
                 print(f"{Time()}[SONG]: New song detected: {songName}, duration: {songDur:,.0f} seconds")
                 # user update on new song
                 currentURI = songURI
                 # changes the internal variable to match new song
+                currentProg = songProg
+                # changes timestamp variable to match
                 songEvent.set()
                 # sets an event to make song() update the text file
-                time.sleep(5)
-                # waits 5 seconds
-                info = authPlayback()
-                # re-runs the check (in case the song is skipped)
-                songURI = (info.get("item")).get("uri")
-                # grabs the URI of the song, stores it
-                songName = (info.get("item")).get("name")
-                # gets the new song name
-
-                if currentURI != songURI:
-                    # if the song has changed in 5 seconds
-                    continue
-                    # sends back to start of looper
+                time.sleep(3)
+                # waits 3 seconds
+                continue
+                # sends back to the start of looper to check for a new song (3 second checks after a song change to check for skip)
 
         if not playing:
         # if the song is paused
