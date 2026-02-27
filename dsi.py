@@ -16,9 +16,8 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.22.2.0553"
-# the program version (literally just date/time)
-# very useful for debug when I accidentally compile the wrong fucking file
+DSIver = "v0.27.2.0215"
+# the program version (y#.dd.m.hhmm)
 
 
 if getattr(sys, "frozen", False):
@@ -293,7 +292,7 @@ main = spotipy.Spotify(auth_manager = authorisation)
 # handles the authentication and user identification on start
 
 # URL List #
-spotifyURLlist = ["track", "album", "artist", "playlist"]
+spotifyURLlist = ["track", "Track", "album", "Album", "artist", "Artist", "playlist", "Playlist"]
 # makes a list of all the possible options for spotify URL types
 
 # Picture Cycling Methods #
@@ -743,31 +742,31 @@ def song(pictureQueue):
         if spotifyURL in spotifyURLlist:
             # if the selected type of URL is in the valid set
 
-            if spotifyURL == "track":
+            if spotifyURL == "track" or spotifyURL == "Track":
                 # if the config option for url type is set to track
                 csURL = cstrackURL.get("spotify")
                 # takes the track's URL
 
-            elif spotifyURL == "album":
+            elif spotifyURL == "album" or spotifyURL == "Album":
                 # if the config option for url type is set to album
                 csURL = csAlbumLinks.get("spotify")
                 # takes the album's URL
 
-            elif spotifyURL == "artist":
+            elif spotifyURL == "artist" or spotifyURL == "Artist":
                 # if the config option for url type is set to artist
                 csURL = csArtistLinks.get("spotify")
                 # takes the artist's URL
 
-            elif spotifyURL == "playlist":
+            elif spotifyURL == "playlist" or spotifyURL == "Playlist":
                 # if the config option for url type is set to playlist
-                if onPlaylist == False:
+                if onPlaylist:
+                    # takes the playlist's URL
+                    csURL = csPlaylistURL.get("spotify")
+                else:
                     # the user isn't playing a playlist, but has selected the playlist url config option
                     csURL = smallURL
-                    # sets it to smallURL as a fallback
-                elif onPlaylist == True:
-                    csURL = csPlaylistURL.get("spotify")
-                    # takes the playlist's URL
-
+                    # sets it to smallURL as a fallback                    
+                    
         else:
             # if the config option for url type is invalid, defaults to my website :)
             csURL = "https://elleffnotelf.com"
@@ -894,7 +893,7 @@ def song(pictureQueue):
                 if finalURI not in uriList:
                     # if the URI is not in the URI list yet
                     if enableUpdates:
-                        print(f"{Time()}[SHAA]: URI not found in list, added to URIlist")
+                        print(f"{Time()}[SHAA]: URI not found in list, added to URI list")
                     uriList.append(finalURI)
                     # adds it to the list of URIs
 
@@ -903,7 +902,7 @@ def song(pictureQueue):
                     finalURI = altURI
                     # sets the URI to use the alternate instead
                     if enableUpdates:
-                        print(f"{Time()}[SHAA]: URI not found in CSV, but the mapped URI is. Using mapped URI")
+                        print(f"{Time()}[SHAA]: URI not found in CSV, but mapped URI was")
                    
 
                     with open(noURIdir, "w", encoding="utf-8") as newUri:

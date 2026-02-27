@@ -13,7 +13,7 @@
 #include <codecvt>
 
 // version number
-std::string DSIDver = "v0.18.2.0448";
+std::string DSIDver = "v0.27.2.0215";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -24,9 +24,13 @@ std::string SmallImage = "";
 // initialises a default refresh time of 15 seconds
 std::uint64_t RefreshTime = 0;
 
-// initialises bools for image failing (very common)
+// initialises bools for image failing
+// this is not common, but prevents more than 1 failure
 std::atomic<bool> LargeImageFail = false;
 std::atomic<bool> SmallImageFail = false;
+
+// initialises a temp string for checks
+std::uint64_t unixOldStart = 0;
 
 // flag to control application run state (starts as true to start running)
 std::atomic<bool> running = true;
@@ -262,8 +266,8 @@ int main() {
           std::string SmallURL = "https://twitter.com";
 
           // placeholder UNIX timestamps
-          uint64_t UNIXstart = 0;
-          uint64_t UNIXend = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
+          uint64_t unixStart = 0;
+          uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
 
           // defaults the "success" to not true
           bool success = false;
@@ -333,8 +337,8 @@ int main() {
 
                 // tries to turn the UNIX timestamps from strings to integers (Discord only accepts int in this field)
                 try {
-                    UNIXstart = std::stoull(unixStartStr);
-                    UNIXend = std::stoull(unixEndStr);
+                    unixStart = std::stoull(unixStartStr);
+                    unixEnd = std::stoull(unixEndStr);
                   } 
                   // if the str -> int fails, sends an exception (e) in text
                   catch(const std::exception& e) {
@@ -346,11 +350,27 @@ int main() {
               std::cout << "Error reading the song file\n" << std::endl;
             }
 
+            // sets up a boolean to check song status
+            bool songChanged = false;
+
+            // checks if the song has changed since the last update
+            // if it has (variables don't match)
+            if (unixStart != unixOldStart) {
+                    
+                unixOldStart = unixStart;
+                songChanged = true;
+            }
+            // if the song hasn't changed
+            else {
+                // pauses the "thread" for 3 seconds (prevents crazy CPU/disk usage for nothing)
+                std::this_thread::sleep_for(std::chrono::seconds(3));
+            }
+
             // closes the text file
             SongInfo.close();
 
                 // only pushes the update if the file was read correctly
-                if (success) {
+                if (success && songChanged) {
 
                     // ensures the fields doesn't exceed the character limit
                     songName = utfTrim(songName);
@@ -422,9 +442,9 @@ int main() {
                     discordpp::ActivityTimestamps timestamps;
 
                     // sets the song's start time (in UNIX timestamp)
-                    timestamps.SetStart(UNIXstart);
+                    timestamps.SetStart(unixStart);
                     // sets the song's end time (in UNIX timestamp)
-                    timestamps.SetEnd(UNIXend);
+                    timestamps.SetEnd(unixEnd);
                     // pushes timestamps to "activity"
                     activity.SetTimestamps(timestamps);
                   
@@ -462,8 +482,8 @@ int main() {
 
                 } // if(success) close
                 
-                // pauses the update loop for as long as RefreshTime is set to
-                std::this_thread::sleep_for(std::chrono::seconds(RefreshTime));
+                // pauses the update loop for 3 seconds (songData won't update that fast, so just lets program breathe)
+                std::this_thread::sleep_for(std::chrono::seconds(3));
                 
                 } // while(running) close bracket
 
