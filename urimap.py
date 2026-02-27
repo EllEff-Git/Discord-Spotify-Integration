@@ -3,7 +3,7 @@ import spotipy, configparser
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 
-URIver = "v0.21.2.0005"
+URIver = "v0.27.2.0419"
 
 # Directory Grabber
 if getattr(sys, 'frozen', False):
@@ -18,7 +18,7 @@ else:
 
 
 # Directory Definitions
-uriDir = os.path.join(directory, "Data","URImap.json")
+uriDir = os.path.join(directory, "Data", "URImap.json")
 """the directory where URImap.json should/will live (inside DSI/Data/URImap.json)"""
 noURIdir = os.path.join(directory, "Data", "URIlist.json")
 """The directory where URIlist.json should/will live (inside DSI/Data/URIlist.json)"""
@@ -52,10 +52,9 @@ authorisation = SpotifyOAuth(
     client_id = sp_client_ID, 
     client_secret = sp_client_secret, 
     redirect_uri = sp_redirect,
-    cache_path = spCache,
-    open_browser=False
+    cache_path = spCache
     )
-# the argument for auth_manager, containing the variables from config + scope of data request
+# the arguments for auth_manager, containing the variables from config + scope of data request
 
 main = spotipy.Spotify(auth_manager = authorisation)
 # handles the authentication and user identification on start
@@ -98,15 +97,15 @@ def mapper(start, end):
         # gets the URI (track ID) for every unique entry in the CSV
 
         if num == start:
-            # prints on the very first one of the batch
+            # prints on the first URI of the batch
             print(f"{Time()} [UMAP]: URI mapping started")
 
         if num % 25 == 0:
-            # prints every 25 tracks
+            # prints every 25 URIs
             print(f"{Time()} [UMAP]: Mapping process: {num} out of {end}")
 
         if num == (end-1):
-            # prints on the last one of the batch
+            # prints on the last URI of the batch
             print(f"{Time()} [UMAP]: Mapping complete")
 
         if uri not in uriMap:
@@ -141,7 +140,8 @@ def mapper(start, end):
                     raise SystemExit
 
                 else:
-                    print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{error}")
+                    print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{Time()} [ERROR]: {error}")
+                    # prints the error message
                     uriMap[uri] = uri
                     # uses the original URI for the current URI
 
@@ -155,9 +155,9 @@ def mapper(start, end):
     # user update
     time.sleep(2)
     # short wait
-    print(f"{Time()} [INFO]: Checking URI list...")
+    print(f"{Time()} [INFO]: Checking URI list")
     # user update
-    batchCalc()
+    batchCalc(10)
     # calls batch calculator again to check for more URIs
 
 
@@ -166,7 +166,7 @@ def mapper(start, end):
 
 
 
-def batchCalc():
+def batchCalc(pause):
     """Function that calculates the batch size of URIs and starts mapper"""
 
     uriLength = (len(uriList))
@@ -180,6 +180,12 @@ def batchCalc():
 
     maxLength = 101
     # sets a max worker size of 101 (number I'm *fairly* certain Spotify won't limit)
+
+    print(f"{Time()} [INFO]: Waiting {pause} seconds to start...")
+    # quick user update on wait
+
+    time.sleep(pause)
+    # sleeps for the parameter-set length (0 at start, a bit after first batch, to prevent insane spam to API)
 
     print(f"{Time()} [INFO]: {uriLength} URIs stored by DSI, {currentLength} already mapped")
     # user inform on task length
@@ -229,7 +235,7 @@ def batchCalc():
 ### PROGRAM START ###
 
 
-batchCalc()
+batchCalc(0)
 # calls batch size calculator
 
 

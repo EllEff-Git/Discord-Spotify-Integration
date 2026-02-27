@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.27.2.0215"
+DSIver = "v0.27.2.0505"
 # the program version (y#.dd.m.hhmm)
 
 
@@ -200,8 +200,16 @@ else:
     None
 
 
-picCycleTime = (int(Config.get("Pictures", "picture_Cycle_Time")) * 60)
-"""Time to wait between picture cycling (minutes), int"""
+picCycleTime = Config.get("Pictures", "picture_Cycle_Time")
+"""Time to wait between picture cycling, int/string (minutes/Song)"""
+
+try:
+    # tries to turn the time into minutes (integer and multiplies by 60)
+    picCycleTime = (int(picCycleTime) * 60)
+except:
+    # if it can't, leaves it alone (should be the case when it's set to "Song")
+    None
+
 picCycleType = Config.get("Pictures", "picture_Cycle_Behavior").lower()
 """Type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
 smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
@@ -435,7 +443,7 @@ if os.path.isfile(SHAAdir):
             # stores the loaded file as uriList
             if enableUpdates:
                 uriLength = len(uriList)
-                print(f"{Time()}[SHAA]: {uriLength} URIs listed")
+                print(f"{Time()}[SHAA]: {uriLength} URIs stored")
     else:
         # if file doesn't exist
         uriList = []
@@ -490,6 +498,8 @@ class Background(threading.Thread):
                 # if the cycle type is "Spotify" (in which case the song handles the pictures)
                 self.running = False
                 False
+                # sets both the running status and the "while" to false
+
                 if enableUpdates:
                     print(f"{Time()}[PICT]: Selected picture method is Spotify covers, disabling picture cycler")
                 break
@@ -517,16 +527,24 @@ class Background(threading.Thread):
                         if enableUpdates:
                             print(f"{Time()}[PICT]: Random picture set")
                             # informs user a new picture is set
-                        time.sleep(self.picCycleTime)
-                        # sleeps until it's time to change pictures
+
+                        if picCycleTime == "song" or picCycleTime == "Song":
+                            # if the cycle "time" is instead set to "song"
+                            picEvent.clear()
+                            # empties the queue
+                        else:
+                            # if the cycle time is a time
+                            time.sleep(self.picCycleTime)
+                            # sleeps until it's time to change pictures
+                            picEvent.clear()
+                            # empties the picture event queue
+                            self.run()
+                            # runs the starter
                     else:
                         time.sleep(10)
                         # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
 
-                    picEvent.clear()
-                    # empties the picture event queue
-                    self.run()
-                    # runs the starter
+
 
                 if self.picCycleType == "sequence":
                     # if the selected method is "Sequence"
@@ -542,16 +560,21 @@ class Background(threading.Thread):
                             if enableUpdates:
                                 print(f"{Time()}[PICT]: Sequential picture set")
                                 # informs user a new picture is set
-                            time.sleep(self.picCycleTime)
-                            # sleeps until it's time to change pictures
+                            if picCycleTime == "song" or picCycleTime == "Song":
+                                # if the cycle "time" is instead set to "song"
+                                picEvent.clear()
+                                # empties the queue
+                            else:
+                                # if the cycle time is a time
+                                time.sleep(self.picCycleTime)
+                                # sleeps until it's time to change pictures
+                                picEvent.clear()
+                                # empties the picture event queue
+                                self.run()
+                                # runs the starter
                         else:
                             time.sleep(10)
                             # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
-                        
-                        picEvent.clear()
-                        # empties the picture event queue
-                        self.run()
-                        # runs the starter
 
                 if self.picCycleType == "once":
                     i = random.randint(0, picLength)
@@ -563,6 +586,7 @@ class Background(threading.Thread):
                     if enableUpdates:
                         print(f"{Time()}[PICT]: Random picture set")
                     self.running = False
+                    False
                     # only sets it once, so it stops the background thread
 
                 if self.picCycleType == "none":
@@ -574,6 +598,7 @@ class Background(threading.Thread):
                     if enableUpdates:
                         print(f"{Time()}[PICT]: Picture set")
                     self.running = False
+                    False
                     # only sets it once, so it stops the background thread
 
             else:
@@ -585,6 +610,7 @@ class Background(threading.Thread):
                 if enableErrors:
                     print(f"{Time()}[PICT]: Invalid picture cycle behavior or no picture set - proceeding without a picture")
                 self.running = False
+                False
                 # doesn't set a picture, doesn't need to - so it stops the background thread
 
 
@@ -626,6 +652,12 @@ def song(pictureQueue):
             # checks pictureQueue to see if it has something
             cppLargeImage = pictureQueue.get()
             # stores the picture from pictureQueue as the picture to send to C++
+
+            if picCycleTime == "song" or picCycleTime == "Song":
+            # if the cycle "time" is instead set to "song"
+
+                picEvent.set()
+                # tells the picture selector to select a new one
 
         songNameList = []
         # creates an empty list for strings to get added into as the loop progresses 
