@@ -16,8 +16,8 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.27.2.0505"
-# the program version (y#.dd.m.hhmm)
+DSIver = "v0.3.01.0910"
+# the program version (y.m.dd.hhmm)
 
 
 if getattr(sys, "frozen", False):
@@ -1383,6 +1383,7 @@ def looper():
             time.sleep(5)
             # waits for a few seconds
             continue
+
         songURI = (info.get("item")).get("uri")
         # grabs the URI of the song, stores it
         songName = (info.get("item").get("name"))
@@ -1425,16 +1426,16 @@ def looper():
                 # changes timestamp variable to match
                 songEvent.set()
                 # sets an event to make song() update the text file
-                time.sleep(3)
-                # waits 3 seconds
+                time.sleep(5)
+                # waits 5 seconds
                 continue
-                # sends back to the start of looper to check for a new song (3 second checks after a song change to check for skip)
+                # sends back to the start of looper to check for a new song (5 second checks after a song change to check for a song skip)
 
         if not playing:
         # if the song is paused
             sleepfor = max(refreshTime, 5)
             # sets the sleep timer to the higher of the two (never lets it go <5s)
-
+        
         else:
         # if the current song is the same, and is not paused
             if songLeft > refreshTime:
@@ -1447,15 +1448,15 @@ def looper():
                 # if there's less song time left than refresh time (if refreshTime = 15, song will have to be <15)
                 sleepfor = max(songLeft, 5)
                 # sleeps for the minimum of 5 seconds
+                if enableUpdates:
+                    print(f"{Time()}[INFO]: New song in {sleepfor} seconds")
+                    # user inform on new song coming soon
 
         if enableUpdates:
             # if config option for updates is on
             if not playing:
                 # if the song is paused, informs user
                 print(f"{Time()}[INFO]: Paused on: {songName}, checking again in {sleepfor:,.0f} seconds")
-            else:
-                # if song is not paused, informs user
-                print(f"{Time()}[INFO]: Song unchanged, checking again in {sleepfor:,.0f} seconds")
 
         time.sleep(sleepfor)
         # sleeps for the determined time

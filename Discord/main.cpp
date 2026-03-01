@@ -12,8 +12,8 @@
 #include <Windows.h>
 #include <codecvt>
 
-// version number
-std::string DSIDver = "v0.27.2.0215";
+// version number (y.m.dd.hhmm)
+std::string DSIDver = "v0.3.1.0910";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -29,8 +29,11 @@ std::uint64_t RefreshTime = 0;
 std::atomic<bool> LargeImageFail = false;
 std::atomic<bool> SmallImageFail = false;
 
-// initialises a temp string for checks
+// initialises a temp string for checks (0 ensures it's always a new song on program start)
 std::uint64_t unixOldStart = 0;
+
+// initialises a temp string for checks (empty ensures it's always a new song on program start)
+std::string oldSong = "";
 
 // flag to control application run state (starts as true to start running)
 std::atomic<bool> running = true;
@@ -349,27 +352,31 @@ int main() {
             else {
               std::cout << "Error reading the song file\n" << std::endl;
             }
+            
+            // closes the text file
+            SongInfo.close();
 
             // sets up a boolean to check song status
             bool songChanged = false;
 
             // checks if the song has changed since the last update
-            // if it has (variables don't match)
-            if (unixStart != unixOldStart) {
-                    
+            // if it has (timestamps OR song names don't match) - this ensures the song changing or being paused gets caught
+            if (unixStart != unixOldStart || oldSong != songName ) {
+
+                // sets the temporary variable to match the new song's name
+                oldSong = songName;
+                // sets the temporary variable to match the new song's timestamp
                 unixOldStart = unixStart;
+                // sets the boolean to true so the next
                 songChanged = true;
             }
             // if the song hasn't changed
             else {
-                // pauses the "thread" for 3 seconds (prevents crazy CPU/disk usage for nothing)
-                std::this_thread::sleep_for(std::chrono::seconds(3));
+                // pauses the "thread" for a bit (prevents crazy CPU/disk usage for nothing)
+                std::this_thread::sleep_for(std::chrono::seconds(2));
             }
 
-            // closes the text file
-            SongInfo.close();
-
-                // only pushes the update if the file was read correctly
+                // only pushes the update if the file was read correctly and the song has changed
                 if (success && songChanged) {
 
                     // ensures the fields doesn't exceed the character limit
@@ -398,6 +405,7 @@ int main() {
                     if (LargeImage.empty() || LargeImage[0] == ' ') {
                         std::cout << "Large Image field is empty or faulty, not pushing\n" << std::endl;
                     }
+                    // if the field doesn't seem faulty
                     else {
                         // if the large image has failed once, doesn't try to push a new one
                         if (LargeImageFail) {   
