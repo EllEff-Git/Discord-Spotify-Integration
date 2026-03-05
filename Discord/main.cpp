@@ -13,7 +13,7 @@
 #include <codecvt>
 
 // version number (y.m.dd.hhmm)
-std::string DSIDver = "v0.3.1.0910";
+std::string DSIDver = "v0.3.05.0824";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -21,13 +21,19 @@ std::uint64_t APPLICATION_ID = 0;
 // initialises a default small icon of nothing
 std::string SmallImage = "";
 
-// initialises a default refresh time of 15 seconds
-std::uint64_t RefreshTime = 0;
-
 // initialises bools for image failing
 // this is not common, but prevents more than 1 failure
+// large image failure state
 std::atomic<bool> LargeImageFail = false;
+// small image failure state
 std::atomic<bool> SmallImageFail = false;
+
+// initialises the pause state that gets pulled from songdata.txt
+std::atomic<bool> pauseState = false;
+// stores the previous pause state
+std::atomic<bool> pauseStateOld = false;
+// initialises the boolean that checks if the pause state has changed since last update
+std::atomic<bool> pauseChanged = false;
 
 // initialises a temp string for checks (0 ensures it's always a new song on program start)
 std::uint64_t unixOldStart = 0;
@@ -59,8 +65,8 @@ std::string pathFinder() {
 
 
 // function used later to trim any potentially long fields, to fit Discord's max of 128 UTF-16 units
-std::string utfTrim(const std::string& input, size_t maxUnits = 118) {
-    // if there's nothing, falls back to default
+std::string utfTrim(const std::string& input, size_t maxUnits = 113) {
+    // if the whole string is empty, falls back to default
     if (input.empty()) return "Listening to Spotify // Data via DSI";
 
     // converter takes UTF-8 and turns into UTF-16
@@ -83,48 +89,58 @@ std::string utfTrim(const std::string& input, size_t maxUnits = 118) {
     // variable to store the trimmed name
     std::wstring trimmed;
 
+    // function that checks for invisible characters *inside* the string (previously was only start/end)
+    auto isInvisible = [](wchar_t c) {
+    return c == L'\t' || c == L'\r' || c == 0x200B || c == 0xFEFF;
+    };
+
     // goes through every character in the string
     for (size_t i = 0; i < utf16.size(); ++i) {
         wchar_t wc = utf16[i];
 
-        // goes through "surrogate pairs" (non-standard characters, emojis, etc)
-        // "high" surrogates = 0xD800-0xDBFF, "lows" = 0xDC00-0xDFFF
+        // if the current character is an "invisible" one, skips that character (won't get added to trimmed string)
+        if (isInvisible(wc)) continue;
+
+        // sets how many UTF-16 units are used
+        size_t unitsNeeded = 1;
+
+        // goes through "surrogate pairs" (emojis, etc)
+        // looks for valid pairs (high + low)
         if (wc >= 0xD800 && wc <= 0xDBFF) {
-            // if the pairs fit in maxUnits
+            // if the character + 1 is less than the string's size
             if (i + 1 < utf16.size()) {
+                // gets the next unit
                 wchar_t low = utf16[i + 1];
+                // checks if the next unit is a low surrogate
                 if (low >= 0xDC00 && low <= 0xDFFF) {
-                    // they get added to trimmed string and add +2
-                    if (units + 2 > maxUnits) break;
-                    trimmed += wc;
-                    trimmed += low;
-                    units += 2;
-                    ++i;
-                    continue;
+                    unitsNeeded = 2;
+                } else {
+                    // not a low surrogate = not valid pair, skip
+                    break; 
                 }
+            } else {
+                // high at the end, skip
+                break;
             }
-            // if they're invalid, they get skipped
-            continue;
         }
 
-        // anything else just gets counted normally
-        // they'll only get added until that character + 1 is > than the safe max
-        if (units + 1 > maxUnits) break;
-        // adds the character to the trimmed string
+        // if adding this pair to the string would go over the max, skips
+        if (units + unitsNeeded > maxUnits) break;
+
+        // adds the high surrogate to the final string
         trimmed += wc;
-        ++units;
-    }
+        // if there's a valid pair (meaning it used 2 units)
+        if (unitsNeeded == 2) {
+            // adds the low surrogate, too
+            trimmed += utf16[++i];
+        }
 
-    // a function that trims trailing space/invisible characters
-    auto trailTrim = [](wchar_t c) {
-        return c == L' ' || c == L'\t' || c == L'\r' || c == 0x200B || c == 0xFEFF;
-    };
-    while (!trimmed.empty() && trailTrim(trimmed.back())) {
-        trimmed.pop_back();
-    }
+        // adds the numbers up
+        units += unitsNeeded;
+    } // for loop close
 
-    // makes sure the string is at least 2 (discord needs 2 =< x =< 128 characters)
-    if (trimmed.size() < 2) {
+    // makes sure the string fits discord requirements (2 =< x =< 128 characters)
+    if (units < 2) {
         // if it's not, uses fallback string
         trimmed = L"Listening to Spotify // Data via DSI";
     }
@@ -147,7 +163,7 @@ int main() {
     std::string cppDir = pathFinder();
 
     // sets the path for each file this program accesses
-    // ids.txt contains the Discord Application ID, the refreshTime and small picture name/link (written once by DSI at start)
+    // ids.txt contains the Discord Application ID and small picture name/link (written once by DSI at start)
     std::string idDir = cppDir + "\\" + "ids.txt";
     // songData.txt gets automatically updated by DSI with song name, time, custom fields, everything
     std::string sdDir = cppDir + "\\" + "songData.txt";
@@ -169,7 +185,7 @@ int main() {
     int lineNum = 0;
 
     // creates empty strings to hold info later
-    std::string AppID, SIMG, rfT;
+    std::string AppID, SIMG;
 
     while (std::getline(file, line)) {
         // goes through and finds where the "=" sign is, then takes the part after it
@@ -187,8 +203,6 @@ int main() {
             if (lineNum == 0) AppID = value;
             // second line is Small Image
             else if (lineNum == 1) SIMG = value;
-            // third (last) line is the Refresh Time, aka how often the program should send data
-            else if (lineNum == 2) rfT = value;
             // adds 1 to lineNum so it moves to next line
             ++lineNum;
         }
@@ -208,14 +222,6 @@ int main() {
         std::cerr << "Invalid App ID, check config.ini\n" << std::endl;
         return 1;
 
-    }
-    // tries to replace RefreshTime with rfT (number from ids.txt)
-    try {
-        RefreshTime = std::stoull(rfT);
-    } 
-    catch (...) {
-        std::cerr << "Invalid Refresh Time, try deleting token.txt in Discord folder if this doesn't resolve automatically\n" << std::endl;
-        return 1;
     }
 
     // something something Discord's handler
@@ -248,35 +254,45 @@ int main() {
 
         // starts a new thread just for updating some fields
         std::thread([client]() {
-          // creates variables for the whole thread
+        
+        // creates variables for the whole thread
 
-          // sets up a temp song name
-          std::string songName = "Loading";
+        // sets up a temp song name
+        std::string songName = "Loading";
 
-          // initializes the song info
-          std::string songStuff = "Discord Spotify Integration";
+        // sets up a temp album name
+        std::string albumName = "An Album";
 
-          // sets an empty large image name
-          std::string LargeImage = "";
-          // small image is set above, since it doesn't have a changing method, like large image does
+        // initializes the song info
+        std::string songStuff = "Discord Spotify Integration";
 
-          // the descriptions for the assets (hover elements)
-          std::string LargeText = "Large Text";
-          std::string SmallText = "Small Text";
+        // sets an empty large image name
+        std::string LargeImage = "";
+        // small image is set above, since it doesn't have a changing method, like large image does
 
-          // placeholder URLs to pass
-          std::string SpotifyURL = "https://youtube.com";
-          std::string SmallURL = "https://twitter.com";
+        // the descriptions for the assets (hover elements)
+        std::string LargeText = "Large Text";
+        std::string SmallText = "Small Text";
 
-          // placeholder UNIX timestamps
-          uint64_t unixStart = 0;
-          uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
+        // placeholder URLs to pass
+        std::string SpotifyURL = "https://youtube.com";
+        std::string SmallURL = "https://twitter.com";
 
-          // defaults the "success" to not true
-          bool success = false;
+        // placeholder UNIX timestamps
+        uint64_t unixStart = 0;
+        uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
 
-          // starts a loop to refresh info
-          while (running) {
+        // placeholder pause state "boolean" (string at this stage)
+        std::string pauseStateStr = "false";
+
+        // sets up an album fallback string
+        std::string albumFallback = "An Album";
+
+        // defaults the "success" to not true
+        bool success = false;
+
+        // starts a loop to refresh info
+        while (running) {
 
             // sets up the prerequisite UNIX temp variables as empty strings
             std::string unixStartStr, unixEndStr;
@@ -305,6 +321,7 @@ int main() {
                     // checks for "=" mark to indicate splits
                     size_t pos = line.find('=');
                     // checks each line for the "=" mark, then processes the line
+
                     if(pos != std::string::npos) {
                         std::string value = line.substr(pos + 1);
                         // checks for empty space
@@ -314,26 +331,33 @@ int main() {
                         if (!value.empty() && value.back() == '\r')
                             // removes an invisible character
                             value.pop_back();
+
                         // line 0 is the name/artist and album of the song
                         if (lineNum == 0) songName = value;
-                        // line 1 is the info on songStuff (minutes, plays, etc)
-                        else if (lineNum == 1) songStuff = value;
-                        // line 2 is largeImage
-                        else if (lineNum == 2) LargeImage = value;
-                        // line 3 is "large text" (total hours)
-                        else if (lineNum == 3) LargeText = value;
-                        // line 4 is the text on hover
-                        else if (lineNum == 4) SmallText = value;
-                        // line 5 is the URL of the song
-                        else if (lineNum == 5) SpotifyURL = value;
-                        // line 6 is the "small url"
-                        else if (lineNum == 6) SmallURL = value;
-                        // line 7 is the start time of the song, in UNIX (string now)
-                        else if (lineNum == 7) unixStartStr = value;
-                        // line 8 is the end time of the song, in UNIX (string now)
-                        else if (lineNum == 8) unixEndStr = value;
+                        // line 1 is the album name
+                        else if (lineNum == 1) albumName = value;
+                        // line 2 is the info on songStuff (minutes, plays, etc)
+                        else if (lineNum == 2) songStuff = value;
+                        // line 3 is largeImage
+                        else if (lineNum == 3) LargeImage = value;
+                        // line 4 is "large text" (total hours)
+                        else if (lineNum == 4) LargeText = value;
+                        // line 5 is the text on hover
+                        else if (lineNum == 5) SmallText = value;
+                        // line 6 is the URL of the song
+                        else if (lineNum == 6) SpotifyURL = value;
+                        // line 7 is the "small url"
+                        else if (lineNum == 7) SmallURL = value;
+                        // line 8 is the start time of the song, in UNIX (string now)
+                        else if (lineNum == 8) unixStartStr = value;
+                        // line 9 is the end time of the song, in UNIX (string now)
+                        else if (lineNum == 9) unixEndStr = value;
+                        // line 10 is a pause change state boolean
+                        else if (lineNum == 10) pauseStateStr = value;
+                        // line 11 is the album fallback text
+                        else if (lineNum == 1) albumFallback = value;
 
-                        // adds 1 to lineNum so it chooses the next line
+                        // adds 1 to lineNum so it moves to the next line
                         lineNum++;
                     }
                 } // closes the reader bracket
@@ -342,11 +366,16 @@ int main() {
                 try {
                     unixStart = std::stoull(unixStartStr);
                     unixEnd = std::stoull(unixEndStr);
-                  } 
-                  // if the str -> int fails, sends an exception (e) in text
-                  catch(const std::exception& e) {
-                    std::cerr << "Timestamp in file is invalid" << "\n" << e.what() << "\n" << std::endl;
-                  }
+                } 
+                // if the str -> int fails, sends an exception (e) as print
+                catch(const std::exception& e) {
+                std::cerr << "Timestamp in file is invalid" << "\n" << e.what() << "\n" << std::endl;
+                }
+
+                // changes pauseState to true if the string in the text file is "True"/"true" 
+                if (pauseStateStr == "True" || pauseStateStr == "true") {
+                    pauseState = true;
+                }
 
             } // if(song.is_open) close bracket
             else {
@@ -367,19 +396,44 @@ int main() {
                 oldSong = songName;
                 // sets the temporary variable to match the new song's timestamp
                 unixOldStart = unixStart;
-                // sets the boolean to true so the next
+                // sets the boolean to true so the next check goes through
                 songChanged = true;
             }
-            // if the song hasn't changed
+            // checks if the song has been paused since last check
+            // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
+            if (pauseState != pauseStateOld) {
+                // sets the boolean to true so the next check goes through
+                pauseChanged = true;
+                // updates the previous pause state to match current
+                pauseStateOld.store(pauseState.load());
+            }
+            // if the song/pause hasn't changed
             else {
                 // pauses the "thread" for a bit (prevents crazy CPU/disk usage for nothing)
                 std::this_thread::sleep_for(std::chrono::seconds(2));
             }
+            
+            // these 2 checks are done because it
+            // checks if the length of the songName (details) field *with* album is eq or gr than 103 (cap of 108 for that field)
+            if ((songName + albumName).length() <= 103) {
+                songName = songName + " " + albumName;
+            }
+            // checks if the length of the songName (details) field *with* fallback string is eq or gr than 103 (cap of 108 for that field)
+            else if ((songName + albumFallback).length() <= 103) {
+                songName = songName + " " + albumFallback;
+            }
+            // if neither is true (both would > 103)
+            else {
+                // does nothing, aka leaves songName alone
+            }
 
-                // only pushes the update if the file was read correctly and the song has changed
-                if (success && songChanged) {
+            // only pushes the update if the file was read correctly and the song has changed or is paused
+            if (success && (songChanged || pauseChanged)) {
 
-                    // ensures the fields doesn't exceed the character limit
+                    // updates pauseChanged to false, so it doesn't double-activate
+                    pauseChanged = false;
+
+                    // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)
                     songName = utfTrim(songName);
                     songStuff = utfTrim(songStuff);
                     LargeText = utfTrim(LargeText);
@@ -434,9 +488,8 @@ int main() {
                         // if the small image has failed once, doesn't try to push a new one
                         if (SmallImageFail) {
                         }
-
-                        else{
                         // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
+                        else{
                         assets.SetSmallImage(SmallImage);
                         }
                     }

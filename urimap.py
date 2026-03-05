@@ -1,9 +1,11 @@
 import os, sys, json, time, datetime
-import spotipy, configparser
+import spotipy, configparser, requests
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 
-URIver = "v0.27.2.0419"
+URIver = "v0.3.04.0855"
+# the program version (y.m.dd.hhmm)
+
 
 # Directory Grabber
 if getattr(sys, 'frozen', False):
@@ -46,6 +48,10 @@ MarketArea = Config.get("Function", "market_Area")
 """The 2-letter country identifier passed to spotify"""
 
 
+# Session
+sessionID = requests.Session()
+# tells the auth to keep one stable connection, rather than re-connecting every request
+
 # Auth
 authorisation = SpotifyOAuth(
     scope = "user-library-read",
@@ -56,7 +62,7 @@ authorisation = SpotifyOAuth(
     )
 # the arguments for auth_manager, containing the variables from config + scope of data request
 
-main = spotipy.Spotify(auth_manager = authorisation)
+main = spotipy.Spotify(auth_manager = authorisation, requests_session = sessionID)
 # handles the authentication and user identification on start
 
 
@@ -138,13 +144,30 @@ def mapper(start, end):
                     time.sleep(600)
                     # sleeps for 600 seconds (10 minutes) to ensure user sees prompt
                     raise SystemExit
-
                 else:
-                    print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{Time()} [ERROR]: {error}")
-                    # prints the error message
-                    uriMap[uri] = uri
-                    # uses the original URI for the current URI
+                    None
+            
+            except PermissionError as error:
 
+                if getattr(error, "winerror", None) == 10013:
+                    # if the error is specifically a windows 10013 error (connection blocked for one reason or another)
+                    print(f"{Time()} [WARN]: Windows has blocked the connection, please check firewall/antivirus settings and retry (WinError 10013)")
+                    print(f"{Time()} [INFO]: Sometimes this is due to odd Windows behavior, and a restart may fix this")
+                    print(f"{Time()} [EXIT]: Exiting app in 10 minutes automatically (feel free to close)")
+                    time.sleep(600)
+                    # sleeps for 600 seconds (10 minutes) to ensure user sees prompt
+                    raise SystemExit
+                else:
+                    None
+            
+            else:
+                print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{Time()} [ERROR]: {error}")
+                # prints the error message
+                uriMap[uri] = uri
+                # uses the original URI for the current URI
+
+            time.sleep(0.25)
+            # safety implementation, to avoid Windows/Spotify rate limits
 
     with open(uriDir, "w", encoding="utf-8") as newUri:
         # opens the JSON file in write mode
@@ -157,8 +180,12 @@ def mapper(start, end):
     # short wait
     print(f"{Time()} [INFO]: Checking URI list")
     # user update
-    batchCalc(10)
-    # calls batch calculator again to check for more URIs
+
+    while True:
+        undoneCheck = batchCalc(15)
+        # ensures there's no functions running before re-checking
+        if not undoneCheck:
+            break
 
 
 

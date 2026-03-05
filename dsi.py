@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.3.01.0910"
+DSIver = "v0.3.05.0826"
 # the program version (y.m.dd.hhmm)
 
 
@@ -132,7 +132,7 @@ def Time():
         
    
 
-print(f"{Time()}[INFO]: Starting DSI {DSIver}\n")
+print(f"{Time()}[START]: Starting DSI {DSIver}\n")
 # quick user update on status
 
 
@@ -161,8 +161,6 @@ enableArtist = Config.getboolean("Song-Format", "enable_Artist")
 """Artist's state, boolean"""
 enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 """Album's state, boolean"""
-albumDrop = Config.getboolean("Song-Format", "enable_Album_Dropping")
-"""Whether the album dropping is enabled, boolean"""
 albumFallback = Config.get("Song-Format", "album_Fallback_Text")
 """The text to fall back to in case the album gets dropped, string"""
 
@@ -287,6 +285,9 @@ spotifyLock = threading.Lock()
 # creates a locking method to prevent redundant API calls (or 2 calls at once)
 
 # Auth #
+sessionID = requests.Session()
+# tells the auth to keep one stable connection, rather than re-connecting every request
+
 authorisation = SpotifyOAuth(
     scope = "user-read-playback-state", 
     client_id = sp_client_ID, 
@@ -296,7 +297,7 @@ authorisation = SpotifyOAuth(
     )
 # the argument for auth_manager, containing the variables from config + scope of data request
 
-main = spotipy.Spotify(auth_manager = authorisation)
+main = spotipy.Spotify(auth_manager = authorisation, requests_session = sessionID)
 # handles the authentication and user identification on start
 
 # URL List #
@@ -317,7 +318,13 @@ dsiShoutoutStr = "// Data by DSI"
 # a shoutout string to DSI, disabled by default in config
 
 totalHours = 0
-# startup string
+# startup variable for total hours
+
+oldCount = 0
+# startup variable for song counter
+
+currentInfo = None
+# startup song info
 
 
 ### Id Writer ###
@@ -328,11 +335,11 @@ def idWriter():
 
     with open(idDir, "w", encoding="utf-8") as txt:
     # opens the ids text file
-        content = ("Discord Application ID = " + dc_app_ID + "\n" + "Small Image Filename = " + smallPic + "\n" + "Refresh Time = " + str(refreshTime))
+        content = ("Discord Application ID = " + dc_app_ID + "\n" + "Small Image Filename = " + smallPic)
         # makes a string from the relevant config options
         txt.write(content)
         if enableUpdates:
-            print(f"{Time()}[INFO]: ID file written\n")
+            print(f"{Time()}[START]: ID file written\n")
         # writes the string to ids.txt at program launch
 
 
@@ -356,7 +363,7 @@ def hourGrabber():
                 totalHours = (f"{totalHours:,.2f}")
                 # turns the float into a formatted string        
                 if enableUpdates:
-                    print(f"{Time()}[INFO]: Total hours saved in CSV: {totalHours}")
+                    print(f"{Time()}[SHAA]: Total hours saved in CSV: {totalHours}")
                     # prints the total hours at start
 
             except:
@@ -379,47 +386,89 @@ def hourGrabber():
 
 
 def authPlayback():
-    """Function to more "safely" handle API requests and errors"""
+    """Function to more "safely" handle Spotify API requests and errors"""
     
-    global main, authorisation
-    # takes the global variables and makes them local
+    global main
+    # takes the global variable and makes it local
 
     with spotifyLock:
         # uses a threading lock, to prevent multiple requests at once
 
+        tokenRefresh = False
+        # a boolean to determine whether to print the token refresh or reconnect text
+
         for attempt in range(3):
-            # tries a max of 3 times to get Spotify data (typically succeeds 1st try, so if it doesn't work in 3, there's a different issue)
+            # tries a max of 3 times to get Spotify data (typically succeeds 1st try, so if it doesn't work in 3, there's a bigger issue)
 
             try:
                 # first tries to send an API request to Spotify
+                
+                success = main.current_playback()
+                # if it works, returns the Spotify playback package (dictionary)
 
-                if attempt != 0 & enableErrors:
+                if attempt != 0 and enableErrors and not tokenRefresh:
                     # if it's not the first attempt, meaning the reconnect attempt print has already been pushed once
                     print(f"{Time()}[INFO]: Reconnect successful!")
                     # prints user update
 
-                return main.current_playback()
-                # if it works, returns the Spotify playback package (dictionary)
+                elif enableErrors and tokenRefresh:
+                    # if the tokenrefresh variable is set to true, that means a connectionerror occurred at least once
+                    print(f"{Time()}[INFO]: Token refreshed successfully!")
+                    # prints user update
+
+                return success
+                # sends back the successfully found dictionary to the calling function (should only be looper)
+                
 
             except (SpotifyException, requests.exceptions.RequestException, ConnectionResetError) as error:
-                # if it fails to acquire a Spotify package
+                # if it fails to acquire a Spotify playback package
 
                 if enableErrors:
-                    # if the error updates are on, prints an error message
+                    # if error printing is enabled
 
-                        # if the header is anything else
-                    print(f"{Time()}[ERROR]: Spotify connection error due to {error}.\n{Time()}[INFO]: Attempting to reconnect ({attempt+1}/3)")
+                    # this section individually checks for 4 separate errors, because they were the most common that I had 
+                    # (token refreshing isn't *really* an error but is classed as such internally)
+                    # while printing 2-3 lines of error code is "helpful", it doesn't really help when the error is a simple, self-fixing one
+                    # this is why these (token expiry, read timeout and 429) are checked for first, so it doesn't print a massive chunk
+
+                    if isinstance(error, requests.exceptions.ConnectionError):
+                        # if the error is a connection error (token expired)
+                        print(f"{Time()}[INFO]: Refreshing Spotify token")
+                        # doesn't sleep because this is a token error and should get fixed nearly instantly
+                        # expected to print just about every 3600 seconds (1h)
+                        tokenRefresh = True
+
+                    elif isinstance(error, requests.exceptions.ReadTimeout):
+                        # if the error is a read timeout (sort of random)
+                        print(f"{Time()}[ERROR]: Spotify API timeout, retrying in 5 seconds ({attempt+1}/3)")
+                        time.sleep(2)
+                        # sleeps for 2 seconds (because there's a function-wide 3-second cooldown added on top)
+
+                    elif isinstance(error, SpotifyException) and error.http_status == 429:
+                        # if the error is due to a rate limit (429 error code from Spotify)
+                        retryTimer = error.headers.get("Retry-After", 5)
+                        # gets the retry cooldown timer (or 5, if none is found)
+                        print(f"{Time()}[WARN]: This application is being rate limited by Spotify, retrying in {retryTimer} ({attempt+1}/3)")
+                        time.sleep(int(retryTimer)-3)
+                        # sleeps for the duration of retryTimer-3 seconds (because there's a function-wide 3-second cooldown added on top)
+
+                    elif isinstance(error, SpotifyException) and error.http_status == 500:
+                        # if the error is 500 (internal error fail)
+                        print(f"{Time()}[ERROR: Spotify internal error (Code 500). Attempting to reconnect ({attempt+1}/3)]")
+                        # should never happen, but very very rarely does
+                    else:
+                        # if the error is anything else
+                        print(f"{Time()}[ERROR]: Spotify errored due to {error}.\n{Time()}[INFO]: Attempting to reconnect ({attempt+1}/3)")
+
+                if attempt == 2:
+                    # if it's the last attempt (range(3) = 0,1,2) and it fails
+                    print(f"{Time()}[CRITICAL]: All attempts to reconnect failed due to {error}\nPlease manually restart DSI. Exiting...")
+                    time.sleep(60)
+                    raise SystemExit
+                    # prompts user, then exits
 
                 time.sleep(3)
-                # waits 3 seconds just in case
-        
-                main = spotipy.Spotify(auth_manager=authorisation)
-                # re-initializes the authorisation manager
-    
-    print(f"{Time()}[CRITICAL]: All attempts to reconnect failed due to {error}\nPlease manually restart DSI. Exiting...")
-    time.sleep(10)
-    return None
-    # if all 3 attempts fail, closes
+                # waits 3 seconds to give it some time
 
 
 
@@ -634,30 +683,19 @@ def runCpp():
 
 
 
-### Picture Queue ###
+### Song Data File Field Selection/Creation ###
 
 
 
 def song(pictureQueue):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
-    global uriList, cppLargeImage, uriMap, totalHours, detailOptions
+    global uriList, cppLargeImage, uriMap, totalHours, detailOptions, pauseStart, currentInfo, trackCounter, oldCount
     # pulls some global variables to local
 
     while True:
 
         songEvent.wait()
         # waits for looper() to set an event
-
-        if not pictureQueue.empty():
-            # checks pictureQueue to see if it has something
-            cppLargeImage = pictureQueue.get()
-            # stores the picture from pictureQueue as the picture to send to C++
-
-            if picCycleTime == "song" or picCycleTime == "Song":
-            # if the cycle "time" is instead set to "song"
-
-                picEvent.set()
-                # tells the picture selector to select a new one
 
         songNameList = []
         # creates an empty list for strings to get added into as the loop progresses 
@@ -668,7 +706,7 @@ def song(pictureQueue):
         cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
-        csFull = authPlayback()
+        csFull = currentInfo
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
@@ -690,21 +728,27 @@ def song(pictureQueue):
         csName = csItem.get("name")
         # stores the name of the song
 
-        csURI = csItem.get("uri")
-        # grabs the URI of the song - which is what determines the song matching
+        isLocalSong = csItem.get("is_local")
+        # checks if the song is a local song (can't use standard API info requests if so)
 
-        csImages = csAlbum.get("images")
-        # gets the information about the album's images
-        csCover = csImages[0].get("url")
-        # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
+        if not isLocalSong:
+            # these fields are only valid when it's not a local song
 
-        csArtists = csAlbum.get("artists")
-        # stores all the artists listed on the song
-        csArtist = csArtists[0].get("name")
-        # stores the first artist's name (in case there's multiple artists, only grabs first)
+            csURI = csItem.get("uri")
+            # grabs the URI of the song - which is what determines the song matching
 
-        csAlbumName = csAlbum.get("name")
-        # stores the album name
+            csImages = csAlbum.get("images")
+            # gets the information about the album's images
+            csCover = csImages[0].get("url")
+            # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
+
+            csArtists = csAlbum.get("artists")
+            # stores all the artists listed on the song
+            csArtist = csArtists[0].get("name")
+            # stores the first artist's name (in case there's multiple artists, only grabs first)
+
+            csAlbumName = csAlbum.get("name")
+            # stores the album name
 
         csLength = int(csItem.get("duration_ms")/1000)
         # stores the length of the song in seconds
@@ -719,29 +763,33 @@ def song(pictureQueue):
         csPlayState = bool(csFull.get("is_playing"))
         # grabs the playback state (true/false)
 
+        pauseState = False
+        # defaults the pauseState to false
+
         if not csPlayState:
             # if the song is paused
-            global pauseStart
-            # takes the pauseStart from global variable to local
 
             if pauseStart is None:
                 # if there's no set pause time
-                pauseStart = time.time()
+                pauseStart = int(time.time())
                 # sets the pause time to current time
+
+            pauseState = True
+            # sets the pauseState to True
 
             csUnixStart = 0
             csUnixEnd = 0
             # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
+
         else:
             # song is playing
-
-            if pauseStart is not None:
-                # if there's a set pause time from before
-                pauseDuration = time.time() - pauseStart
+            if pauseStart is not None and (trackCounter == oldCount):
+                # if there's a set pause time from before (and the song hasn't changed)
+                pauseDuration = int(time.time() - pauseStart)
                 # calculates the time spent on pause
-                csUnixStart += (pauseDuration * 1000)
-                csUnixEnd += (pauseDuration * 1000)
-                # sets the start and end times to match the time spent paused
+                csUnixStart += pauseDuration
+                csUnixEnd += pauseDuration
+                # sets the start and end times to match the time spent paused (by adding the time spent paused)
                 pauseStart = None
                 # resets the pauseStart to None, so it can get checked again
 
@@ -750,14 +798,16 @@ def song(pictureQueue):
             songNameList.append(pauseStateText)
             # adds the pause text as the first string in the list (since it goes first)
 
-        cstrackURL = csItem.get("external_urls")
-        # stores the list that contains track's url
-        csAlbumLinks = csAlbum.get("external_urls") 
-        # stores the list that contains album url
-        csArtistLinks = csArtists[0].get("external_urls")
-        # stores the list that contains artist's url
-        csPlaylist = csFull.get("context")
-        # stores the list that contains the playlist url
+        if not isLocalSong:
+            # can't access these if the playing song is local
+            cstrackURL = csItem.get("external_urls")
+            # stores the list that contains track's url
+            csAlbumLinks = csAlbum.get("external_urls") 
+            # stores the list that contains album url
+            csArtistLinks = csArtists[0].get("external_urls")
+            # stores the list that contains artist's url
+            csPlaylist = csFull.get("context")
+            # stores the list that contains the playlist url
 
         if csPlaylist == None:
             # checks if user is playing a playlist
@@ -802,6 +852,7 @@ def song(pictureQueue):
         else:
             # if the config option for url type is invalid, defaults to my website :)
             csURL = "https://elleffnotelf.com"
+
 
 
 
@@ -1108,6 +1159,7 @@ def song(pictureQueue):
                 # joins together the list 
 
                 if dsiShoutout:
+                    # if the dsi shoutout option is enabled
                     cppLargeHoverList.append(dsiShoutoutStr)
 
             ### No Track Match ###
@@ -1225,6 +1277,7 @@ def song(pictureQueue):
                 # adds the detail field to the list
 
                 if dsiShoutout:
+                    # if the dsi shoutout is enabled
                     cppLargeHoverList.append(dsiShoutoutStr)
 
             cppLargeHover = "".join(cppLargeHoverList)
@@ -1280,8 +1333,8 @@ def song(pictureQueue):
                 songNameList.append(songNameSpacerL)
                 # adds to string
 
-        if enableAlbum or not postText == "":
-            # if there's at least one element after
+        if enableAlbum or postText:
+            # if there's at least one element after (album is enabled *or* there's a post-text)
             if not enableSong and not enableArtist:
                 # if there's no other elements (pre/post texts not counting)
                 None
@@ -1291,22 +1344,9 @@ def song(pictureQueue):
                 # if there's more than just album, adds the right spacer to string
 
         if enableAlbum:
-            # if artist is enabled
-            tempState = " ".join(songNameList)
-            # temporarily makes a string out of the list
-            if len(tempState) > 113:
-                # if the total length of the song state is > 113 characters (5 off from the cutoff)
-                if albumDrop:
-                    # if album dropping is enabled
-                    songNameList.append(albumFallback)
-                    # puts the album fallback text in the list instead
-                else:
-                    songNameList.append(csAlbumName)
-                    # uses the album anyway (may get cut off)
-            else:
-                # if the total length is less than 113
-                songNameList.append(csAlbumName)
-                # adds to string
+            # if album is enabled
+            cppAlbumName = csAlbumName
+            # sets the final name (not necessary but keeps symmetry)
 
         if postText:
             # if postText has something
@@ -1327,8 +1367,30 @@ def song(pictureQueue):
             # puts a fallback string instead
 
 
+        ### Picture Selection ###
+
+
+        if trackCounter != oldCount and csPlayState:
+            # checks if the song has changed (this way it doesn't change the picture when the song gets paused)
+
+            oldCount = trackCounter
+            # updates the song counter
+
+            if not pictureQueue.empty():
+            # checks pictureQueue to see if it has something
+                cppLargeImage = pictureQueue.get()
+                # stores the picture from pictureQueue as the picture to send to C++
+
+                if picCycleTime == "song" or picCycleTime == "Song":
+                # if the cycle "time" is instead set to "song"
+
+                    picEvent.set()
+                    # tells the picture selector to select a new one 
+                    # this is because the picture selection happens automatically, except with "song", where it happens on a per-song basis
+
 
         ### C++ Text File Writer ###
+
 
         if picCycleList == "Spotify" or picCycleList == "spotify":
             # checks if the picture list is set to send pictures from Spotify covers
@@ -1337,6 +1399,7 @@ def song(pictureQueue):
 
         cppFull = (
                     f"songName = {cppSongName}\n"
+                    f"albumName = {cppAlbumName}\n"
                     f"songStuff = {cppState}\n"
                     f"LargeImage = {cppLargeImage}\n"
                     f"LargeText = {cppLargeHover}\n"
@@ -1345,8 +1408,10 @@ def song(pictureQueue):
                     f"SmallURL = {smallURL}\n"
                     f"UNIXstart = {str(csUnixStart)}\n"
                     f"UNIXend = {str(csUnixEnd)}\n"
+                    f"PauseState = {str(pauseState)}\n"
+                    f"AlbumFallback = {albumFallback}" 
                     )
-        # merges all the song information together and removes empty space
+        # merges all the song information together, split by newlines
 
         with open(songDataDir, "w", encoding="utf-8") as txt:
             # opens the songData text file
@@ -1368,14 +1433,22 @@ def song(pictureQueue):
 currentURI = None
 # makes the currentSong empty outside the looper so the loop can start and not make it "None" every time its run
 
+pauseUpdated = False
+# makes the pause update boolean false so it can start normally
+
+trackCounter = 0
+# a counter to track the current song's "ID"
+
 def looper():
     """Function that checks song info on a loop"""
-    global currentURI
-    # grabs the "global" (outside the function) as a local variable
+    global currentURI, currentInfo, pauseUpdated, trackCounter
+    # grabs the "global" variable (outside the function) as a local variables
     while True:
         # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
+
         info = authPlayback()
         # picks up all the info Spotify sends in an update
+
         if not info or not info.get("item"):
             # checks if the info has something and if it can be called
             if enableErrors:
@@ -1383,62 +1456,90 @@ def looper():
             time.sleep(5)
             # waits for a few seconds
             continue
+        
+        currentInfo = info
+        # sets the global variable to match
 
         songURI = (info.get("item")).get("uri")
         # grabs the URI of the song, stores it
         songName = (info.get("item").get("name"))
         # stores name for display purposes
+        songProg = ((info.get("progress_ms")) / 1000)
+        # grabs the progress of the song at the pull time (ms/1000 = seconds)
         playing = info.get("is_playing")
         # checks the pause state (True if playing, False if not)
-        songProg = ((info.get("progress_ms"))/1000)
-        # grabs the progress of the song at the time
 
         if currentURI is None:
-            # when the program first starts, the currentSong will be "None", this updates it
+            # when the program first starts, the currentURI will be "None", this updates it
             currentURI = songURI
             # sets the current song to match 
             currentProg = songProg
-            # updates the current progress 
+            # updates the current progress
+            trackCounter += 1
+            # adds 1 to counter
             picEvent.set()
             # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture
             songEvent.set()
             # since this only runs when the program first starts, sets an event immediately to song, to refresh data
             if enableUpdates:
-                print(f"{Time()}[INFO]: First song: {songName}, has been successfully processed\n")
+                print(f"{Time()}[SONG]: First song: {songName}, has been successfully processed\n")
                 # if user wants feedback, sends this
 
-        
         songDur = ((info.get("item")).get("duration_ms")/1000)
         # grabs both the current time and length of the song (in seconds)
         songLeft = (songDur-songProg)
         # calculates the time left on the song
 
-        if currentURI != songURI or songProg < currentProg:
-        # if there's a song change (if the URI or there's somehow less time left than previously)
+        if (currentURI != songURI) or (songProg < currentProg) or (pauseUpdated and playing):
+        # if there's a song change (if the URI or there's somehow less time left than previously) or if the pause has been triggered
 
-            if enableUpdates:
-                # if console updates are enabled
-                print(f"{Time()}[SONG]: New song detected: {songName}, duration: {songDur:,.0f} seconds")
-                # user update on new song
-                currentURI = songURI
-                # changes the internal variable to match new song
-                currentProg = songProg
-                # changes timestamp variable to match
+            if enableUpdates and not pauseUpdated:
+                # if console updates are enabled and this change wasn't triggered by a pause
+                print(f"\n{Time()}[SONG]: New song detected: {songName}, duration: {songDur:,.0f} seconds")
+                # user update on new song (makes a new line before itself so it separates tracks)
+            elif enableUpdates and pauseUpdated:
+                # if console updates are enabled and this change *was* triggered by a pause
+                print(f"\n{Time()}[SONG]: Unpaused: {songName}")
+
+            currentURI = songURI
+            # changes the internal variable to match new song
+            currentProg = songProg
+            # changes timestamp variable to match
+            songEvent.set()
+            # sets an event to make song() update the text file
+
+            if pauseUpdated:
+                # if it's playing and the pauseUpdate has been set to true
+                pauseUpdated = False
+                # sets the pauseUpdated to false, so it doesn't run twice
+            else:
+                # if it's playing but pauseUpdate is false
+                trackCounter += 1
+                # adds 1 to counter (means track has changed)
+
+            time.sleep(5)
+            # waits 5 seconds
+            continue
+            # sends back to the start of looper to check for a new song (5 second checks after a song change to check for a song skip)
+
+        if not playing and not pauseUpdated:
+        # if the song is paused and hasn't yet updated the pause state
+            if enablePause:
+                # if the pause hasn't been registered yet and the pause behavior is enabled
                 songEvent.set()
-                # sets an event to make song() update the text file
-                time.sleep(5)
-                # waits 5 seconds
-                continue
-                # sends back to the start of looper to check for a new song (5 second checks after a song change to check for a song skip)
-
-        if not playing:
-        # if the song is paused
+                # sets an event to make song() update the text file (this way it doesn't spam)
+                pauseUpdated = True
+                # sets the pause check to True, meaning it has been checked and acted on
+                if enableUpdates:
+                    # if user updates are on
+                    print(f"\n{Time()}[SONG]: Paused on: {songName}")
+                    # user inform (new line to split from main updates, only prints once anyway)
             sleepfor = max(refreshTime, 5)
             # sets the sleep timer to the higher of the two (never lets it go <5s)
-        
+
         else:
         # if the current song is the same, and is not paused
-            if songLeft > refreshTime:
+            if songLeft >= refreshTime:
                 # checks if there's more song left than the refresh time is set to
                 sleepfor = min(songLeft, refreshTime)
                 # sleeps for the smaller amount of time between (time left in song) and (config set refresh time)
@@ -1449,14 +1550,8 @@ def looper():
                 sleepfor = max(songLeft, 5)
                 # sleeps for the minimum of 5 seconds
                 if enableUpdates:
-                    print(f"{Time()}[INFO]: New song in {sleepfor} seconds")
+                    print(f"{Time()}[SONG]: New song in {sleepfor:,.0f} seconds")
                     # user inform on new song coming soon
-
-        if enableUpdates:
-            # if config option for updates is on
-            if not playing:
-                # if the song is paused, informs user
-                print(f"{Time()}[INFO]: Paused on: {songName}, checking again in {sleepfor:,.0f} seconds")
 
         time.sleep(sleepfor)
         # sleeps for the determined time
@@ -1481,7 +1576,7 @@ bg.start()
 picThread = threading.Thread(target = bg.picCycler)
 # creates a thread for the picture changer
 picThread.start()
-# starts the thread
+# starts the picture thread
 
 songThread = threading.Thread(target = song, args=(pictureQueue,))
 # creates the song thread
