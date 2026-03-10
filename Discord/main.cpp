@@ -13,13 +13,16 @@
 #include <codecvt>
 
 // version number (y.m.dd.hhmm)
-std::string DSIDver = "v0.3.05.0824";
+std::string DSIDver = "v0.3.10.1125";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
 
 // initialises a default small icon of nothing
 std::string SmallImage = "";
+
+// sets up an album fallback string
+std::string albumFallback = "An Album";
 
 // initialises bools for image failing
 // this is not common, but prevents more than 1 failure
@@ -37,6 +40,9 @@ std::atomic<bool> pauseChanged = false;
 
 // initialises a temp string for checks (0 ensures it's always a new song on program start)
 std::uint64_t unixOldStart = 0;
+
+// initialises a track ID variable
+std::uint64_t trackID, oldTrackID = 0;
 
 // initialises a temp string for checks (empty ensures it's always a new song on program start)
 std::string oldSong = "";
@@ -203,6 +209,9 @@ int main() {
             if (lineNum == 0) AppID = value;
             // second line is Small Image
             else if (lineNum == 1) SIMG = value;
+            // third (last) line is the album fallback string
+            else if (lineNum == 2) albumFallback = value;
+
             // adds 1 to lineNum so it moves to next line
             ++lineNum;
         }
@@ -285,17 +294,14 @@ int main() {
         // placeholder pause state "boolean" (string at this stage)
         std::string pauseStateStr = "false";
 
-        // sets up an album fallback string
-        std::string albumFallback = "An Album";
-
         // defaults the "success" to not true
         bool success = false;
 
         // starts a loop to refresh info
         while (running) {
 
-            // sets up the prerequisite UNIX temp variables as empty strings
-            std::string unixStartStr, unixEndStr;
+            // sets up the prerequisite UNIX and trackID temp variables as empty strings
+            std::string unixStartStr, unixEndStr, trackIDstr;
 
             // opens the file containing the song information (provided by the main python script) 
             // the file is stored 2 directories above where the EXE resides, 
@@ -354,18 +360,18 @@ int main() {
                         else if (lineNum == 9) unixEndStr = value;
                         // line 10 is a pause change state boolean
                         else if (lineNum == 10) pauseStateStr = value;
-                        // line 11 is the album fallback text
-                        else if (lineNum == 1) albumFallback = value;
-
+                        // line 11 is the track ID
+                        else if (lineNum == 11) trackIDstr = value;
                         // adds 1 to lineNum so it moves to the next line
                         lineNum++;
                     }
                 } // closes the reader bracket
 
-                // tries to turn the UNIX timestamps from strings to integers (Discord only accepts int in this field)
+                // tries to turn the UNIX timestamps and track ID from strings to integers (Discord only accepts ints as timestamps)
                 try {
                     unixStart = std::stoull(unixStartStr);
                     unixEnd = std::stoull(unixEndStr);
+                    trackID = std::stoull(trackIDstr);
                 } 
                 // if the str -> int fails, sends an exception (e) as print
                 catch(const std::exception& e) {
@@ -388,14 +394,12 @@ int main() {
             // sets up a boolean to check song status
             bool songChanged = false;
 
-            // checks if the song has changed since the last update
-            // if it has (timestamps OR song names don't match) - this ensures the song changing or being paused gets caught
-            if (unixStart != unixOldStart || oldSong != songName ) {
+            // checks if the song has changed since the last update (trackIDs don't match)
+            // if it has changes songChanged to true - this ensures the song changing or being paused gets caught
+            if (trackID != oldTrackID) {
 
-                // sets the temporary variable to match the new song's name
-                oldSong = songName;
-                // sets the temporary variable to match the new song's timestamp
-                unixOldStart = unixStart;
+                // sets the old value to match new
+                oldTrackID = trackID;
                 // sets the boolean to true so the next check goes through
                 songChanged = true;
             }
@@ -413,16 +417,16 @@ int main() {
                 std::this_thread::sleep_for(std::chrono::seconds(2));
             }
             
-            // these 2 checks are done because it
+            // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
             // checks if the length of the songName (details) field *with* album is eq or gr than 103 (cap of 108 for that field)
             if ((songName + albumName).length() <= 103) {
                 songName = songName + " " + albumName;
             }
-            // checks if the length of the songName (details) field *with* fallback string is eq or gr than 103 (cap of 108 for that field)
-            else if ((songName + albumFallback).length() <= 103) {
+            // checks if the length of the songName (details) field *with* fallback string is eq or gr than 108 (cap of 108 for that field)
+            else if ((songName + albumFallback).length() <= 108) {
                 songName = songName + " " + albumFallback;
             }
-            // if neither is true (both would > 103)
+            // if neither is true (either option would go over the cap)
             else {
                 // does nothing, aka leaves songName alone
             }
