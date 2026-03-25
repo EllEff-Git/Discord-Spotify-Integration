@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.3.10.1142"
+DSIver = "v0.3.25.0721"
 """The program version (y.m.dd.hhmm)"""
 
 
@@ -80,8 +80,8 @@ dc_app_ID = Config.get("Required", "Discord_Application_ID")
 
 
 # [Function]
-refreshTime = int(Config.get("Function", "time_Between_Refresh"))
-"""Program update cycle interval time, integer"""
+refreshTime = Config.getfloat("Function", "time_Between_Refresh")
+"""Program update cycle interval time, float"""
 if refreshTime < 2:
     # if the refresh time is set too low, overrides to safe minimum of 2s
     refreshTime = 2
@@ -161,9 +161,11 @@ enableArtist = Config.getboolean("Song-Format", "enable_Artist")
 """Artist's state, boolean"""
 enableAlbum = Config.getboolean("Song-Format", "enable_Album")
 """Album's state, boolean"""
-albumFallback = Config.get("Song-Format", "album_Fallback_Text").strip('"', '')
-"""The text to fall back to in case the album gets dropped, string"""
-
+albumFallbackTemp = Config.get("Song-Format", "album_Fallback_Text")
+if albumFallbackTemp:
+    # ensures there's content inside the string before operating on it
+    albumFallback = albumFallbackTemp.replace('"', "")
+    """The text to fall back to in case the album gets dropped, string"""
 
 # [Pictures]
 picCycleList = Config.get("Pictures", "pictures_To_Cycle")
@@ -324,10 +326,10 @@ cppLargeImage = ""
 pauseUpdated = False
 """A check to see if the pause state has been registered properly"""
 
-totalHours, totalMinutes, totalSeconds = 0
+totalHours = totalMinutes = totalSeconds = 0
 """Variables for total hours, minutes and seconds"""
 
-oldCount, trackCounter = 0
+oldCount = trackCounter = 0
 """Variable to track 'song IDs'"""
 
 cycleCount = 0
@@ -355,32 +357,32 @@ def idWriter():
         # writes the string to ids.txt at program launch
 
 
-### Total Hour Grabber ###
+### Total Time Grabber ###
 
 
-def hourGrabber():
-    """Function that grabs the total hours from hours.txt file"""
+def timeGrabber():
+    """Function that grabs the total time counts from totalTimes.txt file"""
     if os.path.isfile(timeDir):
         # checks if the totalTimes.txt file exists
         with open(timeDir, "r") as times:
             # if yes, opens the file
             global totalHours, totalMinutes, totalSeconds
             # grabs total time variables from global
-            totalTimes = times.read()
+            totalTimes = times.readlines()
             # stores the total times from the file
             counter = 0
             for line in totalTimes:
                 # checks all lines in the file
                 if "=" in line:
                     # if "=" is present in the line
-                    x, number = line.strip().split("=", 1)
+                    x, number = line.split("= ", 1)
                     # strips and splits the line, stores both sides
                     if counter == 0:
-                        totalHours = number
+                        totalHours = number.strip()
                     elif counter == 1:
-                        totalMinutes = number
+                        totalMinutes = number.strip()
                     elif counter == 2:
-                        totalSeconds = number
+                        totalSeconds = number.strip()
                     # checks line number and saves the appropriate variable 
                     counter += 1
                     # adds 1 to move to next variable next cycle
@@ -399,7 +401,7 @@ def hourGrabber():
 
             except:
                 # if the float conversion fails for some reason
-                print(f"{Time()}[SHAA]: Error reading the hours.txt file - total hours not set")
+                print(f"{Time()}[SHAA]: Error reading the total time file - total times not set")
 
         times.close()
         # closes the file
@@ -721,6 +723,7 @@ def runCpp():
 def song(pictureQueue):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
     global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo, trackCounter, oldCount
+    global cycleCount
     # pulls some global variables to local
 
     while True:
@@ -978,8 +981,8 @@ def song(pictureQueue):
             if dsiShoutout:
                 cppLargeHoverList.append(dsiShoutoutStr)
 
-        cppLargeHover = "".join(cppLargeHoverList)
-        # joins together the details list to one string
+            cppLargeHover = "".join(cppLargeHoverList)
+            # joins together the details list to one string
 
 
         ### SHAA Behavior ###
@@ -1120,110 +1123,130 @@ def song(pictureQueue):
                 songStuffList.append(songInfoFormatMins)
                 # adds the second field's custom end styling
                     
-                ### Details / Field 3 / Total Hours ###
+            ### Details / Field 3 / Total Hours ###
 
+            if shaaInfoDetails in detailOptions:
+                # if the config option matches one of the set defaults
+
+                if shaaInfoDetails.lower() == "hours":
+                    # if the config calls for total hours
+                    shaaDetailField = totalHours
+                    # gets total hours
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+
+                elif shaaInfoDetails.lower() == "minutes":
+                    # if the config calls for total minutes
+                    shaaDetailField = totalMinutes
+                    # gets total minutes
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+
+                elif shaaInfoDetails.lower() == "seconds":
+                    # if the config calls for total seconds
+                    shaaDetailField = totalSeconds
+                    # gets total seconds
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+
+                elif shaaInfoDetails.lower() == "cycle":
+                    # if the config calls for cycle
+                    if cycleCount == 0:
+                        shaaDetailField = totalHours
+                        # sets the field to be total hours
+                        cycleCount += 1
+                        # adds 1 to counter
+                        cppLargeHoverList.append("Total Hours")
+                    elif cycleCount == 1:
+                        shaaDetailField = totalMinutes
+                        # sets the field to be total minutes
+                        cycleCount += 1
+                        # adds 1 to counter
+                        cppLargeHoverList.append("Total Minutes")
+                    elif cycleCount == 2: 
+                        shaaDetailField = totalSeconds
+                        # sets the field to be total seconds
+                        cycleCount = 0
+                        # resets to 0 for next time 
+                        cppLargeHoverList.append("Total Seconds")
+                    # checks which case matches
+
+                elif shaaInfoDetails.lower() == "volume":
+                    # if the config calls for volume
+                    try:
+                        shaaDetailField = f"{csDevice.get("volume_percent")}%"
+                        # takes the volume and makes it a percentage
+                    except:
+                        shaaDetailField = "some volume"
+                        # if it fails, puts a fallback string
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+                
+                elif shaaInfoDetails.lower() == "repeat":
+                    # if the config calls for repeat state
+                    try:
+                        repeatState = csFull.get("repeat_state")
+
+                        if repeatState:
+                            # if repeat state returns True
+                            shaaDetailField = "on Repeat"
+                            # adds string form
+                        else:
+                            # if repeat state doesn't return True
+                            shaaDetailField = "not on Repeat"
+                            # adds string form
+                    except:
+                        shaaDetailField = "may be on Repeat"
+                        # if it fails, puts a fallback string
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+
+                elif shaaInfoDetails.lower() == "shuffle":
+                    # if the config calls for shuffle state
+                    try:
+                        shuffleState = csFull.get("shuffle_state")
+
+                        if shuffleState:
+                            # if shuffle state returns True
+                            shaaDetailField = "on Shuffle"
+                        else:
+                            # if shuffle state doesn't return True
+                            shaaDetailField = "not on Shuffle"
+                    except:
+                        shaaDetailField = "may be on Shuffle"
+                        # if it fails, puts a fallback string
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # uses the user-formatted one
+
+            else:
+                # if the config option doesn't match any of the set defaults
+                shaaDetailField = shaaInfoDetails
+                # sets the total time to match custom string instead
                 cppLargeHoverList.append(songInfoFormatDetails)
                 # adds the field 3 format (start string, default is Total Hours)
 
-                if songInfoDetailsDoubleSpace:
-                    # if the double space is enabled
-                    cppLargeHoverList.append(" ")
-                    # adds a space to the left side of the spacer
-                if songInfoFormatDetailsSpacer:
-                    # if the spacer isn't empty
-                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
-                    # adds the spacer and a space on the right side
+            if songInfoDetailsDoubleSpace:
+                # if the double space is enabled
+                cppLargeHoverList.append(" ")
+                # adds a space to the left side of the spacer
+            if songInfoFormatDetailsSpacer:
+                # if the spacer isn't empty
+                cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                # adds the spacer and a space on the right side
 
-                if shaaInfoDetails in detailOptions:
-                    # if the config option matches one of the set defaults
+            cppLargeHoverList.append(shaaDetailField + " ")
+            # adds the field and a space
 
-                    if shaaInfoDetails.lower() == "hours":
-                        # if the config calls for total hours
-                        shaaDetailField = totalHours
-                        # gets total hours
+            if dsiShoutout:
+                # if the dsi shoutout option is enabled
+                cppLargeHoverList.append(dsiShoutoutStr)
 
-                    elif shaaInfoDetails.lower() == "minutes":
-                        # if the config calls for total minutes
-                        shaaDetailField = totalMinutes
-                        # gets total minutes
-
-                    elif shaaInfoDetails.lower() == "hours":
-                        # if the config calls for total hours
-                        shaaDetailField = totalMinutes
-                        # gets total hours from the hours.txt file 
-
-                    elif shaaInfoDetails.lower() == "cycle":
-                        # if the config calls for cycle
-                        if cycleCount == 0:
-                            shaaDetailField = totalHours
-                            cycleCount += 1
-                            # adds 1 to counter
-                        elif cycleCount == 1:
-                            shaaDetailField = totalMinutes
-                            cycleCount += 1
-                            # adds 1 to counter
-                        elif cycleCount == 2: 
-                            shaaDetailField = totalSeconds
-                            cycleCount = 0
-                            # resets to 0 for next time 
-                        # checks which case matches
-
-                    elif shaaInfoDetails.lower() == "volume":
-                        # if the config calls for volume
-                        try:
-                            shaaDetailField = f"{csDevice.get("volume_percent")}%"
-                            # takes the volume and makes it a percentage
-                        except:
-                            shaaDetailField = "some volume"
-                            # if it fails, puts a fallback string
-                    
-                    elif shaaInfoDetails.lower() == "repeat":
-                        # if the config calls for repeat state
-                        try:
-                            repeatState = csFull.get("repeat_state")
-
-                            if repeatState:
-                                # if repeat state returns True
-                                shaaDetailField = "on Repeat"
-                                # adds string form
-                            else:
-                                # if repeat state doesn't return True
-                                shaaDetailField = "not on Repeat"
-                                # adds string form
-                        except:
-                            shaaDetailField = "may be on Repeat"
-                            # if it fails, puts a fallback string
-
-                    elif shaaInfoDetails.lower() == "shuffle":
-                        # if the config calls for shuffle state
-                        try:
-                            shuffleState = csFull.get("shuffle_state")
-
-                            if shuffleState:
-                                # if shuffle state returns True
-                                shaaDetailField = "on Shuffle"
-                            else:
-                                # if shuffle state doesn't return True
-                                shaaDetailField = "not on Shuffle"
-                        except:
-                            shaaDetailField = "may be on Shuffle"
-                            # if it fails, puts a fallback string
-
-                else:
-                    # if the config option doesn't match any of the set defaults
-                    shaaDetailField = shaaInfoDetails
-                    # sets the total time to match custom string instead
-
-                cppLargeHoverList.append(shaaDetailField + " ")
-                # joins together the list 
-
-                if dsiShoutout:
-                    # if the dsi shoutout option is enabled
-                    cppLargeHoverList.append(dsiShoutoutStr)
+            cppLargeHover = "".join(cppLargeHoverList)
+            # joins together the list
 
             ### No Track Match ###
 
-            else:
+            if finalURI not in csvReader.index:
                 # if the track wasn't found in CSV
                 if enableUpdates:
                     # if the updates are enabled, lets user know the song wasn't found in CSV
@@ -1262,85 +1285,6 @@ def song(pictureQueue):
                     # adds the custom field to string
                 songStuffList.append(songInfoFormatMins)
                 # adds the second field end text to list
-                
-                ### Details / Field 3 ###
-
-                if songInfoFormatDetails:
-                    # if the format option isn't empty
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # adds to string list
-
-                if songInfoDetailsDoubleSpace:
-                    # if the double space is enabled
-                    cppLargeHoverList.append(" ")
-                    # adds an empty space
-
-                if songInfoFormatDetailsSpacer:
-                    # if the format spacer option isn't empty
-                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
-                    # adds to string list
-
-                if shaaInfoDetails in detailOptions:
-                    # if the config option matches one of the set defaults
-
-                    if shaaInfoDetails == "Hours" or shaaInfoDetails == "hours":
-                        # if the config calls for total hours
-                        shaaDetailField =  f"{( ( (csvReader["Total Time"].agg("sum")/1000) /60) /60):,.2f}"
-                        # counts total time (hours) for all songs (milliseconds/1000 = seconds / 60 = minutes / 60 = hours, then rounded), turns into a formatted string
-
-                    if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
-                        # if the config calls for volume
-                        try:
-                            shaaDetailField = (csDevice.get("volume_percent")+"%")
-                            # takes the volume and makes it a percentage
-                        except:
-                            shaaDetailField = "some volume"
-                            # if it fails, puts a fallback string
-
-                    if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
-                        # if the config calls for repeat state
-                        try:
-                            repeatState = csFull.get("repeat_state")
-                            if repeatState:
-                                # if repeat state returns True
-                                shaaDetailField = "on Repeat"
-                                # adds string form
-                            else:
-                                # if repeat state doesn't return True
-                                shaaDetailField = "not on Repeat"
-                                # adds string form
-                        except:
-                            shaaDetailField = "may be on Repeat"
-                            # if it fails, puts a fallback string
-
-                    if shaaInfoDetails == "Shuffle" or shaaInfoDetails == "shuffle":
-                        # if the config calls for shuffle state
-                        try:
-                            shuffleState = csFull.get("shuffle_state")
-                            if shuffleState:
-                                # if shuffle state returns True
-                                shaaDetailField = "on Shuffle"
-                            else:
-                                # if shuffle state doesn't return True
-                                shaaDetailField = "not on Shuffle"
-                        except:
-                            shaaDetailField = "may be on Shuffle"
-                            # if it fails, puts a fallback string
-
-                    else:
-                        # if the config option doesn't match any of the set defaults
-                        shaaDetailField = shaaInfoDetails
-                        # sets the total time to match custom string instead
-
-                cppLargeHoverList.append(shaaDetailField + " ")
-                # adds the detail field to the list
-
-                if dsiShoutout:
-                    # if the dsi shoutout is enabled
-                    cppLargeHoverList.append(dsiShoutoutStr)
-
-            cppLargeHover = "".join(cppLargeHoverList)
-            # joins together the detail list of strings (SHAA-only)
             
 
         ### Song State String Joiner (SHAA and non) ###
@@ -1616,7 +1560,7 @@ def looper():
 idWriter()
 # runs the idWriter, which writes the ids.txt file
 
-hourGrabber()
+timeGrabber()
 # runs the hourGrabber, which gets total hours from the hours.txt file
 
 bg = Background(picCycleList, picCycleType, picCycleTime, pictureQueue)
