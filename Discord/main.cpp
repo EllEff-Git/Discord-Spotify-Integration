@@ -13,7 +13,7 @@
 #include <codecvt>
 
 // version number (y.m.dd.hhmm)
-std::string DSIDver = "v0.3.25.0710";
+std::string DSIDver = "v0.3.26.0601";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -426,14 +426,7 @@ int main() {
                 // changes the requiredUpdate to true to trigger an update
                 requiredUpdate = true;
             }
-            // if the song/pause hasn't changed and 30s hasn't passed
-            else {
-                // pauses the "thread" for a bit (prevents crazy CPU/disk usage for nothing)
-                std::this_thread::sleep_for(std::chrono::seconds(2));
-                // goes back to start of loop
-                continue;
-            }
-            
+
             // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
             // checks if the length of the songName (details) field *with* album is eq or gr than 103 (cap of 108 for that field)
             if ((songName + albumName).length() <= 103) {
@@ -568,6 +561,14 @@ int main() {
                 }); // UpdateRichPresence close
 
             } // if(success) close
+
+            // if the song/pause hasn't changed and 30s hasn't passed
+            else {
+                // pauses the "thread" for a bit (prevents crazy CPU/disk usage for nothing)
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+                // goes back to start of loop
+                continue;
+            }
             
             // pauses the update loop for 2 seconds (songData won't update that fast, so just lets program breathe)
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -681,9 +682,9 @@ else {
 
     // keeps running to allow program to receive events and callbacks
     while (running) {
-      discordpp::RunCallbacks();
-      // re-checks every 1 second (standard, set by Discord)
-      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        discordpp::RunCallbacks();
+        // re-checks every 1 second (standard, set by Discord)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
   return 0;
