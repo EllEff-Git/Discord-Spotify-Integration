@@ -16,7 +16,7 @@ from spotipy.exceptions import SpotifyException
 ### Setup Section ###
 
 
-DSIver = "v0.4.6.1701"
+DSIver = "v0.4.6.1952"
 """The program version (Y.M.DD.HHMM)"""
 
 
@@ -54,10 +54,14 @@ cppDir = os.path.dirname(cppPath)
 """The directory the C++ Exe lives in"""
 dsiConfigPath = os.path.join(directory, "Data", "config.json")
 """The DSI configuration json file"""
-dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "ui_form.exe")
+dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "dsiWindow.exe")
 """The DSI configurator program/window"""
 shaaConfigPath = os.path.join(directory, "Data", "shaaConfig.json")
 """The SHAA x DSI configuration json file"""
+jsonConfig = None
+"""The config file for the main function"""
+shaaConfig = None
+"""The config file specifically for SHA(A) features"""
 
 
 ### Config Section ###
@@ -97,14 +101,17 @@ skipConfigWindow = Config.getboolean("Function", "Skip_Config_Window", fallback=
 ### UI Class -> Config ###
 
 
-if not skipConfigWindow and os.path.exists(dsiConfigPath):
-# if the config option isn't enabled to skip the config window and the json config is valid
-# basically just doesn't let skip if the json config isn't valid
+if os.path.exists(dsiConfigPath) and skipConfigWindow:
+# checks if the config already exists (not first time) and the skipping is enabled
+    None
+    # if it does, does nothing
+else:
+# if the file doesn't exist
     dsiConfig = subprocess.run([dsiConfigWindow], check=True)
     # runs the dsi configurator (as blocking), continues task once it's done writing config
     if not dsiConfig.returncode == 1:
     # checks if the return code isn't 1 (0 is bad, 1 is good)
-        print(f"DSI config window returned with code: {dsiConfig.returncode} (this is not ideal)")
+        print(f"Configuration complete - {dsiConfig.returncode}")
         # prints the return code
 
 try:
@@ -281,7 +288,7 @@ if not disableShaa:
     songInfoField2 = shaaConfig["songInfoField2"]
     """Second state field type, int"""
     # 0-1 is minutes (track first), 2-3 is hours, 4-5 is seconds
-    shaaFallbackTotal = shaaConfig["songInfoFallback"]
+    shaaFallbackTotal = shaaConfig["songInfoFallbackTotal"]
     """Whether to fall back to total numbers, boolean"""
     if shaaFallbackTotal:
     # if the fallback total usage is enabled

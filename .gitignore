@@ -1,2 +1,10 @@
 todo.txt
 __pycache__
+DSI.xcf
+dsi.spec
+dsi.exe
+URImap.xcf
+urimap.spec
+urimap.exe
+dist
+build

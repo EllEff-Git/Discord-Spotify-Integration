@@ -25,13 +25,16 @@ class Ui_DSIWindow(object):
         self.main.setObjectName(u"main")
         # sets the object name
 
-        self.cwd = os.getcwd()
+        if getattr(sys, 'frozen', False):
+            self.cwd = os.path.dirname(sys.executable)
+        else:
+            self.cwd = os.path.dirname(os.path.abspath(__file__))
         # stores the "current working directory" (should be the Qt/DSI_Qt/ folder)
         self.mainFolder = os.path.join(self.cwd, "..", "..")
         # stores the "main" folder (DSI, which is 2 folders up)
         self.configPath = os.path.join(self.mainFolder, "Data", "config.json")
         # stores the config file path
-        self.shaaPath = os.path.join(self.mainFolder, "Qt", "SHAA_Qt", "ui_form.exe")
+        self.shaaPath = os.path.join(self.mainFolder, "Qt", "SHAA_Qt", "shaaWindow.exe")
         # stores the shaa configuration window path
 
         self.firstTime = False
@@ -86,6 +89,34 @@ class Ui_DSIWindow(object):
 
         self.loadedConfig = readConfig()
         # runs the config reader to get new config info, stores it
+
+        self.clockStyleOptions = ["System Time", "Uptime", "Off"]
+        # stores all the clock style options in a list
+        self.loadedClockStyle = self.loadedConfig["clockStyle"]
+        # gets the loaded clock style from config
+        self.clockStyleOptions.remove(self.loadedClockStyle)
+        # removes the loaded clock style from the list
+
+        self.spotifyURLoptions = ["Track", "Album", "Artist", "Playlist"]
+        # stores all the URL options in a list
+        self.loadedURLoption = self.loadedConfig["spotifyURLType"]
+        # gets the loaded URL option from config
+        self.spotifyURLoptions.remove(self.loadedURLoption)
+        # removes the loaded URL option from the list
+
+        self.picCycleTypes = ["Spotify", "File", "None"]
+        # stores the options for the picture cycling in a list
+        self.loadedPicCycleType = self.loadedConfig["pictureCycleType"]
+        # gets the loaded option for the type
+        self.picCycleTypes.remove(self.loadedPicCycleType)
+        # removes the loaded type from the list
+
+        self.picCycleBehaviors = ["Random", "Sequence", "Once", "None"]
+        # stores the options for the picture cycling behavior in a list
+        self.loadedPicCycleBehavior = self.loadedConfig["pictureCycleBehavior"]
+        # gets the loaded option for the behavior
+        self.picCycleBehaviors.remove(self.loadedPicCycleBehavior)
+        # removes the loaded type
 
         self.songPreviewText = "A Song - an artist - an album"
         # creates a songPreviewText string to be used as a preview for the full styling in "real-time"
@@ -223,7 +254,10 @@ class Ui_DSIWindow(object):
 
         self.enableURIMapBoolean = QCheckBox(self.gridLayoutWidget_2)
         self.enableURIMapBoolean.setObjectName(u"enableURIMapBoolean")
-        self.enableURIMapBoolean.setChecked(True)
+        if self.loadedConfig["enableURI"]:
+        # if the config option is set to True
+            self.enableURIMapBoolean.setChecked(True)
+            # ticks the box automatically
 
         self.basicBooleanGrid.addWidget(self.enableURIMapBoolean, 9, 0, 1, 1)
 
@@ -234,7 +268,10 @@ class Ui_DSIWindow(object):
 
         self.printErrorsBoolean = QCheckBox(self.gridLayoutWidget_2)
         self.printErrorsBoolean.setObjectName(u"printErrorsBoolean")
-        self.printErrorsBoolean.setChecked(True)
+        if self.loadedConfig["printErrors"]:
+        # if the config option is set to True
+            self.printErrorsBoolean.setChecked(True)
+            # ticks the box automatically
 
         self.basicBooleanGrid.addWidget(self.printErrorsBoolean, 19, 0, 1, 1)
 
@@ -269,7 +306,12 @@ class Ui_DSIWindow(object):
 
         self.pauseBoolean = QCheckBox(self.gridLayoutWidget_2)
         self.pauseBoolean.setObjectName(u"pauseBoolean")
-        self.pauseBoolean.setChecked(True)
+        if self.loadedConfig["enablePause"]:
+        # if the config option is set to True
+            self.pauseBoolean.setChecked(True)
+            # ticks the box automatically
+        self.pauseBoolean.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewWriter
 
         self.basicBooleanGrid.addWidget(self.pauseBoolean, 4, 0, 1, 1)
 
@@ -295,7 +337,10 @@ class Ui_DSIWindow(object):
 
         self.printUpdatesBoolean = QCheckBox(self.gridLayoutWidget_2)
         self.printUpdatesBoolean.setObjectName(u"printUpdatesBoolean")
-        self.printUpdatesBoolean.setChecked(True)
+        if self.loadedConfig["printUpdates"]:
+        # if the config option is set to True
+            self.printUpdatesBoolean.setChecked(True)
+            # ticks the box automatically
 
         self.basicBooleanGrid.addWidget(self.printUpdatesBoolean, 16, 0, 1, 1)
 
@@ -318,6 +363,8 @@ class Ui_DSIWindow(object):
 
         self.pauseText = QLineEdit(self.gridLayoutWidget_2)
         self.pauseText.setObjectName(u"pauseText")
+        self.pauseText.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewStringWriter
 
         self.basicBooleanGrid.addWidget(self.pauseText, 6, 0, 1, 1)
 
@@ -410,6 +457,8 @@ class Ui_DSIWindow(object):
 
         self.roundURLText = QLineEdit(self.gridLayoutWidget_2)
         self.roundURLText.setObjectName(u"roundURLText")
+        self.roundURLText.setText(self.loadedConfig["smallPicURL"])
+        # sets the URL from the config automatically
 
         self.urlGrid.addWidget(self.roundURLText, 1, 1, 1, 1)
 
@@ -447,6 +496,8 @@ class Ui_DSIWindow(object):
 
         self.roundPicHoverText = QLineEdit(self.gridLayoutWidget_2)
         self.roundPicHoverText.setObjectName(u"roundPicHoverText")
+        self.roundPicHoverText.setText(self.loadedConfig["smallPicHover"])
+        # sets the text from the config file
 
         self.urlGrid.addWidget(self.roundPicHoverText, 9, 1, 1, 1)
 
@@ -467,6 +518,8 @@ class Ui_DSIWindow(object):
 
         self.roundPicText = QLineEdit(self.gridLayoutWidget_2)
         self.roundPicText.setObjectName(u"roundPicText")
+        self.roundPicText.setText(self.loadedConfig["smallPic"])
+        # sets the picture name from the config file
 
         self.urlGrid.addWidget(self.roundPicText, 5, 1, 1, 1)
 
@@ -514,6 +567,8 @@ class Ui_DSIWindow(object):
 
         self.songSpacerR = QLineEdit(self.gridLayoutWidget_2)
         self.songSpacerR.setObjectName(u"songSpacerR")
+        self.songSpacerR.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewWriter
 
         self.stylingGrid.addWidget(self.songSpacerR, 13, 0, 1, 1)
 
@@ -553,7 +608,12 @@ class Ui_DSIWindow(object):
 
         self.enableAlbum = QCheckBox(self.gridLayoutWidget_2)
         self.enableAlbum.setObjectName(u"enableAlbum")
-        self.enableAlbum.setChecked(True)
+        if self.loadedConfig["enableAlbum"]:
+        # if the config option is set to True
+            self.enableAlbum.setChecked(True)
+            # ticks the box automatically
+        self.enableAlbum.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewWriter
 
         self.stylingGrid.addWidget(self.enableAlbum, 22, 0, 1, 1)
 
@@ -566,8 +626,12 @@ class Ui_DSIWindow(object):
 
         self.enableSong = QCheckBox(self.gridLayoutWidget_2)
         self.enableSong.setObjectName(u"enableSong")
-        self.enableSong.setEnabled(True)
-        self.enableSong.setChecked(True)
+        if self.loadedConfig["enableSong"]:
+        # if the config option is set to True
+            self.enableSong.setChecked(True)
+            # ticks the box automatically
+        self.enableSong.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewWriter
 
         self.stylingGrid.addWidget(self.enableSong, 16, 0, 1, 1)
 
@@ -578,6 +642,8 @@ class Ui_DSIWindow(object):
 
         self.songSpacerL = QLineEdit(self.gridLayoutWidget_2)
         self.songSpacerL.setObjectName(u"songSpacerL")
+        self.songSpacerL.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewWriter
 
         self.stylingGrid.addWidget(self.songSpacerL, 9, 0, 1, 1)
 
@@ -593,17 +659,30 @@ class Ui_DSIWindow(object):
 
         self.enableArtist = QCheckBox(self.gridLayoutWidget_2)
         self.enableArtist.setObjectName(u"enableArtist")
-        self.enableArtist.setChecked(True)
+        if self.loadedConfig["enableArtist"]:
+        # if the config option is set to True
+            self.enableArtist.setChecked(True)
+            # ticks the box automatically
+        self.enableArtist.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewWriter
 
         self.stylingGrid.addWidget(self.enableArtist, 19, 0, 1, 1)
 
         self.preText = QLineEdit(self.gridLayoutWidget_2)
         self.preText.setObjectName(u"preText")
+        self.preText.setText(self.loadedConfig["preText"])
+        # sets the text from loaded config automatically
+        self.preText.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the stringWriter
 
         self.stylingGrid.addWidget(self.preText, 1, 0, 1, 1)
 
         self.postText = QLineEdit(self.gridLayoutWidget_2)
         self.postText.setObjectName(u"postText")
+        self.postText.setText(self.loadedConfig["postText"])
+        # sets the text from loaded config automatically
+        self.postText.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the stringWriter
 
         self.stylingGrid.addWidget(self.postText, 5, 0, 1, 1)
 
@@ -655,45 +734,64 @@ class Ui_DSIWindow(object):
 
     def retranslateUi(self, DSIWindow):
         """Function to 'translate' the strings, I suppose (auto-generated by Qt Creator)"""
+
         DSIWindow.setWindowTitle(QCoreApplication.translate("DSI Configuration", u"DSI Configuration", None))
         # the title of the whole window
-        self.pictureCycleTime.setText(QCoreApplication.translate("DSIWindow", u"10", None))
-        self.pictureCycleBehaviorHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Behavior", None))
-        self.pictureCycleTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How to cycle the big picture<br>Setting to Spotify uses the active album cover (disables cycler)<br>Setting to File reads the picture links from pictureList.txt<br>Setting to None loads no picture (disables cycler)</p></body></html>", None))
-        self.pictureCycleBehavior.setItemText(0, QCoreApplication.translate("DSIWindow", u"Random", None))
-        self.pictureCycleBehavior.setItemText(1, QCoreApplication.translate("DSIWindow", u"Sequence", None))
-        self.pictureCycleBehavior.setItemText(2, QCoreApplication.translate("DSIWindow", u"Once", None))
-        self.pictureCycleBehavior.setItemText(3, QCoreApplication.translate("DSIWindow", u"None", None))
 
         self.pictureCycleTimeHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Time", None))
-        self.pictureCycleHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Type", None))
-        self.pictureCycleType.setItemText(0, QCoreApplication.translate("DSIWindow", u"Spotify", None))
-        self.pictureCycleType.setItemText(1, QCoreApplication.translate("DSIWindow", u"File", None))
-        self.pictureCycleType.setItemText(2, QCoreApplication.translate("DSIWindow", u"None", None))
-
+        self.pictureCycleTime.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["pictureCycleTime"]}", None))
+        # gets the config option for the time
         self.pictureCycleTimeTooltip.setText(QCoreApplication.translate("DSIWindow", u"How many minutes are awaited between picture swaps ('Song' swaps every track swap)", None))
+
+        self.pictureCycleBehaviorHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Behavior", None))
+        self.pictureCycleTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How to cycle the big picture<br>Setting to Spotify uses the active album cover (disables cycler)<br>Setting to File reads the picture links from pictureList.txt<br>Setting to None loads no picture (disables cycler)</p></body></html>", None))
+        self.pictureCycleBehavior.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleBehavior}", None))
+        # takes the loaded config option to display as first
+        self.pictureCycleBehavior.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[0]}", None))
+        self.pictureCycleBehavior.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[1]}", None))
+        self.pictureCycleBehavior.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[2]}", None))
+        # the other three get loaded in order
+
+        self.pictureCycleHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Type", None))
+        self.pictureCycleType.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleType}", None))
+        # gets the loaded type from cofnig to display as first
+        self.pictureCycleType.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleTypes[0]}", None))
+        self.pictureCycleType.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleTypes[1]}", None))
+        # the other two get loaded in order
+
         self.previewTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p align=\"center\">Discord Presence String Preview:</p></body></html>", None))
         self.previewText.setText(QCoreApplication.translate("DSIWindow", f"<html><head/><body><p align=\"center\">{self.songPreviewText}</p></body></html>", None))
         # the song preview text field, uses the formed string
-        self.printUpdatesTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display the current status of the program in the console", None))
+
         self.enableURIMapBoolean.setText(QCoreApplication.translate("DSIWindow", u"Enable URI Mapping", None))
-        self.marketCodeHeader.setText(QCoreApplication.translate("DSIWindow", u"Market Area Code:", None))
         self.printErrorsBoolean.setText(QCoreApplication.translate("DSIWindow", u"Show Program Errors", None))
+
         self.clockStyleTooltip.setText(QCoreApplication.translate("DSIWindow", u"What type of clock (if any) to use in the console", None))
-        self.apiTimerNum.setText(QCoreApplication.translate("DSIWindow", u"10", None))
+        self.apiTimerNum.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["refreshTime"]}", None))
         self.apiTimerHeader.setText(QCoreApplication.translate("DSIWindow", u"Spotify API Check Timer:", None))
+
         self.pauseBoolean.setText(QCoreApplication.translate("DSIWindow", u"Enable Pause Text", None))
+
         self.clockStyleHeader.setText(QCoreApplication.translate("DSIWindow", u"Console Clock Style", None))
-        self.clockStyleSelection.setItemText(0, QCoreApplication.translate("DSIWindow", u"System Time", None))
-        self.clockStyleSelection.setItemText(1, QCoreApplication.translate("DSIWindow", u"Uptime", None))
-        self.clockStyleSelection.setItemText(2, QCoreApplication.translate("DSIWindow", u"Off", None))
+        self.clockStyleSelection.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedClockStyle}", None))
+        # the clock style option - loads the stored style from config to use as the first one
+        self.clockStyleSelection.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.clockStyleOptions[0]}", None))
+        self.clockStyleSelection.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.clockStyleOptions[1]}", None))
+        # the other two styles are the only ones left in the list of options (after the config one is removed), this way the first one always matches the config
 
         self.printUpdatesBoolean.setText(QCoreApplication.translate("DSIWindow", u"Show Program Status", None))
-        self.marketCode.setText("")
-        self.pauseTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to add before the first element, when playback is paused", None))
-        self.pauseText.setText(QCoreApplication.translate("DSIWindow", u"Paused on:", None))
-        self.printErrorsTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display potential program and API errors in the console", None))
+        self.printUpdatesTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display the current status of the program in the console", None))
+
+        self.marketCodeHeader.setText(QCoreApplication.translate("DSIWindow", u"Market Area Code:", None))
+        self.marketCode.setText(self.loadedConfig["marketCode"])
+        # loads the market code from config (can be empty, is empty by default)
         self.marketCodeTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>Your &quot;market area&quot; (the country your Spotify accounts belongs to)<br/>Only used if running the URIMap function<br/>Uses a 2-letter country code (ex. US, JP, DE, SN, CH...)</p></body></html>", None))
+
+        self.pauseTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to add before the first element, when playback is paused", None))
+        self.pauseText.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["pauseText"]}", None))
+        # takes the pause text from the loaded config 
+
+        self.printErrorsTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display potential program and API errors in the console", None))
         self.enableURIMapTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to enable the URI mapping function", None))
         self.apiTimerTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How many seconds are waited before sending a new API call<br/>Minimum of 2, recommended range 5 - 15</p></body></html>", None))
         self.shaaConfigureButton.setText(QCoreApplication.translate("DSIWindow", u"Configure SHAA Details\n"
@@ -709,32 +807,43 @@ class Ui_DSIWindow(object):
         self.spotifyURLTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The link type for the URL that gets set into the link fields (large picture and song detail click)<br/>Note that Playlist requires an active playlist, otherwise defaults to Round Picture URL until an active playlist is found</p></body></html>", None))
         self.roundPicTooltip.setText(QCoreApplication.translate("DSIWindow", u"The name of the picture to load in the round frame (name from Developer Dashboard or link to a picture)", None))
         self.roundURLHeader.setText(QCoreApplication.translate("DSIWindow", u"Round Picture URL:", None))
-        self.roundPicHoverTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to display when hovering over the round picture", None))
-        self.spotifyURLSelection.setItemText(0, QCoreApplication.translate("DSIWindow", u"Track", None))
-        self.spotifyURLSelection.setItemText(1, QCoreApplication.translate("DSIWindow", u"Album", None))
-        self.spotifyURLSelection.setItemText(2, QCoreApplication.translate("DSIWindow", u"Artist", None))
-        self.spotifyURLSelection.setItemText(3, QCoreApplication.translate("DSIWindow", u"Playlist", None))
 
         self.roundPicHoverHeader.setText(QCoreApplication.translate("DSIWindow", u"Round Picture Hover Text:", None))
-        self.enableAlbumTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the album name to the presence string", None))
-        self.songSpacerR.setText(QCoreApplication.translate("DSIWindow", u"\u227b", None))
+        self.roundPicHoverTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to display when hovering over the round picture", None))
+
+        self.spotifyURLSelection.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedURLoption}", None))
+        # uses the loaded URL option as the first one
+        self.spotifyURLSelection.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[0]}", None))
+        self.spotifyURLSelection.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[1]}", None))
+        self.spotifyURLSelection.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[2]}", None))
+        # uses the remaining ones from the list, in order
+        
         self.preTextHeader.setText(QCoreApplication.translate("DSIWindow", u"Pre-text:", None))
         self.preTextTooltip.setText(QCoreApplication.translate("DSIWindow", u"Text placed before the first element (may be omitted)", None))
         self.postTextHeader.setText(QCoreApplication.translate("DSIWindow", u"Post-text:", None))
         self.postTextTooltip.setText(QCoreApplication.translate("DSIWindow", u"Text placed before the last element (may be omitted)", None))
-        self.albumFallbackTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The text to use in the album's place, if the string is too long<br>This happens when the presence string exceeds 128 characters</p></body></html>", None))
+
         self.albumFallbackHeader.setText(QCoreApplication.translate("DSIWindow", u"Album Fallback Text:", None))
-        self.albumFallbackText.setText(QCoreApplication.translate("DSIWindow", u"An album", None))
-        self.enableAlbum.setText(QCoreApplication.translate("DSIWindow", u"Enable Album", None))
-        self.enableSong.setText(QCoreApplication.translate("DSIWindow", u"Enable Song", None))
-        self.songSpacerRHeader.setText(QCoreApplication.translate("DSIWindow", u"Right Spacer", None))
-        self.songSpacerL.setText(QCoreApplication.translate("DSIWindow", u"\u227a", None))
+        self.albumFallbackText.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["albumFallback"]}", None))
+        self.albumFallbackTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The text to use in the album's place, if the string is too long<br>This happens when the presence string exceeds 128 characters</p></body></html>", None))
+
         self.songSpacerLHeader.setText(QCoreApplication.translate("DSIWindow", u"Left Spacer", None))
+        self.songSpacerL.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["spacerL"]}", None))
         self.songSpacerLTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The string/spacer placed after the first element<br>Default: \u227a</p></body></html>", None))
-        self.enableArtist.setText(QCoreApplication.translate("DSIWindow", u"Enable Artist", None))
-        self.enableSongTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the song name to the presence string", None))
+
+        self.songSpacerRHeader.setText(QCoreApplication.translate("DSIWindow", u"Right Spacer", None))
+        self.songSpacerR.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["spacerR"]}", None))
         self.songSpacerRTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The string/spacer placed after the second element<br>Default: \u227b</p></body></html>", None))
+
+        self.enableSong.setText(QCoreApplication.translate("DSIWindow", u"Enable Song", None))
+        self.enableSongTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the song name to the presence string", None))
+
+        self.enableArtist.setText(QCoreApplication.translate("DSIWindow", u"Enable Artist", None))
         self.enableArtistTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the artist's name(s) to the presence string", None))
+
+        self.enableAlbum.setText(QCoreApplication.translate("DSIWindow", u"Enable Album", None))
+        self.enableAlbumTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the album name to the presence string", None))
+
 
     def runShaaWindow(self):
         """Function to run the SHAA configuration window"""
@@ -784,9 +893,75 @@ class Ui_DSIWindow(object):
 
     def previewStringWriter(self):
         """Function to modify/write the preview string"""
+        previewTextList = []
+        # creates an empty list
+        boolCounter = 0
+        # a counter of booleans to check how many elements should be included
 
+        if self.preText.text():
+        # if the pretext is defined
+            boolCounter += 1
+
+        if self.enableSong.isChecked():
+        # if the song is enabled
+            boolCounter += 1
+        
+        if self.enableArtist.isChecked():
+        # if the artist is enabled
+            boolCounter += 1
+
+        if self.enableAlbum.isChecked():
+        # if the album is enabled
+            boolCounter += 1
+
+        if self.postText.text():
+        # if the posttext is defined
+            boolCounter += 1
+
+        if self.pauseBoolean.isChecked():
+        # if the pause is defined
+            previewTextList.append(self.pauseText.text())
+            # adds the pause text
+        if self.preText.text():
+        # if the preText is enabled
+            previewTextList.append(self.preText.text())
+            # adds the pretext
+        if self.enableSong.isChecked():
+        # if the song is enabled
+            previewTextList.append("A song")
+            # adds a string
+        if self.songSpacerL.text() and (boolCounter >= 2) and self.enableSong.isChecked():
+        # if the left spacer is defined (and there's something to chase + the song is enabled, meaning it should go here)
+            previewTextList.append(self.songSpacerL.text())
+            # adds the left spacer
+        if self.enableArtist.isChecked():
+        # if the artist is enabled
+            previewTextList.append("An artist")
+            # adds a string
+        if self.songSpacerL.text() and (boolCounter >= 2) and not self.enableSong.isChecked():
+            # if every other condition is met, and the song is disabled, moves it here instead
+            previewTextList.append(self.songSpacerL.text())
+            # adds the left spacer here instead
+        if self.songSpacerR and (boolCounter >= 3):
+        # if the right spacer is defined (and there's something to chase)
+            previewTextList.append(self.songSpacerR.text())
+            # adds the right spacer
+        if self.enableAlbum.isChecked():
+        # if the album is enabled
+            previewTextList.append("An album")
+            # adds a string
+        if self.postText.text():
+        # if the postText is defined
+            previewTextList.append(self.postText.text())
+            # adds the post text
+
+        self.songPreviewText = " ".join(previewTextList)
+        # forms a string from the subparts (which is then entered into the preview string display)
+        self.previewText.setText(QCoreApplication.translate("DSIWindow", f"<html><head/><body><p align=\"center\">{self.songPreviewText}</p></body></html>", None))
+        # uses the set "translate" method to apply the new text (this way it's centered, may swap to a different form of centering later)
 
 if __name__ == "__main__":
+# runs at start
 
     app = QApplication(sys.argv)
     # creates a Qt Application

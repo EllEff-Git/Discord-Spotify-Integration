@@ -3,7 +3,7 @@ import spotipy, configparser, requests
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 
-URIver = "v0.3.04.0855"
+URIver = "v0.4.6.1953"
 # the program version (y.m.dd.hhmm)
 
 
@@ -12,7 +12,7 @@ if getattr(sys, 'frozen', False):
     # since the program bundled with pyInstaller, it's "frozen"
     directory = os.path.dirname(sys.executable)
     # gets the base directory of the program, where the python .exe resides
-    """Directory should be DSI/Data/URImap.exe"""
+    """Directory should be DSI/"""
 else:
     # if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
@@ -44,7 +44,22 @@ sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
 """spotify client secret, string"""
 sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 """spotify redirect URL, string"""
-MarketArea = Config.get("Function", "market_Area")
+
+# Json Config
+dsiConfigPath = os.path.join(directory, "Data", "config.json")
+
+try:
+# tries to open the json file
+    with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+    # opens the config file in read mode
+        jsonConfig = json.load(jsCfg)
+        # stores the loaded json file as jsonConfig
+except Exception as err:
+# if there's an error
+    print(f"Error reading the json config file: {err}")
+    # user inform
+
+MarketArea = jsonConfig["marketCode"]
 """The 2-letter country identifier passed to spotify"""
 
 

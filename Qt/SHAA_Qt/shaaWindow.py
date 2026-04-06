@@ -14,7 +14,10 @@ class Ui_SHAAWindow(object):
         self.window = SHAAWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
-        self.cwd = os.getcwd()
+        if getattr(sys, 'frozen', False):
+            self.cwd = os.path.dirname(sys.executable)
+        else:
+            self.cwd = os.path.dirname(os.path.abspath(__file__))
         # stores the "current working directory" (should be the Qt/SHAA_Qt/ folder)
         self.mainFolder = os.path.join(self.cwd, "..", "..")
         # stores the "main" folder (DSI, which is 2 folders up)
@@ -35,7 +38,7 @@ class Ui_SHAAWindow(object):
             # if it can't (file doesn't exist)
                 defaultConfig = {
                     "songInfoField1": "Track",
-                    "songInfoField2": 1,
+                    "songInfoField2": 0,
                     "songInfoFallbackTotal": True,
                     "songInfoFallbackText": "",
                     "songInfoDetails": "Hours",
@@ -59,6 +62,27 @@ class Ui_SHAAWindow(object):
 
         self.loadedConfig = readConfig()
         # runs the config reader to get new config info, stores it
+
+        self.songInfoField1Options = ["Track", "Total"]
+        # stores the different options the field 1 can have (playcount)
+        self.loadedField1Option = self.loadedConfig["songInfoField1"]
+        # gets the loaded option from file
+        self.songInfoField1Options.remove(self.loadedField1Option)
+        # removes the current option
+
+        self.songInfoField2Options = ["Track (Minutes)", "Total (Minutes)", "Track (Hours)", "Total (Hours)", "Track (Seconds)", "Total (Seconds)"]
+        # stores all the options possible for field 2
+        self.loadedField2Option = self.loadedConfig["songInfoField2"]
+        # gets the loaded option from file
+        self.poppedField2 = self.songInfoField2Options.pop(self.loadedField2Option)
+        # pops the index (0-5) and stores it
+
+        self.songInfoDetailOptions = ["Hours", "Minutes", "Seconds", "Cycle", "Volume", "Repeat", "Shuffle", "Custom"]
+        # stores all the options possible for details field
+        self.loadedDetailOption = self.loadedConfig["songInfoDetails"]
+        # gets the loaded option from file
+        self.songInfoDetailOptions.remove(self.loadedDetailOption)
+        # removes the current options
 
         self.centralwidget = QWidget(SHAAWindow)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -84,7 +108,6 @@ class Ui_SHAAWindow(object):
         self.verticalSpacer_2 = QSpacerItem(20, 40, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
 
         self.bottomLeftGrid.addItem(self.verticalSpacer_2)
-
 
         self.mainLayout.addLayout(self.bottomLeftGrid, 1, 1, 1, 1)
 
@@ -181,7 +204,8 @@ class Ui_SHAAWindow(object):
 
         self.shaaFallbackText = QLineEdit(self.gridLayoutWidget)
         self.shaaFallbackText.setObjectName(u"shaaFallbackText")
-        self.shaaFallbackText.setReadOnly(False)
+        self.shaaFallbackText.setText(self.loadedConfig["songInfoFallbackText"])
+        # uses the config set text
 
         self.topLeftGrid.addWidget(self.shaaFallbackText, 10, 0, 1, 1)
 
@@ -229,7 +253,10 @@ class Ui_SHAAWindow(object):
 
         self.shaaFallbackTotalCheck = QCheckBox(self.gridLayoutWidget)
         self.shaaFallbackTotalCheck.setObjectName(u"shaaFallbackTotalCheck")
-        self.shaaFallbackTotalCheck.setChecked(True)
+        if self.loadedConfig["songInfoFallbackTotal"]:
+        # if the loaded config has the fallback total set to True
+            self.shaaFallbackTotalCheck.setChecked(True)
+            # ticks the box automatically
 
         self.topLeftGrid.addWidget(self.shaaFallbackTotalCheck, 9, 0, 1, 1)
 
@@ -297,7 +324,10 @@ class Ui_SHAAWindow(object):
 
         self.songInfoFormatDetailsOrderCheck = QCheckBox(self.gridLayoutWidget)
         self.songInfoFormatDetailsOrderCheck.setObjectName(u"songInfoFormatDetailsOrderCheck")
-        self.songInfoFormatDetailsOrderCheck.setChecked(True)
+        if self.loadedConfig["songInfoDetailsTextFirst"]:
+        # if the config option is enabled
+            self.songInfoFormatDetailsOrderCheck.setChecked(True)
+            # ticks the box automatically
 
         self.topRightGrid.addWidget(self.songInfoFormatDetailsOrderCheck, 1, 0, 1, 1)
 
@@ -308,6 +338,10 @@ class Ui_SHAAWindow(object):
 
         self.doubleSpaceCheck = QCheckBox(self.gridLayoutWidget)
         self.doubleSpaceCheck.setObjectName(u"checkBox")
+        if self.loadedConfig["songInfoDetailsDoubleSpace"]:
+        # if the config option is enabled
+            self.doubleSpaceCheck.setChecked(True)
+            # ticks the box automatically
 
         self.topRightGrid.addWidget(self.doubleSpaceCheck, 12, 0, 1, 1)
 
@@ -376,6 +410,10 @@ class Ui_SHAAWindow(object):
         self.bottomRightGrid.setContentsMargins(10, 10, 10, 10)
         self.dsiShoutoutCheck = QCheckBox(self.gridLayoutWidget)
         self.dsiShoutoutCheck.setObjectName(u"dsiShoutoutCheck")
+        if self.loadedConfig["dsiShoutout"]:
+        # if the config option is enabled
+            self.dsiShoutoutCheck.setChecked(True)
+            # ticks the box automatically
 
         self.bottomRightGrid.addWidget(self.dsiShoutoutCheck, 1, 0, 1, 1)
 
@@ -407,36 +445,44 @@ class Ui_SHAAWindow(object):
     # setupUi
 
     def retranslateUi(self, SHAAWindow):
-        SHAAWindow.setWindowTitle(QCoreApplication.translate("SHAAWindow", u"SHAAWindow", None))
-        self.closeAndSaveButton.setText(QCoreApplication.translate("SHAAWindow", u"Close SHAA Configurator\n"
-            "(Please press this to save the configuration)", None))
+        """Function to 'translate' the strings, I suppose (auto-generated by Qt Creator)"""
+        SHAAWindow.setWindowTitle(QCoreApplication.translate("SHAA Configuration", u"SHAA Configuration", None))
+        # the title of the whole window
+
+        self.closeAndSaveButton.setText(QCoreApplication.translate("SHAAWindow", u"\n""Close SHAA Configurator\n"
+            "(Please press this to save the configuration)\n", None))
         self.songInfoFormatPlaysTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Ex. '2,345 plays' or '2,345 listens' or '2,345 repetitions' or '234,567 total plays'...", None))
         self.songInfoFormatMinsHeader.setText(QCoreApplication.translate("SHAAWindow", u"The text to display after the number in the first field", None))
-        self.songInfoSpacerText.setText(QCoreApplication.translate("SHAAWindow", u"\u203b", None))
+        self.songInfoSpacerText.setText(QCoreApplication.translate("SHAAWindow", f"{self.loadedConfig["songInfoFormatSpacer"]}", None))
         self.songInfoFormatMinsTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Ex. '6,789 minutes' or '678,910 total minutes'...", None))
-        self.songInfoFormatMinsText.setText(QCoreApplication.translate("SHAAWindow", u"minutes", None))
+        self.songInfoFormatMinsText.setText(QCoreApplication.translate("SHAAWindow", f"{self.loadedConfig["songInfoFormatMins"]}", None))
         self.songInfoSpacerHeader.setText(QCoreApplication.translate("SHAAWindow", u"The spacer to place between the first and second field", None))
         self.songInfoFormatPlaysHeader.setText(QCoreApplication.translate("SHAAWindow", u"The text to display after the number in the first field", None))
         self.songInfoSpacerTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Ex. '2,345 plays \u203b 6,789 minutes' or '2,345 plays x 6,789 minutes'...", None))
-        self.songInfoFormatPlaysText.setText(QCoreApplication.translate("SHAAWindow", u"plays", None))
+        self.songInfoFormatPlaysText.setText(QCoreApplication.translate("SHAAWindow", f"{self.loadedConfig["songInfoFormatPlays"]}", None))
         self.shaaInfoDetailsHeader.setText(QCoreApplication.translate("SHAAWindow", u"The type of data to display in the details field", None))
         self.shaaFallbackTooltip.setText(QCoreApplication.translate("SHAAWindow", u"If the Total checkbox is checked, uses total counts/times\n"
             "A custom string can be entered instead, if preferred, in the text field", None))
         self.songInfoField1Header.setText(QCoreApplication.translate("SHAAWindow", u"The type of data to display in the first field (playcount)", None))
         self.songInfoField1Tooltip.setText(QCoreApplication.translate("SHAAWindow", u"<html><head/><body><p>Track displays per-track data (ex. 2,345 plays)<br>Total displays total account data (ex. 234,567 plays)</p></body></html>", None))
         self.shaaFallbackHeader.setText(QCoreApplication.translate("SHAAWindow", u"The type of data to fallback on, if the current song isn't found in the CSV", None))
-        self.shaaInfoDetailsDropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", u"Hours", None))
-        self.shaaInfoDetailsDropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", u"Minutes", None))
-        self.shaaInfoDetailsDropdown.setItemText(2, QCoreApplication.translate("SHAAWindow", u"Seconds", None))
-        self.shaaInfoDetailsDropdown.setItemText(3, QCoreApplication.translate("SHAAWindow", u"Cycle", None))
-        self.shaaInfoDetailsDropdown.setItemText(4, QCoreApplication.translate("SHAAWindow", u"Volume", None))
-        self.shaaInfoDetailsDropdown.setItemText(5, QCoreApplication.translate("SHAAWindow", u"Repeat", None))
-        self.shaaInfoDetailsDropdown.setItemText(6, QCoreApplication.translate("SHAAWindow", u"Shuffle", None))
-        self.shaaInfoDetailsDropdown.setItemText(7, QCoreApplication.translate("SHAAWindow", u"Custom", None))
+        self.shaaInfoDetailsDropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", f"{self.loadedDetailOption}", None))
+        # uses the loaded config option
+        self.shaaInfoDetailsDropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[0]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(2, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[1]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(3, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[2]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(4, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[3]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(5, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[4]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(6, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[5]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(7, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[6]}", None))
+        # uses the list remainders
 
         self.shaaFallbackTotalCheck.setText(QCoreApplication.translate("SHAAWindow", u"Total", None))
-        self.songInfoField1Dropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", u"Track", None))
-        self.songInfoField1Dropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", u"Total", None))
+
+        self.songInfoField1Dropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", f"{self.loadedField1Option}", None))
+        # uses the loaded config option for the field1
+        self.songInfoField1Dropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField1Options[0]}", None))
+        # uses the only other option left
 
         self.songInfoField2Header.setText(QCoreApplication.translate("SHAAWindow", u"The type of data to display in the second field (playtime)", None))
         self.shaaInfoDetailsTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Hours takes the total account hours\n"
@@ -449,22 +495,25 @@ class Ui_SHAAWindow(object):
             "Custom enables the custom text below", None))
         self.songInfoField2Tooltip.setText(QCoreApplication.translate("SHAAWindow", u"Track displays per-track data (ex. 6,789 minutes)\n"
             "Total displays total account data (ex. 678,910 minutes)", None))
-        self.songInfoField2Dropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", u"Track (Minutes)", None))
-        self.songInfoField2Dropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", u"Total (Minutes)", None))
-        self.songInfoField2Dropdown.setItemText(2, QCoreApplication.translate("SHAAWindow", u"Track (Hours)", None))
-        self.songInfoField2Dropdown.setItemText(3, QCoreApplication.translate("SHAAWindow", u"Total (Hours)", None))
-        self.songInfoField2Dropdown.setItemText(4, QCoreApplication.translate("SHAAWindow", u"Track (Seconds)", None))
-        self.songInfoField2Dropdown.setItemText(5, QCoreApplication.translate("SHAAWindow", u"Total (Seconds)", None))
+        
+        self.songInfoField2Dropdown.setItemText(0, QCoreApplication.translate("SHAAWindow", f"{self.poppedField2}", None))
+        # uses the popped field as the first one
+        self.songInfoField2Dropdown.setItemText(1, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField2Options[0]}", None))
+        self.songInfoField2Dropdown.setItemText(2, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField2Options[1]}", None))
+        self.songInfoField2Dropdown.setItemText(3, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField2Options[2]}", None))
+        self.songInfoField2Dropdown.setItemText(4, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField2Options[3]}", None))
+        self.songInfoField2Dropdown.setItemText(5, QCoreApplication.translate("SHAAWindow", f"{self.songInfoField2Options[4]}", None))
+        # uses the option list indices
 
         self.label.setText(QCoreApplication.translate("SHAAWindow", u"Whether to add a space on either side of the spacer in the details field", None))
-        self.songInfoFormatSpacerText.setText(QCoreApplication.translate("SHAAWindow", u":", None))
+        self.songInfoFormatSpacerText.setText(QCoreApplication.translate("SHAAWindow", f"{self.loadedConfig["songInfoDetailsSpacer"]}", None))
         self.songInfoFormatDetailsOrderCheck.setText(QCoreApplication.translate("SHAAWindow", u"Text First", None))
         self.songInfoFormatSpacerHeader.setText(QCoreApplication.translate("SHAAWindow", u"The spacer to use between the number and text in the details field", None))
         self.doubleSpaceCheck.setText(QCoreApplication.translate("SHAAWindow", u"Add both spaces", None))
         self.songInfoFormatSpacerTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Ex. 'Total Hours: 11,123' or 'Total Hours - 11,123' or 'Total Hours = 11,123'...", None))
         self.songInfoFormatDetailsHeader.setText(QCoreApplication.translate("SHAAWindow", u"The text to display before or after the number in the details field", None))
         self.songInfoFormatDetailsOrderHeader.setText(QCoreApplication.translate("SHAAWindow", u"Whether to place the text before the number in the details field", None))
-        self.songInfoFormatDetailsText.setText(QCoreApplication.translate("SHAAWindow", u"Total Hours", None))
+        self.songInfoFormatDetailsText.setText(QCoreApplication.translate("SHAAWindow", f"{self.loadedConfig["songInfoDetailsText"]}", None))
         self.songInfoFormatDetailsTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Ex. 'Total Hours: 11,123 ' or 'Hours: 11,123' or 'Hours listened; 11,123'... (text first)\n"
             "Ex. '11,123 Total Hours' or '11,123 hours' or '11,123 hours listened'... (number first)", None))
         self.label_2.setText(QCoreApplication.translate("SHAAWindow", u"Ex. 'Total Hours: 11,123' or 'Total Hours : 11,123'...", None))
@@ -484,7 +533,7 @@ class Ui_SHAAWindow(object):
             "songInfoDetails": self.shaaInfoDetailsDropdown.currentText(),
             "songInfoDetailsText": self.shaaInfoDetailsCustomText.text(),
             "songInfoFormatPlays": self.songInfoFormatPlaysText.text(),
-            "songInfoFormatSpacer": self.songInfoFormatSpacerText.text(),
+            "songInfoFormatSpacer": self.songInfoSpacerText.text(),
             "songInfoFormatMins": self.songInfoFormatMinsText.text(),
             "songInfoDetailsTextFirst": self.songInfoFormatDetailsOrderCheck.isChecked(),
             "songInfoDetailsText": self.songInfoFormatDetailsText.text(),
