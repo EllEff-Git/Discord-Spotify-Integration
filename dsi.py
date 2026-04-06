@@ -1193,12 +1193,12 @@ def song(pictureQueue):
                         playtimeTotal = int(playtime / 1000)
                         # saves the total as the playtime of the song
 
-                    if songInfoField2 == 2:
+                    if songInfoField2 == 0:
                     # track minutes
                         playtimeTotal / 60
                         # divides the seconds into minutes
                     
-                    elif songInfoField2 == 4:
+                    elif songInfoField2 == 2:
                     # track hours
                         playtimeTotal / 3600
                         # divides the seconds into hours
