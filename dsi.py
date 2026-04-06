@@ -9,15 +9,15 @@ import spotipy, requests, json
 from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
 from spotipy.exceptions import SpotifyException
-# Required to check for token exceptions (errors)
+# Required to check for exceptions (errors)
 
 
 
 ### Setup Section ###
 
 
-DSIver = "v0.3.25.0721"
-"""The program version (y.m.dd.hhmm)"""
+DSIver = "v0.4.6.1701"
+"""The program version (Y.M.DD.HHMM)"""
 
 
 if getattr(sys, "frozen", False):
@@ -28,15 +28,6 @@ else:
     # if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
     """The base directory of the program, where DSI.exe resides"""
-
-
-Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
-"""The config.ini reading variable"""
-ConfigPath = os.path.join(directory, "config.ini")
-"""The directory where the config sits in"""
-Config.read(ConfigPath, "utf8")
-# Where the config is read from with UTF-8 format
-
 
 
 spCache = os.path.join(directory, "Data", "spotifycache.json")
@@ -61,11 +52,23 @@ cppPath = os.path.join(directory, "Discord", cppExe)
 """The full path to the C++ exe"""
 cppDir = os.path.dirname(cppPath) 
 """The directory the C++ Exe lives in"""
-
+dsiConfigPath = os.path.join(directory, "Data", "config.json")
+"""The DSI configuration json file"""
+dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "ui_form.exe")
+"""The DSI configurator program/window"""
+shaaConfigPath = os.path.join(directory, "Data", "shaaConfig.json")
+"""The SHAA x DSI configuration json file"""
 
 
 ### Config Section ###
 
+
+Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
+"""The config.ini reading variable"""
+ConfigPath = os.path.join(directory, "config.ini")
+"""The directory where the config sits in"""
+Config.read(ConfigPath, "utf8")
+# Where the config is read from with UTF-8 format
 
 
 # [Required]
@@ -78,35 +81,91 @@ sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
 dc_app_ID = Config.get("Required", "Discord_Application_ID")
 """Discord Application ID, string"""
 
+if not sp_client_ID or not sp_client_secret or not sp_redirect or not dc_app_ID:
+# checks all 4 required fields
+    print("Required field(s) empty, please check your config.ini file and restart")
+    # user inform
+    time.sleep(600)
+    # waits 10 minutes
+    raise SystemExit
+    # closes
+
+skipConfigWindow = Config.getboolean("Function", "Skip_Config_Window", fallback=False)
+"""Whether to skip the configuration window or not"""
+
+
+### UI Class -> Config ###
+
+
+if not skipConfigWindow and os.path.exists(dsiConfigPath):
+# if the config option isn't enabled to skip the config window and the json config is valid
+# basically just doesn't let skip if the json config isn't valid
+    dsiConfig = subprocess.run([dsiConfigWindow], check=True)
+    # runs the dsi configurator (as blocking), continues task once it's done writing config
+    if not dsiConfig.returncode == 1:
+    # checks if the return code isn't 1 (0 is bad, 1 is good)
+        print(f"DSI config window returned with code: {dsiConfig.returncode} (this is not ideal)")
+        # prints the return code
+
+try:
+# tries to open the json file
+    with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+    # opens the config file in read mode
+        jsonConfig = json.load(jsCfg)
+        # stores the loaded json file as jsonConfig
+except Exception as err:
+# if there's an error
+    print(f"Error reading the json config file: {err}")
+    # user inform
+
+if os.path.exists(shaaConfigPath):
+# if the shaa configuration file does exist
+    try:
+    # tries to read the SHAA config file (try because it's not necessary, can be skipped)
+        with open(shaaConfigPath, "r", encoding="utf-8") as shaaCfg:
+        # opens the SHAA config
+            shaaConfig = json.load(shaaCfg)
+            # stores the loaded 
+            disableShaa = False
+    except:
+    # if the file can't be found/opened
+        disableShaa = True
+        # disables SHAA-related functions
+else:
+# if the file doesn't exist
+    disableShaa = True
+    # disables SHAA-related functions
+
 
 # [Function]
-refreshTime = Config.getfloat("Function", "time_Between_Refresh")
+refreshTime = jsonConfig["refreshTime"]
 """Program update cycle interval time, float"""
-if refreshTime < 2:
-    # if the refresh time is set too low, overrides to safe minimum of 2s
-    refreshTime = 2
 
-enablePause = Config.getboolean("Function", "enable_Pause_Behavior")
+if refreshTime < 2:
+# if the refresh time is set too low
+    refreshTime = 2
+    # overrides to safe minimum of 2s  
+
+enablePause = jsonConfig["enablePause"]
 """The "paused on" text enabler, boolean"""
-pauseStateText = Config.get("Function", "pause_Behavior_Text")
+pauseStateText = jsonConfig["pauseText"]
 """The string used for paused status, string"""
-enableUpdates = Config.getboolean("Function", "print_Updates")
+enableUpdates = jsonConfig["printUpdates"]
 """Whether to print updates, boolean"""
-enableErrors = Config.getboolean("Function", "print_Errors")
+enableErrors = jsonConfig["printErrors"]
 """Whether to print errors, boolean"""
-enableMapping = Config.getboolean("Function", "enable_URI_Mapping")
+enableMapping = jsonConfig["enableURI"]
 """Whether to enable the URI mapping functionality, boolean"""
-timestampStyle = Config.get("Function", "timestamp_Style").lower()
-"""The timestamp format for system prints, string (Clock, Uptime, Off)"""
+timestampStyle = jsonConfig["clockStyle"]
+"""The timestamp format for system prints, string (System Time, Uptime, Off)"""
 
 startTime = int(datetime.datetime.now().timestamp())
 """The program start time in UNIX"""
 
 
-
 def Time():
-    """Function that returns the current time, formatted"""
-    if timestampStyle == "uptime":
+    """Function that returns the console time, formatted"""
+    if timestampStyle == "System Time":
         # if the config option is set to uptime
         currentTime = int(datetime.datetime.now().timestamp())
         # takes the current time when Time() is called
@@ -121,7 +180,7 @@ def Time():
         return (uptimeStr + " ")
         # shortens the call to system uptime, adds empty space
 
-    elif timestampStyle == "clock":
+    elif timestampStyle == "Clock":
         # if the config option is set to clock
         return (datetime.datetime.now().strftime("%H:%M:%S") + " ")
          # shortens the call to current system timestamp, adds empty space
@@ -131,136 +190,169 @@ def Time():
         return ""
         
    
-
 print(f"{Time()}[START]: Starting DSI {DSIver}\n")
 # quick user update on status
 
 
 # [URL]
-smallURL = Config.get("URL", "small_URL")
+smallURL = jsonConfig["smallPicURL"]
 """The small picture URL, string"""
-spotifyURL = Config.get("URL", "spotify_URL")
+if not smallURL:
+# if the smallURL is empty
+    smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
+    # shameless plug <3 (only applies if there's no defined URL)
+spotifyURL = jsonConfig["spotifyURLType"]
 """The type of large image URL to use, string of: (Track, Artist, Album, Playlist)"""
 
 
 # [Song-Style]
-songNameSpacerL = Config.get("Song-Style", "song_Spacer_Left")
+songNameSpacerL = jsonConfig["spacerL"]
 """Spacer between 1st and 2nd field, string"""
-songNameSpacerR = Config.get("Song-Style", "song_Spacer_Right")
+songNameSpacerR = jsonConfig["spacerR"]
 """Spacer between 2nd and 3rd field, string"""
 
 
 # [Song-Format]
-preText = Config.get("Song-Format", "pre_Text")
+preText = jsonConfig["preText"]
 """Optional text before the first field, string"""
-postText = Config.get("Song-Format", "post_Text")
+postText = jsonConfig["postText"]
 """Optional text after the last field, string"""
-enableSong = Config.getboolean("Song-Format", "enable_Song")
+enableSong = jsonConfig["enableSong"]
 """Song's state, boolean"""
-enableArtist = Config.getboolean("Song-Format", "enable_Artist")
+enableArtist = jsonConfig["enableArtist"]
 """Artist's state, boolean"""
-enableAlbum = Config.getboolean("Song-Format", "enable_Album")
+enableAlbum = jsonConfig["enableAlbum"]
 """Album's state, boolean"""
-albumFallbackTemp = Config.get("Song-Format", "album_Fallback_Text")
-if albumFallbackTemp:
-    # ensures there's content inside the string before operating on it
-    albumFallback = albumFallbackTemp.replace('"', "")
-    """The text to fall back to in case the album gets dropped, string"""
+albumFallback = jsonConfig["albumFallback"]
+"""The text to fall back to in case the album gets dropped, string"""
+
 
 # [Pictures]
-picCycleList = Config.get("Pictures", "pictures_To_Cycle")
+picCycleList = jsonConfig["pictureCycleType"]
 """Pictures for large image, option (File, Spotify)"""
 
-if picCycleList == "File" or picCycleList == "file":
-    # checks if the config option is set to "File"
+if picCycleList == "File":
+# checks if the config option is set to "File"
     picCycleList = []
     # empties the variable 
     with open(picDir, "r", encoding="utf-8") as file:
     # opens the pictureList.txt file
         for pics in file:
         # for every picture (line) in the file
-
             pic = pics.strip()
             # stores one line
-            
             if pic.startswith("#") or not pic:
-                # if the line starts with # (meaning it's a comment line) or it's empty
+            # if the line starts with # (meaning it's a comment line) or it's empty
                 continue
                 # skips that line and goes to next one
-            
             picCycleList.append(pic)
             # adds the picture to the list
 
     if enableUpdates:
-        # if the update config option is enabled
+    # if the update config option is enabled
         print(f"{Time()}[PICT]: Picture list loaded from file\n")
-
 else:
-    # if the list is on Spotify (or empty), doesn't modify it
+# if the list is on Spotify (or empty), doesn't modify it
     None
 
 
-picCycleTime = Config.get("Pictures", "picture_Cycle_Time")
+picCycleTime = jsonConfig["pictureCycleTime"]
 """Time to wait between picture cycling, int/string (minutes/Song)"""
 
 try:
-    # tries to turn the time into minutes (integer and multiplies by 60)
+# tries to turn the time into minutes (ensures integer type, multiplies by 60)
     picCycleTime = (int(picCycleTime) * 60)
 except:
-    # if it can't, leaves it alone (should be the case when it's set to "Song")
+# if it can't, leaves it alone (should be the case when it's set to "Song")
     None
 
-picCycleType = Config.get("Pictures", "picture_Cycle_Behavior").lower()
+picCycleType = jsonConfig["pictureCycleBehavior"]
 """Type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
-smallPic = Config.get("Pictures", "small_Picture_Name").replace('"', '')
+smallPic = jsonConfig["smallPic"]
 """Name/URL of small picture, string"""
-hoverText = Config.get("Pictures", "text_On_Small_Hover")
+hoverText = jsonConfig["smallPicHover"]
 """Text to show on small picture hover, string"""
 
+if not disableShaa:
+# if the SHAA-related stuff isn't disabled
 
-# [SHAA-Song-Function]
-songInfoField1 = Config.get("SHAA-Song-Function", "song_Info_First_Field")
-"""First state field type, string (Track, Total)"""
-songInfoField2 = Config.get("SHAA-Song-Function", "song_Info_Second_Field")
-"""Second state field type, string (Track, Total)"""
-shaaFallback = Config.get("SHAA-Song-Function", "song_Info_Fallback")
-"""Fallback type for both state fields, string (Total, custom)"""
-shaaInfoDetails = Config.get("SHAA-Song-Function", "song_Info_Detail_Field")
-"""Details field type, string (Hours, Minutes, Seconds, Volume, Repeat, Shuffle, Cycle, custom)"""
+    songInfoField1 = shaaConfig["songInfoField1"]
+    """First state field type, string (Track, Total)"""
+    songInfoField2 = shaaConfig["songInfoField2"]
+    """Second state field type, int"""
+    # 0-1 is minutes (track first), 2-3 is hours, 4-5 is seconds
+    shaaFallbackTotal = shaaConfig["songInfoFallback"]
+    """Whether to fall back to total numbers, boolean"""
+    if shaaFallbackTotal:
+    # if the fallback total usage is enabled
+        shaaFallback = "Total"
+        # sets the string to "Total"
+    else:
+        shaaFallback = shaaConfig["songInfoFallbackText"]
+        # gets the custom string from the shaa config
 
+    shaaInfoDetails = shaaConfig["songInfoDetails"]
+    """Details field type, string (Hours, Minutes, Seconds, Volume, Repeat, Shuffle, Cycle, custom)"""
+    if shaaInfoDetails == "Custom":
+    # if the details field is set to custom
+        shaaInfoDetails = shaaConfig["songInfoDetailsText"]
+        # uses the custom string from the config
+        songInfoFallback = ""
+        # uses empty string (custom string defined above)
+    else:
+    # if the field isn't custom, uses "total" as an additional string
+        songInfoFallback = "total"
+        """Fallback text for missing song data for both state fields, string"""
 
-# [SHAA-State-Format]
-songInfoFormatPlays = Config.get("SHAA-State-Format", "song_Info_Format_First_Field")
-"""Text format of the first field, string"""
-songInfoSpacer = Config.get("SHAA-State-Format", "song_Info_Spacer")
-"""Spacer to place between first and second field, string"""
-songInfoFormatMins = Config.get("SHAA-State-Format", "song_Info_Format_Second_Field")
-"""Text format of the second field, string"""
-songInfoFallback = Config.get("SHAA-State-Format", "song_Info_Fallback_Format")
-"""Fallback text for missing song data for both state fields, string"""
+    songInfoFormatPlays = shaaConfig["songInfoFormatPlays"]
+    """Text format of the first field, string"""
+    songInfoSpacer = shaaConfig["songInfoFormatSpacer"]
+    """Spacer to place between first and second field, string"""
+    songInfoFormatMins = shaaConfig["songInfoFormatMins"]
+    """Text format of the second field, string"""
 
-songInfoFormatDetails = Config.get("SHAA-Details-Format", "song_Info_Format_Details")
-"""Text format of the details field, string"""
-songInfoFormatDetailsSpacer = Config.get("SHAA-Details-Format", "song_Info_Format_Details_Spacer")
-"""Spacer to place between details field data and string, string"""
-songInfoDetailsDoubleSpace = Config.getboolean("SHAA-Details-Format", "song_Info_Double_Space")
-"""Whether to add space on either side of the spacer, boolean"""
-dsiShoutout = Config.getboolean("SHAA-Details-Format", "dsi_Shoutout")
-"""Whether to add a shoutout to DSI at the end of the details section, boolean"""
+    songInfoFormatTextFirst = shaaConfig["songInfoDetailsTextFirst"]
+    """The order the number and text fall to (boolean, True = text first)"""
+    songInfoFormatDetails = shaaConfig["songInfoDetailsText"]
+    """Text format of the details field, string"""
+    songInfoFormatDetailsSpacer = shaaConfig["songInfoDetailsSpacer"]
+    """Spacer to place between details field data and string, string"""
+    songInfoDetailsDoubleSpace = shaaConfig["songInfoDetailsDoubleSpace"]
+    """Whether to add space on either side of the spacer, boolean"""
+    dsiShoutout = shaaConfig["dsiShoutout"]
+    """Whether to add a shoutout to DSI at the end of the details section, boolean"""
+
+else:
+# if the disableShaa is set to True
+    songInfoField1 = "Track"
+    songInfoField2 = 0
+    shaaFallback = "Total"
+    shaaInfoDetails = "Hours"
+    songInfoFormatPlays = "plays"
+    songInfoSpacer = "※"
+    songInfoFormatMins = "minutes"
+    songInfoFallback = "total"
+    songInfoFormatTextFirst = True
+    songInfoFormatDetails = "Total Hours"
+    songInfoFormatDetailsSpacer = ":"
+    songInfoDetailsDoubleSpace = False
+    dsiShoutout = False
+    # uses "default" options (most of these shouldn't get accessed if SHAA isn't enabled anyway, but some do)
 
 
 print(f"{Time()}[CFG]: Configuration loaded\n")
-# another quick user update
+# user inform
 
 
 if not enableUpdates:
     # if console printing is disabled in config
     print(f"{Time()}[CFG]: Console updates disabled in config (print_Updates)\n")
-    # prints a quick warning
+    # prints a warning
 
 if not enableErrors:
     # if error printing is disabled in config
     print(f"{Time()}[CFG]: Error printing disabled in config (print_Errors)\n")
+    # prints a warning
 
 
 
@@ -344,7 +436,7 @@ dsiShoutoutStr = "// Data by DSI"
 
 def idWriter():
     """Function for writing the ids.txt file"""
-
+    # these are things the C++ program uses "statically" (they can't change during operation)
     with open(idDir, "w", encoding="utf-8") as txt:
     # opens the ids text file
         content = ("Discord Application ID = " + dc_app_ID + "\n" 
@@ -352,6 +444,7 @@ def idWriter():
                    + "Album Fallback = " + albumFallback)
         # makes a string from the relevant config options
         txt.write(content)
+        # writes the config to file
         if enableUpdates:
             print(f"{Time()}[START]: ID file written\n")
         # writes the string to ids.txt at program launch
@@ -363,18 +456,19 @@ def idWriter():
 def timeGrabber():
     """Function that grabs the total time counts from totalTimes.txt file"""
     if os.path.isfile(timeDir):
-        # checks if the totalTimes.txt file exists
+    # checks if the totalTimes.txt file exists
         with open(timeDir, "r") as times:
-            # if yes, opens the file
+        # if yes, opens the file
             global totalHours, totalMinutes, totalSeconds
             # grabs total time variables from global
             totalTimes = times.readlines()
             # stores the total times from the file
             counter = 0
+            # keeps a counter to check line number
             for line in totalTimes:
-                # checks all lines in the file
+            # checks all lines in the file
                 if "=" in line:
-                    # if "=" is present in the line
+                # if "=" is present in the line
                     x, number = line.split("= ", 1)
                     # strips and splits the line, stores both sides
                     if counter == 0:
@@ -387,6 +481,7 @@ def timeGrabber():
                     counter += 1
                     # adds 1 to move to next variable next cycle
             try:
+            # tries to convert the strings to floats
                 totalHours = float(totalHours)
                 totalMinutes = float(totalMinutes)
                 totalSeconds = float(totalSeconds)
@@ -400,14 +495,12 @@ def timeGrabber():
                     # prints the total times at start
 
             except:
-                # if the float conversion fails for some reason
+            # if the float conversion fails for some reason
                 print(f"{Time()}[SHAA]: Error reading the total time file - total times not set")
-
         times.close()
         # closes the file
-
     else:
-        # if the file for SHA doesn't exist
+    # if the file for SHA doesn't exist
         None
         # there's already a print informing about non-SHAA installation later
 
@@ -421,10 +514,10 @@ def authPlayback():
     """Function to more "safely" handle Spotify API requests and errors"""
     
     global main
-    # takes the global variable and makes it local
+    # takes the global variable for the OAuth
 
     with spotifyLock:
-        # uses a threading lock, to prevent multiple requests at once
+        # uses a threading lock, to prevent multiple requests at once (shouldn't really happen, but prevents double-access bugs)
 
         tokenRefresh = False
         # a boolean to determine whether to print the token refresh or reconnect text
@@ -466,9 +559,10 @@ def authPlayback():
                     if isinstance(error, requests.exceptions.ConnectionError):
                         # if the error is a connection error (token expired)
                         print(f"{Time()}[INFO]: Refreshing Spotify token")
-                        # doesn't sleep because this is a token error and should get fixed nearly instantly
+                        # doesn't sleep because this is a token error and should get "fixed" nearly instantly
                         # expected to print just about every 3600 seconds (1h)
                         tokenRefresh = True
+                        # sets the tokenRefresh flag to true so the next print is more relevant (purely QoL)
 
                     elif isinstance(error, requests.exceptions.ReadTimeout):
                         # if the error is a read timeout (sort of random)
@@ -508,8 +602,8 @@ def authPlayback():
 ### SHA(A) Check ### 
 
 
-if os.path.isfile(SHAAdir):
-    # if the grouped.csv file exists
+if os.path.isfile(SHAAdir) and not disableShaa:
+# if the grouped.csv file exists and SHAA-functionality isn't disabled
     print(f"{Time()}[SHAA]: Spotify Analyser functionality enabled\n")
     # informs user SHAA is enabled
     csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
@@ -523,25 +617,31 @@ if os.path.isfile(SHAAdir):
             # loads the JSON file of URIs
             uriList = json.load(URIs)
             # stores the loaded file as uriList
-            if enableUpdates:
+            if enableUpdates and enableMapping:
+            # if the user prints and mapping options are enabled
                 uriLength = len(uriList)
+                # stores the length of the unmapped URI list
                 print(f"{Time()}[SHAA]: {uriLength} URIs stored")
+                # debug-ish list (if using the URI mapper)
     else:
-        # if file doesn't exist
+    # if file doesn't exist
         uriList = []
         # creates a new, empty list
 
     if os.path.exists(uriDir):
-        # checks if the URI map file (uriMap.json) exists
+    # checks if the URI map file (uriMap.json) exists
         with open(uriDir) as maps:
-            # loads the URI map file
+        # loads the URI map file
             uriMap = json.load(maps)
             # stores the loaded file as uriMap
-            if enableUpdates:
+            if enableUpdates and enableMapping:
+            # if the user prints and mapping options are enabled
                 uriMLength = len(uriMap)
+                # stores the length of the mapped URIs
                 print(f"{Time()}[SHAA]: {uriMLength} URIs mapped")
+                # user inform
     else:
-        # if the file doesn't exist
+    # if the file doesn't exist
         uriMap = {}
         # creates a new, empty list
 
@@ -552,7 +652,7 @@ if os.path.isfile(SHAAdir):
 
 class Background(threading.Thread):
     """Background thread for picture selection"""
-# a class to use background tasking, this way the pictures can cycle outside the main song loop
+    # a class to use background tasking, this way the pictures can cycle outside the main song loop
     def __init__(self, picCycleList, picCycleType, picCycleTime, pictureQueue):
         super().__init__()
 
@@ -625,8 +725,6 @@ class Background(threading.Thread):
                     else:
                         time.sleep(10)
                         # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
-
-
 
                 if self.picCycleType == "sequence":
                     # if the selected method is "Sequence"
@@ -702,11 +800,13 @@ class Background(threading.Thread):
 
 
 def runCpp():
-    """Function to start the C++ .exe"""
+    """Function to run the C++ / Discord RPC program"""
     with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as cppPrint:
-        # opens the C++ exe, passes a directory and takes output from it
+    # opens the C++ exe, passes the current working directory and takes its output
         if enableUpdates:
+        # if user prints are enabled
             for lineRaw in cppPrint.stdout:
+            # gets every output line
                 line = lineRaw.strip()
                 # ensures there's no empty prints
                 if line:
@@ -890,25 +990,19 @@ def song(pictureQueue):
             csURL = "https://elleffnotelf.com"
 
 
-
-
-        ### Field Selection and String Merging ###
-
-
-
         ### SHAAless Behavior ###
 
 
-        if not os.path.isfile(SHAAdir):
+        if not os.path.isfile(SHAAdir) or disableShaa:
             # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
 
             ### Field 1 / Field 2 ###
 
-            songStuffList.append(songInfoField1)
+            songStuffList.append(songInfoFallback)
             # adds the user-defined first field to list
             songStuffList.append(songInfoSpacer)
             # adds the spacer to list
-            songStuffList.append(songInfoField2)
+            songStuffList.append(songInfoFallback)
             # adds the user-defined second field to list
                 
             ### Details / Field 3 ###
@@ -931,7 +1025,7 @@ def song(pictureQueue):
             if shaaInfoDetails in detailOptions:
                 # if the config option matches one of the set defaults
 
-                if shaaInfoDetails == "Volume" or shaaInfoDetails == "volume":
+                if shaaInfoDetails == "Volume":
                     # if the config calls for volume
                     try:
                         shaaDetailField = f"{csDevice.get("volume_percent")}%"
@@ -940,7 +1034,7 @@ def song(pictureQueue):
                         shaaDetailField = "some volume"
                         # if it fails, puts a fallback string
                     
-                if shaaInfoDetails == "Repeat" or shaaInfoDetails == "repeat":
+                if shaaInfoDetails == "Repeat":
                     # if the config calls for repeat state
                     try:
                         repeatState = csFull.get("repeat_state")
@@ -956,7 +1050,7 @@ def song(pictureQueue):
                         shaaDetailField = "may be on Repeat"
                          # if it fails, puts a fallback string
 
-                if shaaInfoDetails == "Shuffle" or shaaInfoDetails == "shuffle":
+                if shaaInfoDetails == "Shuffle":
                     # if the config calls for shuffle state
                     try:
                         shuffleState = csFull.get("shuffle_state")
@@ -988,10 +1082,10 @@ def song(pictureQueue):
         ### SHAA Behavior ###
 
 
-        if os.path.isfile(SHAAdir):
-            # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
-            # this data is only entered to rich presence if used with SHA (and installed correctly)
-            # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
+        if os.path.isfile(SHAAdir) and not disableShaa:
+        # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
+        # this data is only entered to rich presence if used with SHA (and installed correctly)
+        # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
             
             ### URI Checkpoint ###
 
@@ -999,25 +1093,25 @@ def song(pictureQueue):
             # creates a new variable with the current song's URI
 
             if enableMapping:
-                # if URI mapping is enabled
+            # if URI mapping is enabled
                 
                 altURI = uriMap.get(csURI)
                 # creates an alteranate variable from the JSON map by checking with the current URI
 
                 if finalURI in csvReader.index:
-                    # checks if the URI is on the CSV (this check is just to prevent double prints)
+                # checks if the URI is on the CSV (this check is just to prevent double prints)
                     if enableUpdates:
                         print(f"{Time()}[SHAA]: Current song found in CSV")
 
                 if finalURI not in uriList:
-                    # if the URI is not in the URI list yet
+                # if the URI is not in the URI list yet
                     if enableUpdates:
                         print(f"{Time()}[SHAA]: URI not found in list, added to URI list")
                     uriList.append(finalURI)
                     # adds it to the list of URIs
 
                 if finalURI not in csvReader.index and altURI in csvReader.index:
-                    # if the URI is not found in the CSV index, but the alt URI is
+                # if the URI is not found in the CSV index, but the alt URI is
                     finalURI = altURI
                     # sets the URI to use the alternate instead
                     if enableUpdates:
@@ -1030,12 +1124,12 @@ def song(pictureQueue):
                         # pushes the data from uriList to the JSON file
 
                     with open(noURIdir, "r", encoding="utf-8") as URIs:
-                        # loads the uri mapping file
+                    # loads the uri mapping file
                         uriList = json.load(URIs)
                         # stores the loaded file as uriList again, now with the new entry
 
             if finalURI in csvReader.index:
-                # checks if the URI is on the CSV  
+            # checks if the URI is on the CSV  
 
                 ### Plays / Field 1 ###
 
@@ -1043,16 +1137,16 @@ def song(pictureQueue):
                 playtime = csvReader.loc[finalURI, "Total Time"]
                 # sets temp variables that lookup the cells based on the track and columns
 
-                if songInfoField1 == "Track" or songInfoField1 == "track":
-                    # if the selected type for first field is Track
+                if songInfoField1 == "Track":
+                # if the selected type for first field is Track
 
                     if isinstance(playcount, pd.Series):
-                        # if there's more than one instance of the current song
+                    # if there's more than one instance of the current song
                         playcountTotal = playcount.sum()
                         # saves the playcount total based on calculated playcounts
 
                     else:
-                        # if there's only one instance of the current song
+                    # if there's only one instance of the current song
                         playcountTotal = playcount
                         # saves the total as the playcount of the song
 
@@ -1061,17 +1155,12 @@ def song(pictureQueue):
                     songStuffList.append(shaaPlaycount)
                     # adds the total playcount to the list
 
-                elif songInfoField1 == "Total" or songInfoField1 == "total":
-                    # if the selected type for the first field is Total
+                elif songInfoField1 == "Total":
+                # if the selected type for the first field is Total
 
                     shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
                     # adds up *all* the playcounts for all tracks
                     songStuffList.append(shaaPlaycount)
-
-                else: 
-                    # if the setting doesn't match either
-                    songStuffList.append(songInfoField1)
-                    # appends with the user-defined custom text
 
                 ### Field 1 Format ###
 
@@ -1085,38 +1174,54 @@ def song(pictureQueue):
 
                 ### Minutes / Field 2 ###
 
-                if songInfoField2 == "Track" or songInfoField2 == "track":
-                    # if the selected type for the second field is Track
+                if songInfoField2 == 0 or songInfoField2 == 2 or songInfoField2 == 4:
+                # if the selected type for the second field is 0 (track minutes), 2 (track hours) or 4 (track seconds)
 
                     if isinstance(playtime, pd.Series):
-                        # if there's more than one instance of the current song
-
-                        playtimeTotal = (((playtime.sum()) / 1000 ) / 60)
-                        # calculates the total playtime
-                    
+                    # if there's more than one instance of the current song
+                        playtimeTotal = int((playtime.sum()) / 1000)
+                        # calculates the total playtime (seconds)
                     else:
-                        # if there's only one instance of the current song
-                        playtimeTotal = ((playtime / 1000) / 60 )
-                        # saves the total as the playtime of the song 
+                    # if there's only one instance of the current song
+                        playtimeTotal = int(playtime / 1000)
+                        # saves the total as the playtime of the song
+
+                    if songInfoField2 == 2:
+                    # track minutes
+                        playtimeTotal / 60
+                        # divides the seconds into minutes
+                    
+                    elif songInfoField2 == 4:
+                    # track hours
+                        playtimeTotal / 3600
+                        # divides the seconds into hours
 
                     shaaPlaytime = f"{playtimeTotal:,.1f}"
                     # formats the string properly
                     songStuffList.append(shaaPlaytime)
                     # adds the total playcount to the list
 
-                elif songInfoField2 == "Total" or songInfoField2 == "total":
-                    # if the selected type for the first field is Total
+                elif songInfoField2 == 1 or songInfoField2 == 3 or songInfoField2 == 5:
+                # if the selected type for the first field is 1 (total minutes), 3 (total hours) or 5 (total seconds)
 
-                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.1f}"
-                    # adds up *all* the time played (milliseconds/1000 = seconds / 60 = minutes)
+                    shaaPlaytime = int(csvReader["Total Time"].agg("sum") / 1000)
+                    # adds up *all* the time played (milliseconds/1000 = seconds)
+
+                    if songInfoField2 == 1:
+                    # total minutes
+                        shaaPlaytime = shaaPlaytime / 60
+                        # divides the seconds into minutes
+
+                    elif songInfoField2 == 3:
+                    # total hours
+                        shaaPlaytime = shaaPlaytime / 3600
+                        # divides the seconds into hours
+
+                    shaaPlaytime = f"{shaaPlaytime:,.1f}"
+                    # formats the string properly
 
                     songStuffList.append(shaaPlaytime)
                     # adds to string list
-
-                else:
-                    # if the setting doesn't match either
-                    songStuffList.append(songInfoField2)
-                    # appends with the user-defined custom text
 
                 ### Field 2 Format ###
 
@@ -1238,7 +1343,7 @@ def song(pictureQueue):
             # adds the field and a space
 
             if dsiShoutout:
-                # if the dsi shoutout option is enabled
+            # if the dsi shoutout option is enabled
                 cppLargeHoverList.append(dsiShoutoutStr)
 
             cppLargeHover = "".join(cppLargeHoverList)
@@ -1247,24 +1352,24 @@ def song(pictureQueue):
             ### No Track Match ###
 
             if finalURI not in csvReader.index:
-                # if the track wasn't found in CSV
+            # if the track wasn't found in CSV
                 if enableUpdates:
-                    # if the updates are enabled, lets user know the song wasn't found in CSV
+                # if the updates are enabled, lets user know the song wasn't found in CSV
                     print(f"{Time()}[SHAA]: {csName} not found in CSV, using fallback values")
                 
                 ### Field 1 / Field 2 ###
 
-                if shaaFallback == "Total" or shaaFallback == "total":
-                    # if the selected fallback is Total/total
+                if shaaFallback == "Total":
+                # if the selected fallback is Total/total
                     shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
                     # uses the total playcount for all songs
                     shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
                     # uses the total amount of playtime for all songs
                 else:
-                    # if the selected fallback isn't total
-                        shaaPlaycount = shaaFallback
-                        shaaPlaytime = shaaFallback
-                        # takes the custom string and replaces playcount/time variables with that
+                # if the selected fallback isn't total
+                    shaaPlaycount = shaaFallback
+                    shaaPlaytime = shaaFallback
+                    # takes the custom string and replaces playcount/time variables with that
 
                 # string constructor
                 songStuffList.append(shaaPlaycount)
@@ -1291,11 +1396,11 @@ def song(pictureQueue):
 
 
         if songStuffList:
-            # if there's anything in songStuffList (not empty)
+        # if there's anything in songStuffList (not empty)
             cppState = " ".join(songStuffList)
 
         else:
-            # if the list *is* empty
+        # if the list *is* empty
             cppState = "An amount of time spent listening"
             # puts a fallback string instead
 
@@ -1307,39 +1412,39 @@ def song(pictureQueue):
         # sets a temp flag for the left spacer, just so it can't get double printed
 
         if preText:
-            # if preText has something
+        # if preText has something
             songNameList.append(preText)
             # adds to string
 
         if enableSong:
-            # if song is enabled
+        # if song is enabled
             songNameList.append(csName)
             # adds to string
             if songNameSpacerL:
-                # if songNameSpacerL(eft) isn't empty
+            # if songNameSpacerL(eft) isn't empty
                 SNSL = False
                 # sets the requirement to add Left Spacer to false, so that it doesn't get added
                 if (enableArtist or enableAlbum) or (enableArtist and enableAlbum):
-                    # if artist OR album is enabled, OR if both are enabled (aka there's *something* after)
+                # if artist OR album is enabled, OR if both are enabled (aka there's *something* after)
                     songNameList.append(songNameSpacerL)
                     # adds the left spacer, since there's something to the right of it
                 else:
-                    # if there's nothing after, doesn't add the spacer
+                # if there's nothing after, doesn't add the spacer
                     None
 
         if enableArtist:
-            # if artist is enabled
+        # if artist is enabled
             songNameList.append(csArtist)
             # adds to string
             if songNameSpacerL and SNSL:
-                # if songNameSpacerL(eft) has something and isn't already in
+            # if songNameSpacerL(eft) has something and isn't already in
                 songNameList.append(songNameSpacerL)
                 # adds to string
 
         if enableAlbum or postText:
-            # if there's at least one element after (album is enabled *or* there's a post-text)
+        # if there's at least one element after (album is enabled *or* there's a post-text)
             if not enableSong and not enableArtist:
-                # if there's no other elements (pre/post texts not counting)
+            # if there's no other elements (pre/post texts not counting)
                 None
                 # does nothing
             else:
@@ -1347,7 +1452,7 @@ def song(pictureQueue):
                 # if there's more than just album, adds the right spacer to string
 
         if enableAlbum:
-            # if album is enabled
+        # if album is enabled
             cppAlbumName = csAlbumName
             # sets the final name (not necessary but keeps symmetry)
 

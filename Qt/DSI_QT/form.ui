@@ -1,0 +1,809 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>DSIWindow</class>
+ <widget class="QMainWindow" name="DSIWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1523</width>
+    <height>1080</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>DSIWindow</string>
+  </property>
+  <widget class="QWidget" name="main">
+   <widget class="QWidget" name="gridLayoutWidget_2">
+    <property name="geometry">
+     <rect>
+      <x>0</x>
+      <y>0</y>
+      <width>1521</width>
+      <height>1072</height>
+     </rect>
+    </property>
+    <layout class="QGridLayout" name="fullWindowLayout">
+     <property name="leftMargin">
+      <number>20</number>
+     </property>
+     <property name="topMargin">
+      <number>0</number>
+     </property>
+     <property name="rightMargin">
+      <number>20</number>
+     </property>
+     <property name="bottomMargin">
+      <number>40</number>
+     </property>
+     <property name="spacing">
+      <number>20</number>
+     </property>
+     <item row="2" column="2">
+      <layout class="QGridLayout" name="pictureGrid">
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="horizontalSpacing">
+        <number>5</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>10</number>
+       </property>
+       <item row="3" column="0">
+        <widget class="Line" name="line_12">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLineEdit" name="pictureCycleTime">
+         <property name="text">
+          <string>10</string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="Line" name="line_13">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="QLabel" name="pictureCycleBehaviorHeader">
+         <property name="text">
+          <string>Picture Cycle Behavior</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="pictureCycleTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How to cycle the big picture&lt;br&gt;Setting to Spotify uses the active album cover (disables cycler)&lt;br&gt;Setting to File reads the picture links from pictureList.txt&lt;br&gt;Setting to None loads no picture (disables cycler)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QComboBox" name="pictureCycleBehavior">
+         <item>
+          <property name="text">
+           <string>Random</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Sequence</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Once</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>None</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="pictureCycleTimeHeader">
+         <property name="text">
+          <string>Picture Cycle Time</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="pictureCycleHeader">
+         <property name="text">
+          <string>Picture Cycle Type</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QComboBox" name="pictureCycleType">
+         <item>
+          <property name="text">
+           <string>Spotify</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>File</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>None</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="pictureCycleTimeTooltip">
+         <property name="text">
+          <string>How many minutes are awaited between picture swaps</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="2" column="1">
+      <layout class="QVBoxLayout" name="previewBox">
+       <property name="spacing">
+        <number>5</number>
+       </property>
+       <property name="leftMargin">
+        <number>20</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>20</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <item>
+        <spacer name="verticalSpacer_2">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Policy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>50</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QLabel" name="previewTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;Discord Presence String Preview:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="previewText">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p align=&quot;center&quot;&gt;dsiString&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer">
+         <property name="orientation">
+          <enum>Qt::Orientation::Vertical</enum>
+         </property>
+         <property name="sizeType">
+          <enum>QSizePolicy::Policy::Fixed</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>120</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </item>
+     <item row="0" column="0" rowspan="2">
+      <layout class="QGridLayout" name="basicBooleanGrid">
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="horizontalSpacing">
+        <number>5</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>10</number>
+       </property>
+       <item row="17" column="0">
+        <widget class="QLabel" name="printUpdatesTooltip">
+         <property name="text">
+          <string>Whether to display the current status of the program in the console</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QCheckBox" name="enableURIMapBoolean">
+         <property name="text">
+          <string>Enable URI Mapping</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="12" column="0">
+        <widget class="QLabel" name="marketCodeHeader">
+         <property name="text">
+          <string>Market Area Code:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="19" column="0">
+        <widget class="QCheckBox" name="printErrorsBoolean">
+         <property name="text">
+          <string>Show Program Errors</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="24" column="0">
+        <widget class="QLabel" name="clockStyleTooltip">
+         <property name="text">
+          <string>What type of clock (if any) to use in the console</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLineEdit" name="apiTimerNum">
+         <property name="text">
+          <string>10</string>
+         </property>
+        </widget>
+       </item>
+       <item row="21" column="0">
+        <widget class="Line" name="line_17">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="15" column="0">
+        <widget class="Line" name="line_16">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="apiTimerHeader">
+         <property name="text">
+          <string>Spotify API Check Timer:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QCheckBox" name="pauseBoolean">
+         <property name="text">
+          <string>Enable Pause Text</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="18" column="0">
+        <widget class="Line" name="line_4">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="22" column="0">
+        <widget class="QLabel" name="clockStyleHeader">
+         <property name="text">
+          <string>Console Clock Style</string>
+         </property>
+        </widget>
+       </item>
+       <item row="23" column="0">
+        <widget class="QComboBox" name="clockStyleSelection">
+         <item>
+          <property name="text">
+           <string>System Time</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Uptime</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Off</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="16" column="0">
+        <widget class="QCheckBox" name="printUpdatesBoolean">
+         <property name="text">
+          <string>Show Program Status</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="13" column="0">
+        <widget class="QLineEdit" name="marketCode">
+         <property name="text">
+          <string/>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="pauseTooltip">
+         <property name="text">
+          <string>The text to add before the first element, when playback is paused</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="Line" name="line">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLineEdit" name="pauseText">
+         <property name="text">
+          <string>Paused on:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="Line" name="line_2">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="20" column="0">
+        <widget class="QLabel" name="printErrorsTooltip">
+         <property name="text">
+          <string>Whether to display potential program and API errors in the console</string>
+         </property>
+        </widget>
+       </item>
+       <item row="14" column="0">
+        <widget class="QLabel" name="marketCode_2">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Your &amp;quot;market area&amp;quot; (the country your Spotify accounts belongs to)&lt;br/&gt;Only used if running the URIMap function&lt;br/&gt;Uses a 2-letter country code (ex. US, JP, DE, SN, CH...)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="0">
+        <widget class="QLabel" name="enableURIMapTooltip">
+         <property name="text">
+          <string>Whether to enable the URI mapping function</string>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="0">
+        <widget class="Line" name="line_3">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="apiTimerTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How many seconds are waited before sending a new API call&lt;br/&gt;Minimum of 2, recommended range 5 - 15&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="2" column="0">
+      <layout class="QVBoxLayout" name="verticalLayout">
+       <item>
+        <widget class="QPushButton" name="shaaConfigureButton">
+         <property name="text">
+          <string>Configure SHAA Details
+(Opens a new window)</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="dsiStarterButton">
+         <property name="text">
+          <string>Start DSI
+(Closes this window, runs DSI)</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="0" column="1" rowspan="2">
+      <layout class="QGridLayout" name="urlGrid">
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="horizontalSpacing">
+        <number>5</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>10</number>
+       </property>
+       <item row="2" column="1">
+        <widget class="QLabel" name="roundURLTooltip">
+         <property name="text">
+          <string>What static URL to set in the round, smaller picture</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="Line" name="line_6">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="1">
+        <widget class="Line" name="line_15">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="12" column="1">
+        <widget class="QLabel" name="spotifyURLHeader">
+         <property name="text">
+          <string>Spotify URL Type:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="roundURLText"/>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLabel" name="roundPicHeader">
+         <property name="text">
+          <string>Round Picture:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="14" column="1">
+        <widget class="QLabel" name="spotifyURLTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The link type for the URL that gets set into the link fields (large picture and song detail click)&lt;br/&gt;Note that Playlist requires an active playlist, otherwise defaults to Round Picture URL until an active playlist is found&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="1">
+        <widget class="QLineEdit" name="roundPicHoverText"/>
+       </item>
+       <item row="6" column="1">
+        <widget class="QLabel" name="roundPicTooltip">
+         <property name="text">
+          <string>The name of the picture to load in the round frame (name from Developer Dashboard or link to a picture)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="1">
+        <widget class="QLabel" name="roundURLHeader">
+         <property name="text">
+          <string>Round Picture URL:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="1">
+        <widget class="QLabel" name="roundPicHoverTooltip">
+         <property name="text">
+          <string>The text to display when hovering over the round picture</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <widget class="QLineEdit" name="roundPicText"/>
+       </item>
+       <item row="13" column="1">
+        <widget class="QComboBox" name="spotifyURLSelection">
+         <item>
+          <property name="text">
+           <string>Track</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Album</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Artist</string>
+          </property>
+         </item>
+         <item>
+          <property name="text">
+           <string>Playlist</string>
+          </property>
+         </item>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="Line" name="line_14">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <widget class="QLabel" name="roundPicHoverHeader">
+         <property name="text">
+          <string>Round Picture Hover Text:</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+     <item row="0" column="2" rowspan="2">
+      <layout class="QGridLayout" name="stylingGrid">
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>10</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>10</number>
+       </property>
+       <property name="horizontalSpacing">
+        <number>5</number>
+       </property>
+       <property name="verticalSpacing">
+        <number>10</number>
+       </property>
+       <item row="19" column="0">
+        <widget class="QLabel" name="enableAlbumTooltip">
+         <property name="text">
+          <string>Whether to add the album name to the presence string</string>
+         </property>
+        </widget>
+       </item>
+       <item row="17" column="0">
+        <widget class="Line" name="line_10">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QLineEdit" name="songSpacerR">
+         <property name="text">
+          <string>≻</string>
+         </property>
+        </widget>
+       </item>
+       <item row="0" column="0">
+        <widget class="QLabel" name="preTextHeader">
+         <property name="text">
+          <string>Pre-text:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="preTextTooltip">
+         <property name="text">
+          <string>Text placed before the first element (may be omitted)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="0">
+        <widget class="Line" name="line_5">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="23" column="0">
+        <widget class="QLabel" name="albumFallbackTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The text to use in the album's place, if the string is too long&lt;br&gt;This happens when the presence string exceeds 128 characters&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="21" column="0">
+        <widget class="QLabel" name="albumFallbackHeader">
+         <property name="text">
+          <string>Album Fallback Text:</string>
+         </property>
+        </widget>
+       </item>
+       <item row="22" column="0">
+        <widget class="QLineEdit" name="albumFallbackText">
+         <property name="text">
+          <string>An album</string>
+         </property>
+        </widget>
+       </item>
+       <item row="18" column="0">
+        <widget class="QCheckBox" name="enableAlbum">
+         <property name="text">
+          <string>Enable Album</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="20" column="0">
+        <widget class="Line" name="line_11">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="12" column="0">
+        <widget class="QCheckBox" name="enableSong">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string>Enable Song</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="QLabel" name="songSpacerRHeader">
+         <property name="text">
+          <string>Right Spacer</string>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLineEdit" name="songSpacerL">
+         <property name="text">
+          <string>≺</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="songSpacerLHeader">
+         <property name="text">
+          <string>Left Spacer</string>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="songSpacerLTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The string/spacer placed after the first element&lt;br&gt;Default: ≺&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="15" column="0">
+        <widget class="QCheckBox" name="enableArtist">
+         <property name="text">
+          <string>Enable Artist</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLineEdit" name="preText"/>
+       </item>
+       <item row="13" column="0">
+        <widget class="QLabel" name="enableSongTooltip">
+         <property name="text">
+          <string>Whether to add the song name to the presence string</string>
+         </property>
+        </widget>
+       </item>
+       <item row="14" column="0">
+        <widget class="Line" name="line_9">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="Line" name="line_7">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="0">
+        <widget class="QLabel" name="songSpacerRTooltip">
+         <property name="text">
+          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The string/spacer placed after the second element&lt;br&gt;Default: ≻&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+         </property>
+        </widget>
+       </item>
+       <item row="16" column="0">
+        <widget class="QLabel" name="enableArtistTooltip">
+         <property name="text">
+          <string>Whether to add the artist's name(s) to the presence string</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="Line" name="line_8">
+         <property name="orientation">
+          <enum>Qt::Orientation::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </widget>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1523</width>
+     <height>21</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

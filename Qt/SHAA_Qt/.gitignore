@@ -1,0 +1,6 @@
+ui_form.spec
+ui_form.exe
+dist
+build
+__pycache__
+.qtcreator
