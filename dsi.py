@@ -1195,12 +1195,12 @@ def song(pictureQueue):
 
                     if songInfoField2 == 0:
                     # track minutes
-                        playtimeTotal / 60
+                        playtimeTotal = (playtimeTotal / 60)
                         # divides the seconds into minutes
                     
                     elif songInfoField2 == 2:
                     # track hours
-                        playtimeTotal / 3600
+                        playtimeTotal = (playtimeTotal / 3600)
                         # divides the seconds into hours
 
                     shaaPlaytime = f"{playtimeTotal:,.1f}"
@@ -1216,12 +1216,12 @@ def song(pictureQueue):
 
                     if songInfoField2 == 1:
                     # total minutes
-                        shaaPlaytime = shaaPlaytime / 60
+                        shaaPlaytime = (shaaPlaytime / 60)
                         # divides the seconds into minutes
 
                     elif songInfoField2 == 3:
                     # total hours
-                        shaaPlaytime = shaaPlaytime / 3600
+                        shaaPlaytime = (shaaPlaytime / 3600)
                         # divides the seconds into hours
 
                     shaaPlaytime = f"{shaaPlaytime:,.1f}"
