@@ -1,6 +1,6 @@
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
 # Required imports to manage the PyQt window
 import json, os, sys
 # Required for config management
@@ -10,19 +10,28 @@ class Ui_SHAAWindow(object):
     # setup (sorry if the docs are a bit weird, this was made with the Qt Creator, I wrote docs after <3)
         if not SHAAWindow.objectName():
             SHAAWindow.setObjectName(u"SHAAWindow")
-        SHAAWindow.setFixedSize(1455, 860)
+        SHAAWindow.setMinimumSize(1455, 860)
         self.window = SHAAWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
+        # since the program bundled with pyInstaller, it's "frozen"
             self.cwd = os.path.dirname(sys.executable)
+            self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
+            # reassigns the path variables accordingly
         else:
-            self.cwd = os.path.dirname(os.path.abspath(__file__))
-        # stores the "current working directory" (should be the Qt/SHAA_Qt/ folder)
+        # if somehow not in a bundled (frozen) state
+            self.cwd = os.path.dirname(__file__)
+            self.mainIcon = os.path.join(self.cwd, "icons", "dsiIcon.png")
+            # reassigns the path variables accordingly
+
         self.mainFolder = os.path.join(self.cwd, "..", "..")
         # stores the "main" folder (DSI, which is 2 folders up)
         self.configPath = os.path.join(self.mainFolder, "Data", "shaaConfig.json")
         # stores the config file's path
+
+        self.window.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
 
         def readConfig() -> dict:
             """Function to read the config file, returns the json dictionary"""

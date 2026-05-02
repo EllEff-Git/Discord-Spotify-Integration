@@ -1,6 +1,6 @@
-from PySide6.QtCore import *
-from PySide6.QtGui import *
-from PySide6.QtWidgets import *
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
 # Required imports to manage the PyQt window
 import json, os, sys, asyncio
 # Required for config management
@@ -15,8 +15,8 @@ class Ui_DSIWindow(object):
         # checks for a name 
             DSIWindow.setObjectName(u"DSIWindow")
             # sets the name
-        DSIWindow.setFixedSize(1520, 1070)
-        # sets the window size (1520 pixels wide, 1070 tall)
+        DSIWindow.setMinimumSize(1520, 1030)
+        # sets the window size (1520 pixels wide, 1030 tall)
         self.window = DSIWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
@@ -25,17 +25,26 @@ class Ui_DSIWindow(object):
         self.main.setObjectName(u"main")
         # sets the object name
 
-        if getattr(sys, 'frozen', False):
+        if getattr(sys, "frozen", False):
+        # since the program bundled with pyInstaller, it's "frozen"
             self.cwd = os.path.dirname(sys.executable)
+            self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
+            # reassigns the path variables accordingly
         else:
-            self.cwd = os.path.dirname(os.path.abspath(__file__))
-        # stores the "current working directory" (should be the Qt/DSI_Qt/ folder)
+        # if somehow not in a bundled (frozen) state
+            self.cwd = os.path.dirname(__file__)
+            self.mainIcon = os.path.join(self.cwd, "icons", "dsiIcon.png")
+            # reassigns the path variables accordingly
+
         self.mainFolder = os.path.join(self.cwd, "..", "..")
         # stores the "main" folder (DSI, which is 2 folders up)
         self.configPath = os.path.join(self.mainFolder, "Data", "config.json")
         # stores the config file path
         self.shaaPath = os.path.join(self.mainFolder, "Qt", "SHAA_Qt", "shaaWindow.exe")
         # stores the shaa configuration window path
+
+        self.window.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
 
         self.firstTime = False
         # stores a boolean for the first time launch (False by default)
@@ -53,6 +62,7 @@ class Ui_DSIWindow(object):
             except:
             # if it can't (file doesn't exist)
                 defaultConfig = {
+                    "disableCfgWin": False,
                     "refreshTime": 10,
                     "enablePause": True,
                     "pauseText": "Paused on:",
@@ -111,11 +121,11 @@ class Ui_DSIWindow(object):
         self.picCycleTypes.remove(self.loadedPicCycleType)
         # removes the loaded type from the list
 
-        self.picCycleBehaviors = ["Random", "Sequence", "Once", "None"]
+        # self.picCycleBehaviors = ["Random", "Sequence", "Once", "None"]
         # stores the options for the picture cycling behavior in a list
-        self.loadedPicCycleBehavior = self.loadedConfig["pictureCycleBehavior"]
+        # self.loadedPicCycleBehavior = self.loadedConfig["pictureCycleBehavior"]
         # gets the loaded option for the behavior
-        self.picCycleBehaviors.remove(self.loadedPicCycleBehavior)
+        # self.picCycleBehaviors.remove(self.loadedPicCycleBehavior)
         # removes the loaded type
 
         self.songPreviewText = "A Song - an artist - an album"
@@ -123,11 +133,11 @@ class Ui_DSIWindow(object):
 
         self.gridLayoutWidget_2 = QWidget(self.main)
         self.gridLayoutWidget_2.setObjectName(u"gridLayoutWidget_2")
-        self.gridLayoutWidget_2.setGeometry(QRect(0, 0, 1515, 1060))
+        self.gridLayoutWidget_2.setGeometry(QRect(0, 0, 1515, 1010))
         # the "main" ('background') layout in the background, sets size and name
 
         self.fullWindowLayout = QGridLayout(self.gridLayoutWidget_2)
-        self.fullWindowLayout.setSpacing(20)
+        self.fullWindowLayout.setSpacing(15)
         self.fullWindowLayout.setObjectName(u"fullWindowLayout")
         self.fullWindowLayout.setContentsMargins(15, 0, 20, 15)
         # the *actual* main layout, contains all other widgets and layouts
@@ -161,26 +171,26 @@ class Ui_DSIWindow(object):
         self.pictureGrid.addWidget(self.line_13, 7, 0, 1, 1)
         # adds the line
 
-        self.pictureCycleBehaviorHeader = QLabel(self.gridLayoutWidget_2)
-        self.pictureCycleBehaviorHeader.setObjectName(u"pictureCycleBehaviorHeader")
+        #self.pictureCycleBehaviorHeader = QLabel(self.gridLayoutWidget_2)
+        #self.pictureCycleBehaviorHeader.setObjectName(u"pictureCycleBehaviorHeader")
         # label (text field) for the cycle behavior, above the selection
-        self.pictureGrid.addWidget(self.pictureCycleBehaviorHeader, 8, 0, 1, 1)
+        #self.pictureGrid.addWidget(self.pictureCycleBehaviorHeader, 8, 0, 1, 1)
         # adds the label
 
-        self.pictureCycleTooltip = QLabel(self.gridLayoutWidget_2)
-        self.pictureCycleTooltip.setObjectName(u"pictureCycleTooltip")
+        #self.pictureCycleTooltip = QLabel(self.gridLayoutWidget_2)
+        #self.pictureCycleTooltip.setObjectName(u"pictureCycleTooltip")
         # the tooltip label for the picCycler
-        self.pictureGrid.addWidget(self.pictureCycleTooltip, 2, 0, 1, 1)
+        #self.pictureGrid.addWidget(self.pictureCycleTooltip, 2, 0, 1, 1)
         # adds the tooltip to the grid
 
-        self.pictureCycleBehavior = QComboBox(self.gridLayoutWidget_2)
-        self.pictureCycleBehavior.addItem("")
-        self.pictureCycleBehavior.addItem("")
-        self.pictureCycleBehavior.addItem("")
-        self.pictureCycleBehavior.addItem("")
-        self.pictureCycleBehavior.setObjectName(u"pictureCycleBehavior")
+        #self.pictureCycleBehavior = QComboBox(self.gridLayoutWidget_2)
+        #self.pictureCycleBehavior.addItem("")
+        #self.pictureCycleBehavior.addItem("")
+        #self.pictureCycleBehavior.addItem("")
+        #self.pictureCycleBehavior.addItem("")
+        #self.pictureCycleBehavior.setObjectName(u"pictureCycleBehavior")
         # a combobox (dropdown) for the cycling behavior (gets the strings from the translate I guess)
-        self.pictureGrid.addWidget(self.pictureCycleBehavior, 9, 0, 1, 1)
+        #self.pictureGrid.addWidget(self.pictureCycleBehavior, 9, 0, 1, 1)
         # adds the combobox to the picture grid
 
         self.pictureCycleTimeHeader = QLabel(self.gridLayoutWidget_2)
@@ -410,21 +420,27 @@ class Ui_DSIWindow(object):
         # this layout just contains 2 buttons, the shaa button and the starter button
 
         self.shaaConfigureButton = QPushButton(self.gridLayoutWidget_2)
+        # the button that opens the SHAA configuration window
         self.shaaConfigureButton.setObjectName(u"shaaConfigureButton")
         self.shaaConfigureButton.clicked.connect(self.runShaaWindow)
         # runs the SHAA configuration window when pressed
+        self.shaaConfigureButton.setMinimumHeight(55)
+        # sets a minimum height of 55px
         self.verticalLayout.addWidget(self.shaaConfigureButton)
+        # adds the button to the layout
 
         self.dsiStarterButton = QPushButton(self.gridLayoutWidget_2)
         self.dsiStarterButton.setObjectName(u"dsiStarterButton")
         self.dsiStarterButton.clicked.connect(self.writeConfig)
         # "connects" the starter button to the config writer (also closes the window)
+        self.dsiStarterButton.setMinimumHeight(55)
+        # sets a minimum size of 55px
 
         self.verticalLayout.addWidget(self.dsiStarterButton)
         # adds the start button to the layout
 
-
         self.fullWindowLayout.addLayout(self.verticalLayout, 2, 0, 1, 1)
+        # adds the vertical (button) layout to the full layout
 
         self.urlGrid = QGridLayout()
         self.urlGrid.setObjectName(u"urlGrid")
@@ -743,13 +759,13 @@ class Ui_DSIWindow(object):
         # gets the config option for the time
         self.pictureCycleTimeTooltip.setText(QCoreApplication.translate("DSIWindow", u"How many minutes are awaited between picture swaps ('Song' swaps every track swap)", None))
 
-        self.pictureCycleBehaviorHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Behavior", None))
-        self.pictureCycleTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How to cycle the big picture<br>Setting to Spotify uses the active album cover (disables cycler)<br>Setting to File reads the picture links from pictureList.txt<br>Setting to None loads no picture (disables cycler)</p></body></html>", None))
-        self.pictureCycleBehavior.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleBehavior}", None))
+        #self.pictureCycleBehaviorHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Behavior", None))
+        #self.pictureCycleTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How to cycle the big picture<br>Setting to Spotify uses the active album cover (disables cycler)<br>Setting to File reads the picture links from pictureList.txt<br>Setting to None loads no picture (disables cycler)</p></body></html>", None))
+        #self.pictureCycleBehavior.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleBehavior}", None))
         # takes the loaded config option to display as first
-        self.pictureCycleBehavior.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[0]}", None))
-        self.pictureCycleBehavior.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[1]}", None))
-        self.pictureCycleBehavior.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[2]}", None))
+        #self.pictureCycleBehavior.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[0]}", None))
+        #self.pictureCycleBehavior.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[1]}", None))
+        #self.pictureCycleBehavior.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[2]}", None))
         # the other three get loaded in order
 
         self.pictureCycleHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Type", None))
@@ -857,6 +873,7 @@ class Ui_DSIWindow(object):
     def writeConfig(self):
         """Function to write the config json file (and exit)"""
         configuration = {
+            "disableCfgWin": False,
             "refreshTime": float(self.apiTimerNum.text()),
             "enablePause": self.pauseBoolean.isChecked(),
             "pauseText": self.pauseText.text(),
@@ -879,7 +896,7 @@ class Ui_DSIWindow(object):
             "albumFallback": self.albumFallbackText.text(),
             "pictureCycleType": self.pictureCycleType.currentText(),
             "pictureCycleTime": int(self.pictureCycleTime.text()),
-            "pictureCycleBehavior": self.pictureCycleBehavior.currentText()
+            "pictureCycleBehavior": "Random" #self.pictureCycleBehavior.currentText()
         }
         # forms a configuration based on the states of each of the fields
 

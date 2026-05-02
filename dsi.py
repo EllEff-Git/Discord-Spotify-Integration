@@ -1,7 +1,7 @@
 import pandas as pd
 # Required for all the CSV parsing and data grabbing
-import configparser, random, subprocess
-# Required to read config, choose random pictures and to start the C++ file
+import random, subprocess
+# Required to choose random pictures and to start the C++ file
 import os, sys, time, threading, queue, datetime
 # Required for system information, background tasking and queueing
 import spotipy, requests, json
@@ -10,397 +10,208 @@ from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
 from spotipy.exceptions import SpotifyException
 # Required to check for exceptions (errors)
+from collections import deque
+# Required for "console-like" UI logging
+from PyQt6.QtCore import *
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
+# Required for the main window
 
 
 
-### Setup Section ###
+### Version ###
 
 
-DSIver = "v0.4.6.1952"
+
+DSIver = "0.5.2.0537"
 """The program version (Y.M.DD.HHMM)"""
 
 
+
+### Directory Grab ###
+
+
+
+directory = None
+"""The base directory of the program, where DSI.exe resides"""
+iconPath = None
+"""The path of the app icon png"""
+
+
 if getattr(sys, "frozen", False):
-    # since the program bundled with pyInstaller, it's "frozen"
+# since the program bundled with pyInstaller, it's "frozen"
     directory = os.path.dirname(sys.executable)
-    """The base directory of the program, where DSI.exe resides"""
+    iconPath = os.path.join(sys._MEIPASS, "dsiIcon.png")
+    # reassigns the path variables accordingly
 else:
-    # if somehow not in a bundled (frozen) state
+# if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
-    """The base directory of the program, where DSI.exe resides"""
+    iconPath = os.path.join(directory, "icons", "dsiIcon.png")
+    # reassigns the path variables accordingly
 
+### Config ###
 
-spCache = os.path.join(directory, "Data", "spotifycache.json")
-"""The directory where the spotify cache (token) sits in"""
-idDir = os.path.join(directory, "Discord", "ids.txt")
-"""The directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
-songDataDir = os.path.join(directory, "Discord", "songData.txt")
-"""The directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
-noURIdir = os.path.join(directory, "Data", "URIlist.json")
-"""The directory where URIlist (unfound URIs) should/will live"""
-uriDir = os.path.join(directory, "Data", "URImap.json")
-"""The directory where URImap.json should/will live (inside DSI/Data/URImap.json)"""
-picDir = os.path.join(directory, "pictureList.txt")
-"""The directory where pictureList.txt lives (inside DSI/pictureList.txt)"""
-SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
-"""The directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
-timeDir = os.path.join(directory, "..", "Data", "CSV", "totalTimes.txt")
-"""The directory where the totalTimes.txt file is"""
-cppExe = "DSIdiscord.exe"
-"""The name of the C++ exe file"""
-cppPath = os.path.join(directory, "Discord", cppExe)
-"""The full path to the C++ exe"""
-cppDir = os.path.dirname(cppPath) 
-"""The directory the C++ Exe lives in"""
+secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
+"""The main configuration file, contains client secret info"""
 dsiConfigPath = os.path.join(directory, "Data", "config.json")
 """The DSI configuration json file"""
 dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "dsiWindow.exe")
 """The DSI configurator program/window"""
 shaaConfigPath = os.path.join(directory, "Data", "shaaConfig.json")
 """The SHAA x DSI configuration json file"""
+
+### Token/ID ###
+
+spCache = os.path.join(directory, "Data", "spotifycache.json")
+"""The directory where the spotify cache (token) sits in"""
+idDir = os.path.join(directory, "Discord", "ids.txt")
+"""The directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
+
+### Song Details ###
+
+songDataDir = os.path.join(directory, "Discord", "songData.txt")
+"""The directory where songData.txt should/will live (inside DSI/Discord/songData.txt)"""
+noURIdir = os.path.join(directory, "Data", "URIlist.json")
+"""The directory where URIlist (unfound URIs) should/will live"""
+uriDir = os.path.join(directory, "Data", "URImap.json")
+"""The directory where URImap.json should/will live (inside DSI/Data/URImap.json)"""
+
+### Spotify History Analyser (Addon) ###
+
+SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
+"""The directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
+timeDir = os.path.join(directory, "..", "Data", "CSV", "totalTimes.txt")
+"""The directory where the totalTimes.txt file is"""
+
+### Customisation ###
+
+picDir = os.path.join(directory, "pictureList.txt")
+"""The directory where pictureList.txt lives (inside DSI/pictureList.txt)"""
+
+### C++ Locations ###
+
+cppExe = "DSIdiscord.exe"
+"""The name of the C++ exe file"""
+cppPath = os.path.join(directory, "Discord", cppExe)
+"""The full path to the C++ exe"""
+cppDir = os.path.dirname(cppPath) 
+"""The directory the C++ Exe lives in"""
+
+
+
+### Global Variables ###
+
+
+secretConfig = {}
+"""The config file with client IDs and such"""
 jsonConfig = None
 """The config file for the main function"""
 shaaConfig = None
 """The config file specifically for SHA(A) features"""
 
-
-### Config Section ###
-
-
-Config = configparser.ConfigParser(comment_prefixes = ["/", "#"], allow_no_value = True)
-"""The config.ini reading variable"""
-ConfigPath = os.path.join(directory, "config.ini")
-"""The directory where the config sits in"""
-Config.read(ConfigPath, "utf8")
-# Where the config is read from with UTF-8 format
-
-
-# [Required]
-sp_client_ID = Config.get("Required", "Spotify_Client_ID")
+sp_client_ID = None
 """Spotify Client ID, string"""
-sp_client_secret = Config.get("Required", "Spotify_Client_Secret")
+sp_client_secret = None
 """Spotify Client Secret, string"""
-sp_redirect = Config.get("Required", "Spotify_Redirect_URI")
+sp_redirect = None
 """Spotify redirect URL, string"""
-dc_app_ID = Config.get("Required", "Discord_Application_ID")
+dc_app_ID = None
 """Discord Application ID, string"""
 
-if not sp_client_ID or not sp_client_secret or not sp_redirect or not dc_app_ID:
-# checks all 4 required fields
-    print("Required field(s) empty, please check your config.ini file and restart")
-    # user inform
-    time.sleep(600)
-    # waits 10 minutes
-    raise SystemExit
-    # closes
-
-skipConfigWindow = Config.getboolean("Function", "Skip_Config_Window", fallback=False)
+skipConfigWindow = False
 """Whether to skip the configuration window or not"""
 
-
-### UI Class -> Config ###
-
-
-if os.path.exists(dsiConfigPath) and skipConfigWindow:
-# checks if the config already exists (not first time) and the skipping is enabled
-    None
-    # if it does, does nothing
-else:
-# if the file doesn't exist
-    dsiConfig = subprocess.run([dsiConfigWindow], check=True)
-    # runs the dsi configurator (as blocking), continues task once it's done writing config
-    if not dsiConfig.returncode == 1:
-    # checks if the return code isn't 1 (0 is bad, 1 is good)
-        print(f"Configuration complete - {dsiConfig.returncode}")
-        # prints the return code
-
-try:
-# tries to open the json file
-    with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
-    # opens the config file in read mode
-        jsonConfig = json.load(jsCfg)
-        # stores the loaded json file as jsonConfig
-except Exception as err:
-# if there's an error
-    print(f"Error reading the json config file: {err}")
-    # user inform
-
-if os.path.exists(shaaConfigPath):
-# if the shaa configuration file does exist
-    try:
-    # tries to read the SHAA config file (try because it's not necessary, can be skipped)
-        with open(shaaConfigPath, "r", encoding="utf-8") as shaaCfg:
-        # opens the SHAA config
-            shaaConfig = json.load(shaaCfg)
-            # stores the loaded 
-            disableShaa = False
-    except:
-    # if the file can't be found/opened
-        disableShaa = True
-        # disables SHAA-related functions
-else:
-# if the file doesn't exist
-    disableShaa = True
-    # disables SHAA-related functions
-
-
-# [Function]
-refreshTime = jsonConfig["refreshTime"]
+refreshTime = 0.0
 """Program update cycle interval time, float"""
 
-if refreshTime < 2:
-# if the refresh time is set too low
-    refreshTime = 2
-    # overrides to safe minimum of 2s  
-
-enablePause = jsonConfig["enablePause"]
+enablePause = True
 """The "paused on" text enabler, boolean"""
-pauseStateText = jsonConfig["pauseText"]
+pauseStateText = "Paused on:"
 """The string used for paused status, string"""
-enableUpdates = jsonConfig["printUpdates"]
+enableUpdates = True
 """Whether to print updates, boolean"""
-enableErrors = jsonConfig["printErrors"]
+enableErrors = True
 """Whether to print errors, boolean"""
-enableMapping = jsonConfig["enableURI"]
+enableMapping = True
 """Whether to enable the URI mapping functionality, boolean"""
-timestampStyle = jsonConfig["clockStyle"]
+timestampStyle = "Uptime"
 """The timestamp format for system prints, string (System Time, Uptime, Off)"""
 
 startTime = int(datetime.datetime.now().timestamp())
 """The program start time in UNIX"""
 
-
-def Time():
-    """Function that returns the console time, formatted"""
-    if timestampStyle == "System Time":
-        # if the config option is set to uptime
-        currentTime = int(datetime.datetime.now().timestamp())
-        # takes the current time when Time() is called
-        uptime = currentTime - startTime
-        # calculates the seconds apart between current and startup time
-        uptimeHr, remainderHr = divmod(uptime, 3600)
-        # takes the hours and the remainders
-        uptimeMin, uptimeSec = divmod(remainderHr, 60)
-        # takes the minutes and seconds from the remainders
-        uptimeStr = ("{:02}:{:02}:{:02}".format(int(uptimeHr), int(uptimeMin), int(uptimeSec)))
-        # the uptime of the program, format of HH:MM:SS
-        return (uptimeStr + " ")
-        # shortens the call to system uptime, adds empty space
-
-    elif timestampStyle == "Clock":
-        # if the config option is set to clock
-        return (datetime.datetime.now().strftime("%H:%M:%S") + " ")
-         # shortens the call to current system timestamp, adds empty space
-
-    else:
-        # if the config option is set to something else, reads as off (thus doesn't add anything)
-        return ""
-        
-   
-print(f"{Time()}[START]: Starting DSI {DSIver}\n")
-# quick user update on status
-
-
-# [URL]
-smallURL = jsonConfig["smallPicURL"]
+smallURL = ""
 """The small picture URL, string"""
-if not smallURL:
-# if the smallURL is empty
-    smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
-    # shameless plug <3 (only applies if there's no defined URL)
-spotifyURL = jsonConfig["spotifyURLType"]
+spotifyURL = "Track"
 """The type of large image URL to use, string of: (Track, Artist, Album, Playlist)"""
 
-
-# [Song-Style]
-songNameSpacerL = jsonConfig["spacerL"]
+songNameSpacerL = "\u227a"
 """Spacer between 1st and 2nd field, string"""
-songNameSpacerR = jsonConfig["spacerR"]
+songNameSpacerR = "\u227b"
 """Spacer between 2nd and 3rd field, string"""
 
-
-# [Song-Format]
-preText = jsonConfig["preText"]
+preText = ""
 """Optional text before the first field, string"""
-postText = jsonConfig["postText"]
+postText = ""
 """Optional text after the last field, string"""
-enableSong = jsonConfig["enableSong"]
+enableSong = True
 """Song's state, boolean"""
-enableArtist = jsonConfig["enableArtist"]
+enableArtist = True
 """Artist's state, boolean"""
-enableAlbum = jsonConfig["enableAlbum"]
+enableAlbum = True
 """Album's state, boolean"""
-albumFallback = jsonConfig["albumFallback"]
+albumFallback = "An album"
 """The text to fall back to in case the album gets dropped, string"""
 
-
-# [Pictures]
-picCycleList = jsonConfig["pictureCycleType"]
+picCycleList = "Spotify"
 """Pictures for large image, option (File, Spotify)"""
 
-if picCycleList == "File":
-# checks if the config option is set to "File"
-    picCycleList = []
-    # empties the variable 
-    with open(picDir, "r", encoding="utf-8") as file:
-    # opens the pictureList.txt file
-        for pics in file:
-        # for every picture (line) in the file
-            pic = pics.strip()
-            # stores one line
-            if pic.startswith("#") or not pic:
-            # if the line starts with # (meaning it's a comment line) or it's empty
-                continue
-                # skips that line and goes to next one
-            picCycleList.append(pic)
-            # adds the picture to the list
-
-    if enableUpdates:
-    # if the update config option is enabled
-        print(f"{Time()}[PICT]: Picture list loaded from file\n")
-else:
-# if the list is on Spotify (or empty), doesn't modify it
-    None
-
-
-picCycleTime = jsonConfig["pictureCycleTime"]
+picCycleTime = 10
 """Time to wait between picture cycling, int/string (minutes/Song)"""
 
-try:
-# tries to turn the time into minutes (ensures integer type, multiplies by 60)
-    picCycleTime = (int(picCycleTime) * 60)
-except:
-# if it can't, leaves it alone (should be the case when it's set to "Song")
-    None
-
-picCycleType = jsonConfig["pictureCycleBehavior"]
+picCycleType = "Random"
 """Type of cycling to perform on pictures, string (Random, Sequence, Once, None)"""
-smallPic = jsonConfig["smallPic"]
+smallPic = ""
 """Name/URL of small picture, string"""
-hoverText = jsonConfig["smallPicHover"]
+hoverText = ""
 """Text to show on small picture hover, string"""
 
-if not disableShaa:
-# if the SHAA-related stuff isn't disabled
-
-    songInfoField1 = shaaConfig["songInfoField1"]
-    """First state field type, string (Track, Total)"""
-    songInfoField2 = shaaConfig["songInfoField2"]
-    """Second state field type, int"""
-    # 0-1 is minutes (track first), 2-3 is hours, 4-5 is seconds
-    shaaFallbackTotal = shaaConfig["songInfoFallbackTotal"]
-    """Whether to fall back to total numbers, boolean"""
-    if shaaFallbackTotal:
-    # if the fallback total usage is enabled
-        shaaFallback = "Total"
-        # sets the string to "Total"
-    else:
-        shaaFallback = shaaConfig["songInfoFallbackText"]
-        # gets the custom string from the shaa config
-
-    shaaInfoDetails = shaaConfig["songInfoDetails"]
-    """Details field type, string (Hours, Minutes, Seconds, Volume, Repeat, Shuffle, Cycle, custom)"""
-    if shaaInfoDetails == "Custom":
-    # if the details field is set to custom
-        shaaInfoDetails = shaaConfig["songInfoDetailsText"]
-        # uses the custom string from the config
-        songInfoFallback = ""
-        # uses empty string (custom string defined above)
-    else:
-    # if the field isn't custom, uses "total" as an additional string
-        songInfoFallback = "total"
-        """Fallback text for missing song data for both state fields, string"""
-
-    songInfoFormatPlays = shaaConfig["songInfoFormatPlays"]
-    """Text format of the first field, string"""
-    songInfoSpacer = shaaConfig["songInfoFormatSpacer"]
-    """Spacer to place between first and second field, string"""
-    songInfoFormatMins = shaaConfig["songInfoFormatMins"]
-    """Text format of the second field, string"""
-
-    songInfoFormatTextFirst = shaaConfig["songInfoDetailsTextFirst"]
-    """The order the number and text fall to (boolean, True = text first)"""
-    songInfoFormatDetails = shaaConfig["songInfoDetailsText"]
-    """Text format of the details field, string"""
-    songInfoFormatDetailsSpacer = shaaConfig["songInfoDetailsSpacer"]
-    """Spacer to place between details field data and string, string"""
-    songInfoDetailsDoubleSpace = shaaConfig["songInfoDetailsDoubleSpace"]
-    """Whether to add space on either side of the spacer, boolean"""
-    dsiShoutout = shaaConfig["dsiShoutout"]
-    """Whether to add a shoutout to DSI at the end of the details section, boolean"""
-
-else:
-# if the disableShaa is set to True
-    songInfoField1 = "Track"
-    songInfoField2 = 0
-    shaaFallback = "Total"
-    shaaInfoDetails = "Hours"
-    songInfoFormatPlays = "plays"
-    songInfoSpacer = "※"
-    songInfoFormatMins = "minutes"
-    songInfoFallback = "total"
-    songInfoFormatTextFirst = True
-    songInfoFormatDetails = "Total Hours"
-    songInfoFormatDetailsSpacer = ":"
-    songInfoDetailsDoubleSpace = False
-    dsiShoutout = False
-    # uses "default" options (most of these shouldn't get accessed if SHAA isn't enabled anyway, but some do)
-
-
-print(f"{Time()}[CFG]: Configuration loaded\n")
-# user inform
-
-
-if not enableUpdates:
-    # if console printing is disabled in config
-    print(f"{Time()}[CFG]: Console updates disabled in config (print_Updates)\n")
-    # prints a warning
-
-if not enableErrors:
-    # if error printing is disabled in config
-    print(f"{Time()}[CFG]: Error printing disabled in config (print_Errors)\n")
-    # prints a warning
-
-
-
-### Variable Section ###
-
+songInfoField1 = "Track"
+"""First state field type, string (Track, Total)"""
+songInfoField2 = 0
+"""Second state field type, int"""
+# 0-1 is minutes (track first), 2-3 is hours, 4-5 is seconds
+shaaFallbackTotal = False
+"""Whether to fall back to total numbers, boolean"""
+shaaFallback = "Total"
+"""The fallback type (total or string)"""
+shaaInfoDetails = "Hours"
+"""Details field type, string (Hours, Minutes, Seconds, Volume, Repeat, Shuffle, Cycle, custom)"""
+songInfoFormatPlays = "plays"
+"""Text format of the first field, string"""
+songInfoSpacer = "※"
+"""Spacer to place between first and second field, string"""
+songInfoFormatMins = "minutes"
+"""Text format of the second field, string"""
+songInfoFallback = "total"
+"""Fallback text for missing song data for both state fields, string"""
+songInfoFormatTextFirst = True
+"""The order the number and text fall to (boolean, True = text first)"""
+songInfoFormatDetails = "Total Hours"
+"""Text format of the details field, string"""
+songInfoFormatDetailsSpacer = ":"
+"""Spacer to place between details field data and string, string"""
+songInfoDetailsDoubleSpace = False
+"""Whether to add space on either side of the spacer, boolean"""
+dsiShoutout = False
+"""Whether to add a shoutout to DSI at the end of the details section, boolean"""
+# uses "default" options (most of these shouldn't get accessed if SHAA isn't enabled anyway, but some do)
 
 
 # Detail Field Options #
 detailOptions = ["hours", "minutes", "seconds", "volume", "repeat", "shuffle", "cycle",
                  "Hours", "Minutes", "Seconds", "Volume", "Repeat", "Shuffle", "Cycle"]
 """All possible choices for detail field (hours) that doesn't include custom string"""
-
-# Picture Queue #
-pictureQueue = queue.Queue()
-"""Creates an empty queue for pictures from picCycler to get sent to"""
-
-# Event Thread #
-songEvent = threading.Event()
-"""Creates an empty threading event list for song"""
-
-picEvent = threading.Event()
-"""Creates an empty threading event list for picturecycler """
-
-spotifyLock = threading.Lock()
-"""Creates a locking method to prevent redundant API calls (or 2 calls at once)"""
-
-# Auth #
-sessionID = requests.Session()
-"""Tells the auth to keep one stable connection, rather than re-connecting every request"""
-
-authorisation = SpotifyOAuth(
-    scope = "user-read-playback-state", 
-    client_id = sp_client_ID, 
-    client_secret = sp_client_secret, 
-    redirect_uri = sp_redirect,
-    cache_path = spCache
-    )
-"""The argument for auth_manager, containing the variables from config + scope of data request"""
-
-main = spotipy.Spotify(auth_manager = authorisation, requests_session = sessionID)
-"""Handles the authentication and user identification"""
 
 # URL List #
 spotifyURLlist = ["track", "Track", "album", "Album", "artist", "Artist", "playlist", "Playlist"]
@@ -429,7 +240,7 @@ totalHours = totalMinutes = totalSeconds = 0
 """Variables for total hours, minutes and seconds"""
 
 oldCount = trackCounter = 0
-"""Variable to track 'song IDs'"""
+"""Variables to track 'song IDs'"""
 
 cycleCount = 0
 """Variable to check the cycle count of hours, minutes and seconds (if enabled)"""
@@ -438,78 +249,839 @@ dsiShoutoutStr = "// Data by DSI"
 """A shoutout string to DSI, disabled by default in config"""
 
 
-### Id Writer ###
 
 
-def idWriter():
-    """Function for writing the ids.txt file"""
-    # these are things the C++ program uses "statically" (they can't change during operation)
-    with open(idDir, "w", encoding="utf-8") as txt:
-    # opens the ids text file
-        content = ("Discord Application ID = " + dc_app_ID + "\n" 
-                   + "Small Image Filename = " + smallPic + "\n" 
-                   + "Album Fallback = " + albumFallback)
-        # makes a string from the relevant config options
-        txt.write(content)
-        # writes the config to file
-        if enableUpdates:
-            print(f"{Time()}[START]: ID file written\n")
-        # writes the string to ids.txt at program launch
 
+### Main Window ###
+
+
+
+class DSI_MainWindow(QMainWindow):
+    """The main window class"""
+    labelSwap = pyqtSignal(str, int)
+    # a pyQt signal to swap the label
+    readyTag = pyqtSignal()
+    # a signal to signal the readiness state of the window
+
+    def __init__(self):
+        super().__init__()
+
+    ### Init / Basic ###
+
+        self.show()
+        # shows the program window (Windows hides by default)
+
+        self.version = DSIver
+        # stores the version in self
+        self.mainIcon = iconPath
+        # the program's main icon
+        self.programName = f"DSI Starter v{self.version}"
+        # stores the program name
+
+        self.windowSizeX = max(1000, int(startApp.primaryScreen().size().width() / 3))
+        self.windowSizeY = max(600, int(startApp.primaryScreen().size().height() / 3))
+        # base window sizes (min of 1000 pixels ~33% of the main monitor's width and height)
+
+    ### Basic Window Setup ###
+
+        self.setWindowTitle(self.programName)
+        # the window title
+        self.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
+        self.setMinimumSize(QSize(self.windowSizeX, self.windowSizeY))
+        # the window size
+
+    ### UI Elements ###
+
+        self.container = QWidget()
+        # a container to hold elements
+        self.mainLayout = QGridLayout()
+        # new grid layout to put elements into
+        self.mainLayout.setSpacing(20)
+        # sets spacing of 20px to each
+
+        self.mainLayout.setRowMinimumHeight(0, 50)
+        self.mainLayout.setRowMinimumHeight(1, 50)
+        self.mainLayout.setRowMinimumHeight(2, 100)
+        self.mainLayout.setRowMinimumHeight(3, 50)
+        self.mainLayout.setRowMinimumHeight(4, 50)
+        # sets the minimum height for rows
+
+        self.mainLayout.setColumnMinimumWidth(0, 100)
+        self.mainLayout.setColumnMinimumWidth(1, 200)
+        self.mainLayout.setColumnMinimumWidth(2, 300)
+        self.mainLayout.setColumnMinimumWidth(3, 200)
+        self.mainLayout.setColumnMinimumWidth(4, 100)
+        # sets the minimum width for columns
+
+        self.mainLayout.setColumnStretch(0, 0)
+        self.mainLayout.setColumnStretch(1, 1)
+        self.mainLayout.setColumnStretch(3, 1)
+        self.mainLayout.setColumnStretch(4, 0)
+        self.mainLayout.setColumnStretch(2, 1)
+        # allows columns 1, 2 and 3 (center) to stretch
+        self.mainLayout.setRowStretch(2, 1)
+        # allows row 2 (center) to stretch
+
+        self.container.setLayout(self.mainLayout)
+        # sets the container to use layout
+
+        self.mainLabel = QLabel()
+        # a label to hold the main information about current process
+        self.mainLabel.setText("DSI starter window")
+        # initial text
+        self.mainLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # centers the label
+        self.mainLabel.setWordWrap(True)
+        # makes the text wrap if it's too big
+        self.mainLabel.setFixedSize(300, 50)
+        # tells the label to prefer the main layout's size
+        self.mainLayout.addWidget(self.mainLabel, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the label to the main layout (should be top, always)
+
+    ### Hideable/Showable Elements ###
+
+        self.userInputField = QLineEdit()
+        # creates a new QLineEdit for user to input into
+        self.userInputField.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # alings to center
+        self.userInputField.setFixedSize(300, 30)
+        # sets size
+        self.mainLayout.addWidget(self.userInputField, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the qline to layout (row 1, col 0)
+        self.userInputField.hide()
+        # hides by default
+
+        self.submitButton = QPushButton("Submit")
+        # makes a new button to save the iput
+        self.submitButton.setFixedSize(60, 35)
+        # sets size
+        self.mainLayout.addWidget(self.submitButton, 2, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+        # adds the button to layout (row 2, col 3)
+        self.submitButton.hide()
+        # hides by default
+
+    ### Intermediary ###
+
+        self.setCentralWidget(self.container)
+        # sets the container to fill the window
+        self.labelSwap.connect(self.changeLabel)
+        # connects the label swap signal to the change label function
+        self.readyTag.connect(startStart)
+        # connects the ready tag to the program logic starter
+
+    ### Line "Storage" ###
+
+        self.multiLabel = False
+        # sets the multi-string label to false to begin with
+        self.lines = deque(maxlen = 15)
+        # creates a "deque" to hold a max of 15 items (strings)
+
+    ### Run Arguments ###
+
+        self.requiredItemCheck()
+        # runs the required items function to check IDs
+
+### Label Changer ###
+
+    def changeLabel(self, text: str, msgType: int):
+        """Function to change the passed label"""
+        if timestampStyle != "off":
+        # ensures the option isn't off or empty
+            time = (self.Time() + "\n")
+        # stores the time string with a spacer
+        else:
+        # if it is
+            time = ""
+            # stores empty string
+
+        if msgType == 0:
+        # type 0 is "all ok"
+            None
+            # doesn't do anything to the message
+        elif msgType == 1:
+        # type 1 is "required"
+            text = f"{time}{text}"
+            # adds the timestamp (if enabled)
+        elif msgType == 2 or msgType == 3:
+        # type 2 is "error", 3 is "song-related"
+            text = f"\n{time}{text}"
+            # adds a new line before
+        elif msgType == 4:
+        # type 4 is critical error
+            text = f"\n\nCRITICAL ERROR\n{time}{text}\n\n"
+            # adds a lot of space to ensure attention
+
+        if self.multiLabel:
+        # if the boolean for multi-labeling (several lines at once) is enabled (the program has reached startup)
+            self.lines.append(text)
+            # adds the line to the deque of lines
+            fullString = ("\n".join(self.lines))
+            # joins the lines together by newlines
+            self.mainLabel.setText(f"{fullString}")
+            # sets the text to match
+        else:
+        # if the boolean is off
+            self.mainLabel.setText(f"{text}")
+            # sets the passed label's text to the passed text string
+
+### Window Closer ###
+
+    def stopper(self):
+        """A function to close the window"""
+        self.close()
+        # just closes the window (stops blocking the main program flow)
+
+### Required Stuff Grab ###
+
+    def requiredItemCheck(self):
+        """A function to check required items (IDs, etc)"""
+        global secretConfig
+        # global -> local
+
+        if os.path.exists(secretConfigPath):
+        # if the "secret" configuration file does exist
+            try:
+            # tries to read the config file (try because it could fail)
+                with open(secretConfigPath, "r", encoding="utf-8") as scrtCfg:
+                # opens the SHAA config
+                    secretConfig = json.load(scrtCfg)
+                    # stores the loaded config
+                    self.requiredItemGrab()
+                    # calls the next stage
+            except:
+            # if the file can't be found/opened
+                self.requiredItemsFail(2)
+                # calls the fail function to reconstruct
+        else:
+        # if the file doesn't exist
+            self.requiredItemsFail(1)
+            # calls the fail function to reconstruct
+
+    def requiredItemGrab(self):
+        """A function to grab and push the required items, when they're found"""
+        global sp_client_ID, sp_client_secret, sp_redirect, dc_app_ID
+        # global -> local
+
+        try:
+        # tries to grab the IDs and such
+            sp_client_ID = secretConfig["Spotify_Client_ID"]
+            sp_client_secret = secretConfig["Spotify_Client_Secret"]
+            sp_redirect = secretConfig["Spotify_Redirect_URI"]
+            dc_app_ID = secretConfig["Discord_Application_ID"]
+            # updates all the global variables
+            self.labelSwap.emit("All required items loaded successfully, proceeding...", 0)
+            # user update
+            self.configRun()
+            # moves to next stage
+        except:
+        # if it fails (something's wrong with the file/input)
+            self.requiredItemsFail(2)
+            # calls the fail function to reconstruct
+
+    def requiredItemsFail(self, state):
+        """A function to handle missing required items (re-input)"""
+        global secretConfig, sp_client_ID, sp_client_secret, sp_redirect, dc_app_ID
+        # global -> local
+
+        if state == 1:
+        # state 1 is no file exists (first time or deleted file)
+            self.labelSwap.emit("No required config found, please enter required information:", 0)
+            # user inform
+
+            sp_client_ID = self.requiredItemInput("sp_Client_ID")
+            secretConfig["Spotify_Client_ID"] = sp_client_ID
+            # stores the client ID 
+
+            sp_client_secret = self.requiredItemInput("sp_client_secret")
+            secretConfig["Spotify_Client_Secret"] = sp_client_secret
+            # stores the client secret
+
+            sp_redirect = self.requiredItemInput("sp_redirect")
+            secretConfig["Spotify_Redirect_URI"] = sp_redirect
+            # stores the redirect URL
+
+            dc_app_ID = self.requiredItemInput("dc_app_ID")
+            secretConfig["Discord_Application_ID"] = dc_app_ID
+            # stores the discord application ID
+
+            # calls the required item input to construct a UI with input, stores return
+            
+        elif state == 2:
+        # state 2 is the file has an issue, but exists (missing info?)
+            try:
+            # tries to read the config file (try because it could fail)
+                with open(secretConfigPath, "r", encoding="utf-8") as scrtCfg:
+                # opens the SHAA config
+                    secretConfig = json.load(scrtCfg)
+                    # stores the loaded config
+            except:
+            # if it can't open the file
+                None
+                # does nothing, because the map remains empty
+
+            try:
+            # tries to grab the item from stored config
+                sp_client_ID = secretConfig["Spotify_Client_ID"]
+            except:
+            # if it can't
+                sp_client_ID = self.requiredItemInput("sp_Client_ID")
+                # calls the input field to grab a new one instead
+                secretConfig["Spotify_Client_ID"] = sp_client_ID
+                # stores the client ID 
+            try:
+            # tries to grab the item from stored config
+                sp_client_secret = secretConfig["Spotify_Client_Secret"]
+            except:
+                sp_client_secret = self.requiredItemInput("sp_client_secret")
+                # calls the input field to grab a new one instead
+                secretConfig["Spotify_Client_Secret"] = sp_client_secret
+                # stores the client secret
+            try:
+            # tries to grab the item from stored config
+                sp_redirect = secretConfig["Spotify_Redirect_URI"]
+            except:
+                sp_redirect = self.requiredItemInput("sp_redirect")
+                # calls the input field to grab a new one instead
+                secretConfig["Spotify_Redirect_URI"] = sp_redirect
+                # stores the redirect URL
+
+            try:
+            # tries to grab the item from stored config
+                dc_app_ID = secretConfig["Discord_Application_ID"]
+            except:
+                dc_app_ID = self.requiredItemInput("dc_app_ID")
+                # calls the input field to grab a new one instead
+                secretConfig["Discord_Application_ID"] = dc_app_ID
+                # stores the discord application ID
+
+        self.userInputField.hide()
+        self.submitButton.hide()
+        # hides the button and input field once done
+
+        with open(secretConfigPath, "w", encoding="utf-8") as scrtCfg:
+        # opens the secret config/makes new one
+            json.dump(secretConfig, scrtCfg, indent=3)
+            # saves the config to file
+
+        self.labelSwap.emit("Required items stored successfully, proceeding...", 0)
+        # user update
+
+        self.configRun()
+        # moves to next stage
+
+    def requiredItemInput(self, field):
+        """Function to prompt user for a required item"""
+
+        self.userInputField.setText("")
+        # clears the text
+
+        if field == "sp_Client_ID":
+        # if the requested field is spotify client id
+            fieldString = "Spotify Client ID"
+            # forms a user-readable string
+
+        elif field == "sp_client_secret":
+        # if the requested field is
+            fieldString = "Spotify Client Secret"
+            # forms a user-readable string
+
+        elif field == "sp_redirect":
+        # if the requested field is
+            fieldString = "Spotify Redirect URI"
+            # forms a user-readable string
+
+        elif field == "dc_app_ID":
+        # if the requested field is discord app id
+            fieldString = "Discord Application ID"
+            # forms a user-readable string
+
+        self.labelSwap.emit(f"Please enter your {fieldString}", 1)
+        # sets the label to request for the passed info
+
+        self.userInputField.show()
+        # unhides the input field
+        self.userInputField.setPlaceholderText(fieldString)
+        # sets the field string to be placeholder (background) text for the input
+        self.submitButton.show()
+        # shows the submit button
+
+        inputLoop = QEventLoop()
+        # creates a pyqt event loop
+        self.submitButton.clicked.connect(inputLoop.quit)
+        # connects the submit button to stop the loop
+        inputLoop.exec()
+        # runs until the button is pressed
+
+        userInputTemp = self.inputGrabber()
+        # calls the input grabber to get the text from the input field
+        userInput = userInputTemp.strip()
+        # removes potential whitespace at start/end
+
+        if userInput == "" or userInput == None:
+        # if the returned user input field is empty
+            self.labelSwap.emit(f"{fieldString} can't be empty", 2)
+            # user inform
+        else:
+        # if there's something
+            return userInput
+            # returns to calling function
+
+    def inputGrabber(self):
+        """Function to grab the user input field text and return it"""
+        return self.userInputField.text()
+        # just grabs the text from the user input field and returns it
+
+### UI Class -> Config ###
+
+    def configRun(self): 
+        """Function to run the configuration window(s)"""
+        global jsonConfig, shaaConfig, disableShaa, skipConfigWindow
+        # global -> local
+
+        if os.path.exists(dsiConfigPath):
+        # checks if the config already exists (not first time) and the skipping is enabled
+            self.labelSwap.emit("Found configuration, reading...", 0)
+            # user update
+            try:
+            # tries to open the json file
+                with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+                # opens the config file in read mode
+                    jsonConfig = json.load(jsCfg)
+                    # stores the loaded json file as jsonConfig
+            except Exception as err:
+            # if there's an error
+                self.labelSwap.emit(f"Error reading the configuration file: {err}", 2)
+                # user inform
+
+            try:
+            # tries to read the config
+                skipCfgWin = jsonConfig["disableCfgWin"]
+                # whether to prompt user with config window or not, boolean
+                self.labelSwap.emit("Configuration found and skipping is enabled, proceeding...", 0)
+                # user update
+            except:
+            # if it can't be read
+                skipCfgWin = False
+                # sets to true if it can't be grabbed
+                self.labelSwap.emit("Could not skip config...", 0)
+                # user update
+        else:
+        # if the config file doesn't exist
+            skipCfgWin = False
+            # sets the config to false
+            
+        if not skipCfgWin:
+        # if the file doesn't exist or config needs to be rechecked
+            dsiConfig = subprocess.run([dsiConfigWindow], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            # runs the dsi configurator (as blocking), continues task once it's done writing config
+            if not dsiConfig.returncode == 1:
+            # checks if the return code isn't 1 (0 is bad, 1 is good)
+                self.labelSwap.emit(f"Configuration complete, proceeding...", 0)
+                # sends the return code
+
+
+        if os.path.exists(shaaConfigPath):
+        # if the shaa configuration file does exist
+            try:
+            # tries to read the SHAA config file (try because it's not necessary, can be skipped)
+                with open(shaaConfigPath, "r", encoding="utf-8") as shaaCfg:
+                # opens the SHAA config
+                    shaaConfig = json.load(shaaCfg)
+                    # stores the loaded 
+                    disableShaa = False
+                    # keeps shaa enabled
+                    self.labelSwap.emit("SHAA successfully detected, enabling SHAA...", 0)
+                    # user update
+            except:
+            # if the file can't be found/opened
+                disableShaa = True
+                # disables SHAA-related functions
+                self.labelSwap.emit("SHAA not installed (successfully), skipping...", 0)
+                # user update
+        else:
+        # if the file doesn't exist
+            disableShaa = True
+            # disables SHAA-related functions
+            self.labelSwap.emit("SHAA not installed, skipping...", 0)
+            # user update
+
+        QTimer.singleShot(1500, self.mainConfigLoad)
+        # runs the next stage
+
+### Config Load ###
+    
+    def mainConfigLoad(self):
+        """Function that loads and stores the config options"""
+        global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors, enableMapping, timestampStyle, startTime
+        # global -> local
+
+        refreshTime = jsonConfig["refreshTime"]
+        # grabs the refresh time from config
+
+        if refreshTime < 2:
+        # if the refresh time is set too low
+            refreshTime = 2
+            # overrides to safe minimum of 2s  
+
+        enablePause = jsonConfig["enablePause"]
+        pauseStateText = jsonConfig["pauseText"]
+        enableUpdates = jsonConfig["printUpdates"]
+        enableErrors = jsonConfig["printErrors"]
+        enableMapping = jsonConfig["enableURI"]
+        timestampStyle = jsonConfig["clockStyle"]
+        # loads all options from config
+
+        self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
+        # user update
+        QTimer.singleShot(1500, self.customConfigLoad)
+        # runs the next stage
+
+    def customConfigLoad(self):
+        """Function that loads and stores the customisation config options"""
+        global smallURL, spotifyURL, songNameSpacerL, songNameSpacerR, preText, postText, enableSong, enableArtist, enableAlbum, albumFallback, picCycleList
+        # global -> local
+
+        smallURL = jsonConfig["smallPicURL"]
+        if not smallURL:
+        # if the smallURL is empty
+            smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
+            # shameless plug <3 (only applies if there's no defined URL)
+        spotifyURL = jsonConfig["spotifyURLType"]
+        songNameSpacerL = jsonConfig["spacerL"]
+        songNameSpacerR = jsonConfig["spacerR"]
+        preText = jsonConfig["preText"]
+        postText = jsonConfig["postText"]
+        enableSong = jsonConfig["enableSong"]
+        enableArtist = jsonConfig["enableArtist"]
+        enableAlbum = jsonConfig["enableAlbum"]
+        albumFallback = jsonConfig["albumFallback"]
+        picCycleList = jsonConfig["pictureCycleType"]
+        # grabs each option from config, loads into global var
+
+        self.labelSwap.emit("Customisation configurations loaded, proceeding...", 0)
+        # user update
+        QTimer.singleShot(1500, self.finalConfigLoad)
+        # runs the next stage
+
+    def finalConfigLoad(self):
+        """Function that loads the last part of the config"""
+        global picCycleList, picCycleTime, picCycleType, smallPic, hoverText
+
+        if picCycleList == "File":
+        # checks if the config option is set to "File"
+            picCycleList = []
+            # empties the variable 
+            with open(picDir, "r", encoding="utf-8") as file:
+            # opens the pictureList.txt file
+                for pics in file:
+                # for every picture (line) in the file
+                    pic = pics.strip()
+                    # stores one line
+                    if pic.startswith("#") or not pic:
+                    # if the line starts with # (meaning it's a comment line) or it's empty
+                        continue
+                        # skips that line and goes to next one
+                    picCycleList.append(pic)
+                    # adds the picture to the list
+            if enableUpdates:
+            # if the update config option is enabled
+                self.labelSwap.emit("Picture list loaded from file", 0)
+                # user update
+        else:
+        # if the list is on Spotify (or empty), doesn't modify it
+            None
+
+        picCycleTime = jsonConfig["pictureCycleTime"]
+        try:
+        # tries to turn the time into minutes (ensures integer type, multiplies by 60)
+            picCycleTime = (int(picCycleTime) * 60)
+        except:
+        # if it can't, leaves it alone (should be the case when it's set to "Song")
+            None
+
+        picCycleType = jsonConfig["pictureCycleBehavior"]
+        smallPic = jsonConfig["smallPic"]
+        hoverText = jsonConfig["smallPicHover"]
+        # loads last settings
+
+        QTimer.singleShot(500, self.shaaConfigLoad)
+        # calls the shaa config loader
+
+### SHAA Config Load ###
+
+    def shaaConfigLoad(self):
+        """Function to load and store the SHAA config options"""
+        global songInfoField1, songInfoField2, shaaFallbackTotal, shaaFallback, shaaInfoDetails, songInfoFallback
+        global songInfoFormatPlays, songInfoSpacer, songInfoFormatMins, songInfoFormatTextFirst, songInfoFormatDetails
+        global songInfoFormatDetailsSpacer, songInfoDetailsDoubleSpace, dsiShoutout
+        # a lot of global -> local
+
+        if not disableShaa:
+        # if the SHAA-related stuff isn't disabled
+
+            songInfoField1 = shaaConfig["songInfoField1"]
+            songInfoField2 = shaaConfig["songInfoField2"]
+            shaaFallbackTotal = shaaConfig["songInfoFallbackTotal"]
+            if shaaFallbackTotal:
+            # if the fallback total usage is enabled
+                shaaFallback = "Total"
+                # sets the string to "Total"
+            else:
+                shaaFallback = shaaConfig["songInfoFallbackText"]
+                # gets the custom string from the shaa config
+
+            shaaInfoDetails = shaaConfig["songInfoDetails"]
+            if shaaInfoDetails == "Custom":
+            # if the details field is set to custom
+                shaaInfoDetails = shaaConfig["songInfoDetailsText"]
+                # uses the custom string from the config
+                songInfoFallback = ""
+                # uses empty string (custom string defined above)
+            else:
+            # if the field isn't custom, uses "total" as an additional string
+                songInfoFallback = "total"
+                
+            songInfoFormatPlays = shaaConfig["songInfoFormatPlays"]
+            songInfoSpacer = shaaConfig["songInfoFormatSpacer"]
+            songInfoFormatMins = shaaConfig["songInfoFormatMins"]
+            songInfoFormatTextFirst = shaaConfig["songInfoDetailsTextFirst"]
+            songInfoFormatDetails = shaaConfig["songInfoDetailsText"]
+            songInfoFormatDetailsSpacer = shaaConfig["songInfoDetailsSpacer"]
+            songInfoDetailsDoubleSpace = shaaConfig["songInfoDetailsDoubleSpace"]
+            dsiShoutout = shaaConfig["dsiShoutout"]
+
+        else:
+        # if the disableShaa is set to True
+            None
+            # does nothing, because those settings are already set above
+
+        QTimer.singleShot(1500, self.updateWarning)
+        # calls the next stage (warnings regarding missing debug)
+
+### Update Prints ###
+
+    def updateWarning(self):
+        if not enableUpdates:
+        # if console printing is disabled in config
+            self.labelSwap.emit("Update logging disabled in config", 0)
+            # user update
+            QTimer.singleShot(1000, self.errorWarning)
+            # calls the error warning function
+        else:
+            self.errorWarning()
+            # calls the error warning function
+
+### Error Prints ###
+
+    def errorWarning(self):
+        if not enableErrors:
+        # if error printing is disabled in config
+            self.labelSwap.emit("Error logging disabled in config", 0)
+            # user update
+            QTimer.singleShot(1500, self.idWriter)
+            # calls the next stage (id writer)
+        else:
+            self.idWriter()
+            # calls the next stage (id writer)
+
+### Time String ###
+
+    def Time(self):
+        """Function that returns the time formatted"""
+        if timestampStyle == "Uptime":
+            # if the config option is set to uptime
+            currentTime = int(datetime.datetime.now().timestamp())
+            # takes the current time when Time() is called
+            uptime = currentTime - startTime
+            # calculates the seconds apart between current and startup time
+            uptimeHr, remainderHr = divmod(uptime, 3600)
+            # takes the hours and the remainders
+            uptimeMin, uptimeSec = divmod(remainderHr, 60)
+            # takes the minutes and seconds from the remainders
+            uptimeStr = ("{:02}:{:02}:{:02}".format(int(uptimeHr), int(uptimeMin), int(uptimeSec)))
+            # the uptime of the program, format of HH:MM:SS
+            return (uptimeStr + " ")
+            # shortens the call to system uptime, adds empty space
+
+        elif timestampStyle == "System Time":
+            # if the config option is set to clock
+            return (datetime.datetime.now().strftime("%H:%M:%S") + " ")
+            # shortens the call to current system timestamp, adds empty space
+
+        else:
+            # if the config option is set to something else, reads as off (thus doesn't add anything)
+            return ""
+        
+### ID Writer ###
+
+    def idWriter(self):
+        """Function for writing the ids.txt file"""
+        # these are things the C++ program uses "statically" (they can't change during operation)
+        with open(idDir, "w", encoding="utf-8") as txt:
+        # opens the ids text file
+            content = ("Discord Application ID = " + dc_app_ID + "\n" 
+                    + "Small Image Filename = " + smallPic + "\n" 
+                    + "Album Fallback = " + albumFallback)
+            # makes a string from the relevant config options
+            txt.write(content)
+            # writes the config to file
+            if enableUpdates:
+            # if updates are enabled
+                self.labelSwap.emit("Updated ID file for Discord...", 0)
+            # writes the string to ids.txt at program launch
+
+        if not disableShaa:
+        # if SHAA is installed
+            QTimer.singleShot(2000, self.timeGrabber)
+            # calls the next stage (timeGrabber)
+        else:
+            QTimer.singleShot(1000, self.readyStateReadier)
+            # skips timeGrabber
 
 ### Total Time Grabber ###
 
+    def timeGrabber(self):
+        """Function that grabs the total time counts from totalTimes.txt file"""
+        global totalHours, totalMinutes, totalSeconds
+        # global -> local
+        self.labelSwap.emit("Grabbing total times from file...", 0)
+        # user update
 
-def timeGrabber():
-    """Function that grabs the total time counts from totalTimes.txt file"""
-    if os.path.isfile(timeDir):
-    # checks if the totalTimes.txt file exists
-        with open(timeDir, "r") as times:
-        # if yes, opens the file
-            global totalHours, totalMinutes, totalSeconds
-            # grabs total time variables from global
-            totalTimes = times.readlines()
-            # stores the total times from the file
-            counter = 0
-            # keeps a counter to check line number
-            for line in totalTimes:
-            # checks all lines in the file
-                if "=" in line:
-                # if "=" is present in the line
-                    x, number = line.split("= ", 1)
-                    # strips and splits the line, stores both sides
-                    if counter == 0:
-                        totalHours = number.strip()
-                    elif counter == 1:
-                        totalMinutes = number.strip()
-                    elif counter == 2:
-                        totalSeconds = number.strip()
-                    # checks line number and saves the appropriate variable 
-                    counter += 1
-                    # adds 1 to move to next variable next cycle
-            try:
-            # tries to convert the strings to floats
-                totalHours = float(totalHours)
-                totalMinutes = float(totalMinutes)
-                totalSeconds = float(totalSeconds)
-                # turns the strings into floats
-                totalHours = (f"{totalHours:,.2f}")
-                totalMinutes = (f"{totalMinutes:,.0f}")
-                totalSeconds = (f"{totalSeconds:,.0f}")
-                # turns the floats into formatted strings (2 decimal points for hours, 0 for the other two)
-                if enableUpdates:
-                    print(f"{Time()}[SHAA]: Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds")
-                    # prints the total times at start
+        if os.path.isfile(timeDir):
+        # checks if the totalTimes.txt file exists
+            with open(timeDir, "r") as times:
+            # if yes, opens the file
+                totalTimes = times.readlines()
+                # stores the total times from the file
+                counter = 0
+                # keeps a counter to check line number
+                for line in totalTimes:
+                # checks all lines in the file
+                    if "=" in line:
+                    # if "=" is present in the line
+                        x, number = line.split("= ", 1)
+                        # strips and splits the line, stores both sides
+                        if counter == 0:
+                            totalHours = number.strip()
+                        elif counter == 1:
+                            totalMinutes = number.strip()
+                        elif counter == 2:
+                            totalSeconds = number.strip()
+                        # checks line number and saves the appropriate variable 
+                        counter += 1
+                        # adds 1 to move to next variable next cycle
+                try:
+                # tries to convert the strings to floats
+                    totalHours = float(totalHours)
+                    totalMinutes = float(totalMinutes)
+                    totalSeconds = float(totalSeconds)
+                    # turns the strings into floats
+                    totalHours = (f"{totalHours:,.2f}")
+                    totalMinutes = (f"{totalMinutes:,.0f}")
+                    totalSeconds = (f"{totalSeconds:,.0f}")
+                    # turns the floats into formatted strings (2 decimal points for hours, 0 for the other two)
+                    if enableUpdates:
+                    # if updates are enabled
+                        self.labelSwap.emit(f"Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds", 0)
+                        # prints the total times at start
 
-            except:
-            # if the float conversion fails for some reason
-                print(f"{Time()}[SHAA]: Error reading the total time file - total times not set")
-        times.close()
-        # closes the file
-    else:
-    # if the file for SHA doesn't exist
-        None
-        # there's already a print informing about non-SHAA installation later
+                except:
+                # if the float conversion fails for some reason
+                    self.labelSwap.emit(f"Error reading totalTimes.txt file - total times not set...", 2)
+                    # user update on error
+            times.close()
+            # closes the file
+        else:
+        # if the file for SHA doesn't exist
+            if not disableShaa:
+            # if SHAA isn't disabled
+                self.labelSwap.emit("Could not find totalTimes.txt file, please ensure proper SHAA installation...", 2)
+                # there's already a print informing about non-SHAA installation later
+
+        QTimer.singleShot(2500, self.readyStateReadier)
+        # calls the next stage 
+
+### Ready State Setter ###
+
+    def readyStateReadier(self):
+        """Function that finalizes the window class' progress"""
+        self.multiLabel = True
+        # sets the boolean to true, allowing further "prints" to utilise more than 1 line of output
+        self.setWindowTitle(f"Discord Spotify Integration v{self.version}")
+        # sets a new title (starter -> real)
+
+        self.userInputField.deleteLater()
+        self.submitButton.deleteLater()
+        # deletes the now useless buttons
+
+        self.mainLayout.removeWidget(self.mainLabel)
+        # removes the main label widget
+
+        self.mainLabel.setMinimumSize(500, 600)
+        # sets minimum sizes for the label (overrides the previous fixed size)
+
+        self.mainLayout.addWidget(self.mainLabel, 0, 2, 5, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the label back, but in the middle of the screen (spans all 5 rows)
+
+        self.mainLayout.setColumnMinimumWidth(0, 20)
+        self.mainLayout.setColumnMinimumWidth(1, 20)
+        self.mainLayout.setColumnMinimumWidth(2, 500)
+        self.mainLayout.setColumnMinimumWidth(3, 20)
+        self.mainLayout.setColumnMinimumWidth(4, 20)
+        # sets the minimum width for columns
+
+        self.setMinimumSize(620, 650)
+        # sets new minimum sizes for window
+
+        self.readyTag.emit()
+        # sends a signal to the ready tag to allow progress
+
+
+
+
+
+### Global Objects ###
+
+
+
+pictureQueue = queue.Queue()
+"""An empty queue for pictures from picCycler to get sent to"""
+
+songEvent = threading.Event()
+"""An empty threading event list for song"""
+
+picEvent = threading.Event()
+"""An empty threading event list for picturecycler """
+
+spotifyLock = threading.Lock()
+"""A locking method to prevent redundant API calls (or 2 calls at once)"""
+
+sessionID = requests.Session()
+"""Tells the auth to keep one stable connection, rather than re-connecting every request"""
+
+authorisation = None
+"""The argument for auth_manager, containing the variables from config + scope of data request"""
+
+main = None
+"""Handles the authentication and user identification"""
+
+def eventer():
+    """Function that reassigns the required global objects"""
+    global authorisation, main
+    # grabs the global variables for the spotify auth
+
+    authorisation = SpotifyOAuth(
+        scope = "user-read-playback-state", 
+        client_id = sp_client_ID, 
+        client_secret = sp_client_secret, 
+        redirect_uri = sp_redirect,
+        cache_path = spCache
+        )
+    # this assignment can only be made *after* the client UI window runs (because that handles the config -> global var)
+
+    main = spotipy.Spotify(auth_manager = authorisation, requests_session = sessionID)
+    # same deal with this
 
 
 
@@ -540,12 +1112,12 @@ def authPlayback():
 
                 if attempt != 0 and enableErrors and not tokenRefresh:
                     # if it's not the first attempt, meaning the reconnect attempt print has already been pushed once
-                    print(f"{Time()}[INFO]: Reconnect successful!")
+                    mainWin.labelSwap.emit("Reconnect successful!", 0)
                     # prints user update
 
                 elif enableErrors and tokenRefresh:
                     # if the tokenrefresh variable is set to true, that means a connectionerror occurred at least once
-                    print(f"{Time()}[INFO]: Token refreshed successfully!")
+                    mainWin.labelSwap.emit("Token refreshed successfully!", 0)
                     # prints user update
 
                 return success
@@ -565,7 +1137,7 @@ def authPlayback():
 
                     if isinstance(error, requests.exceptions.ConnectionError):
                         # if the error is a connection error (token expired)
-                        print(f"{Time()}[INFO]: Refreshing Spotify token")
+                        mainWin.labelSwap.emit("Refreshing Spotify token", 1)
                         # doesn't sleep because this is a token error and should get "fixed" nearly instantly
                         # expected to print just about every 3600 seconds (1h)
                         tokenRefresh = True
@@ -573,7 +1145,7 @@ def authPlayback():
 
                     elif isinstance(error, requests.exceptions.ReadTimeout):
                         # if the error is a read timeout (sort of random)
-                        print(f"{Time()}[ERROR]: Spotify API timeout, retrying in 5 seconds ({attempt+1}/3)")
+                        mainWin.labelSwap.emit("Spotify API timeout, retrying in 5 seconds ({attempt+1}/3)", 2)
                         time.sleep(2)
                         # sleeps for 2 seconds (because there's a function-wide 3-second cooldown added on top)
 
@@ -581,22 +1153,22 @@ def authPlayback():
                         # if the error is due to a rate limit (429 error code from Spotify)
                         retryTimer = error.headers.get("Retry-After", 5)
                         # gets the retry cooldown timer (or 5, if none is found)
-                        print(f"{Time()}[WARN]: This application is being rate limited by Spotify, retrying in {retryTimer} ({attempt+1}/3)")
-                        time.sleep(int(retryTimer)-3)
+                        mainWin.labelSwap.emit(f"This application is being rate limited by Spotify, retrying in {retryTimer} ({attempt+1}/3)", 2)
+                        time.sleep(int(retryTimer) - 3)
                         # sleeps for the duration of retryTimer-3 seconds (because there's a function-wide 3-second cooldown added on top)
 
                     elif isinstance(error, SpotifyException) and error.http_status == 500:
                         # if the error is 500 (internal error fail)
-                        print(f"{Time()}[ERROR]: Spotify internal error (Code 500). Attempting to reconnect ({attempt+1}/3)]")
+                        mainWin.labelSwap.emit(f"Spotify internal error (Code 500). Attempting to reconnect ({attempt+1}/3)]", 2)
                         # should never happen, but very very rarely does
 
                     else:
                         # if the error is anything else
-                        print(f"{Time()}[ERROR]: Spotify errored due to {error}.\n{Time()}[INFO]: Attempting to reconnect ({attempt+1}/3)")
+                        mainWin.labelSwap.emit(f"Spotify errored due to {error}.\nAttempting to reconnect ({attempt+1}/3)", 2)
 
                 if attempt == 2:
                     # if it's the last attempt (range(3) = 0,1,2) and it fails
-                    print(f"{Time()}[CRITICAL]: All attempts to reconnect failed due to {error}\nPlease manually restart DSI. Exiting...")
+                    mainWin.labelSwap.emit(f"All attempts to reconnect failed due to {error}\nPlease manually restart DSI. Exiting...", 4)
                     time.sleep(60)
                     raise SystemExit
                     # prompts user, then exits
@@ -609,55 +1181,71 @@ def authPlayback():
 ### SHA(A) Check ### 
 
 
-if os.path.isfile(SHAAdir) and not disableShaa:
-# if the grouped.csv file exists and SHAA-functionality isn't disabled
-    print(f"{Time()}[SHAA]: Spotify Analyser functionality enabled\n")
-    # informs user SHAA is enabled
-    csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
-    # opens the CSV file and uses utf-8 encoding to ensure compatibility
-    csvReader = csvReader.set_index("URI")
-    # sets the track URL as the index
 
-    if os.path.exists(noURIdir):
-        # checks if the uri file (uriList.json) exists
-        with open(noURIdir, "r", encoding="utf-8") as URIs:
-            # loads the JSON file of URIs
-            uriList = json.load(URIs)
-            # stores the loaded file as uriList
-            if enableUpdates and enableMapping:
-            # if the user prints and mapping options are enabled
-                uriLength = len(uriList)
-                # stores the length of the unmapped URI list
-                print(f"{Time()}[SHAA]: {uriLength} URIs stored")
-                # debug-ish list (if using the URI mapper)
-    else:
-    # if file doesn't exist
-        uriList = []
-        # creates a new, empty list
+def shaaCheck():
+    """Function that loads CSV stuff related to the SHA(A)"""
+    global uriList, csvReader, uriMap
+    # loads globals to manipulate
 
-    if os.path.exists(uriDir):
-    # checks if the URI map file (uriMap.json) exists
-        with open(uriDir) as maps:
-        # loads the URI map file
-            uriMap = json.load(maps)
-            # stores the loaded file as uriMap
-            if enableUpdates and enableMapping:
-            # if the user prints and mapping options are enabled
-                uriMLength = len(uriMap)
-                # stores the length of the mapped URIs
-                print(f"{Time()}[SHAA]: {uriMLength} URIs mapped")
-                # user inform
-    else:
-    # if the file doesn't exist
-        uriMap = {}
-        # creates a new, empty list
+    if os.path.isfile(SHAAdir) and not disableShaa:
+    # if the grouped.csv file exists and SHAA-functionality isn't disabled
+        mainWin.labelSwap.emit("Spotify Analyser (Addon) functionality enabled", 0)
+        # informs user SHAA is enabled
+        csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
+        # opens the CSV file and uses utf-8 encoding to ensure compatibility
+        csvReader = csvReader.set_index("URI")
+        # sets the track URL as the index
+
+        if os.path.exists(noURIdir):
+            # checks if the uri file (uriList.json) exists
+            with open(noURIdir, "r", encoding="utf-8") as URIs:
+                # loads the JSON file of URIs
+                uriList = json.load(URIs)
+                # stores the loaded file as uriList
+                if enableUpdates and enableMapping:
+                # if the user prints and mapping options are enabled
+                    uriLength = len(uriList)
+                    # stores the length of the unmapped URI list
+                    mainWin.labelSwap.emit(f"{uriLength} URIs stored", 1)
+                    # debug-ish list (if using the URI mapper)
+        else:
+        # if file doesn't exist
+            uriList = []
+            # creates a new, empty list
+
+        if os.path.exists(uriDir):
+        # checks if the URI map file (uriMap.json) exists
+            with open(uriDir) as maps:
+            # loads the URI map file
+                uriMap = json.load(maps)
+                # stores the loaded file as uriMap
+                if enableUpdates and enableMapping:
+                # if the user prints and mapping options are enabled
+                    uriMLength = len(uriMap)
+                    # stores the length of the mapped URIs
+                    mainWin.labelSwap.emit(f"{uriMLength} URIs mapped", 1)
+                    # user inform
+        else:
+        # if the file doesn't exist
+            uriMap = {}
+            # creates a new, empty list
+
+
+
+def uriWriter(URIs: list):
+    """Function that writes the current URI list to file"""
+    with open(noURIdir, "w", encoding="utf-8") as nURI:
+    # opens the unfound URI file in write mode
+        json.dump(URIs, nURI, indent=3)
+        # "dumps" the list of URIs into the file (with indent)
+
 
 
 ### Background Picture Tasker ###
 
 
 
-class Background(threading.Thread):
+class pictureClass(threading.Thread):
     """Background thread for picture selection"""
     # a class to use background tasking, this way the pictures can cycle outside the main song loop
     def __init__(self, picCycleList, picCycleType, picCycleTime, pictureQueue):
@@ -690,7 +1278,7 @@ class Background(threading.Thread):
                 # sets both the running status and the "while" to false
 
                 if enableUpdates:
-                    print(f"{Time()}[PICT]: Selected picture method is Spotify covers, disabling picture cycler")
+                    mainWin.labelSwap.emit("Selected picture method is Spotify covers, disabling picture cycler", 0)
                 break
                 # kills the picture cycler
                 
@@ -714,7 +1302,7 @@ class Background(threading.Thread):
                         self.pictureQueue.put(cppLargeImage)
                         # sends the picture to a queue that then reaches song()
                         if enableUpdates:
-                            print(f"{Time()}[PICT]: Random picture set")
+                            mainWin.labelSwap.emit("Random picture set", 1)
                             # informs user a new picture is set
 
                         if picCycleTime == "song" or picCycleTime == "Song":
@@ -745,7 +1333,7 @@ class Background(threading.Thread):
                             self.pictureQueue.put(cppLargeImage)
                             # sends the picture to a queue that then reaches song()
                             if enableUpdates:
-                                print(f"{Time()}[PICT]: Sequential picture set")
+                                mainWin.labelSwap.emit("Sequential picture set", 1)
                                 # informs user a new picture is set
                             if picCycleTime == "song" or picCycleTime == "Song":
                                 # if the cycle "time" is instead set to "song"
@@ -771,7 +1359,7 @@ class Background(threading.Thread):
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
                     if enableUpdates:
-                        print(f"{Time()}[PICT]: Random picture set")
+                        mainWin.labelSwap.emit("Random picture set", 1)
                     self.running = False
                     False
                     # only sets it once, so it stops the background thread
@@ -783,7 +1371,7 @@ class Background(threading.Thread):
                     self.pictureQueue.put(cppLargeImage)
                     # sends the picture to a queue that then reaches song()
                     if enableUpdates:
-                        print(f"{Time()}[PICT]: Picture set")
+                        mainWin.labelSwap.emit("Picture set", 1)
                     self.running = False
                     False
                     # only sets it once, so it stops the background thread
@@ -795,7 +1383,7 @@ class Background(threading.Thread):
                 self.pictureQueue.put(cppLargeImage)
                 # sends the picture to a queue that then reaches song()
                 if enableErrors:
-                    print(f"{Time()}[PICT]: Invalid picture cycle behavior or no picture set - proceeding without a picture")
+                    mainWin.labelSwap.emit("Invalid picture cycle behavior or no picture set - proceeding without a picture", 1)
                 self.running = False
                 False
                 # doesn't set a picture, doesn't need to - so it stops the background thread
@@ -808,7 +1396,7 @@ class Background(threading.Thread):
 
 def runCpp():
     """Function to run the C++ / Discord RPC program"""
-    with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1) as cppPrint:
+    with subprocess.Popen([cppPath], cwd=cppDir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, creationflags=subprocess.CREATE_NO_WINDOW) as cppPrint:
     # opens the C++ exe, passes the current working directory and takes its output
         if enableUpdates:
         # if user prints are enabled
@@ -818,7 +1406,7 @@ def runCpp():
                 # ensures there's no empty prints
                 if line:
                     # every time the C++ file prints something, this program takes it
-                    print(f"{Time()}[DISC]: {line.rstrip()}")
+                    mainWin.labelSwap.emit(f"{line.rstrip()}", 0)
                     # prints it after a line ends
 
 
@@ -834,6 +1422,7 @@ def song(pictureQueue):
     # pulls some global variables to local
 
     while True:
+    # while the loop is active, keeps repeating
 
         songEvent.wait()
         # waits for looper() to set an event
@@ -1108,32 +1697,25 @@ def song(pictureQueue):
                 if finalURI in csvReader.index:
                 # checks if the URI is on the CSV (this check is just to prevent double prints)
                     if enableUpdates:
-                        print(f"{Time()}[SHAA]: Current song found in CSV")
+                    # if the user updates are enabled
+                        mainWin.labelSwap.emit("Current song found in CSV", 0)
 
                 if finalURI not in uriList:
                 # if the URI is not in the URI list yet
                     if enableUpdates:
-                        print(f"{Time()}[SHAA]: URI not found in list, added to URI list")
+                        mainWin.labelSwap.emit("URI not found in list, added to URI list", 1)
                     uriList.append(finalURI)
                     # adds it to the list of URIs
+                    uriWriter(uriList)
+                    # calls the URI writer with the list
 
                 if finalURI not in csvReader.index and altURI in csvReader.index:
                 # if the URI is not found in the CSV index, but the alt URI is
                     finalURI = altURI
                     # sets the URI to use the alternate instead
                     if enableUpdates:
-                        print(f"{Time()}[SHAA]: URI not found in CSV, but mapped URI was")
-                   
-
-                    with open(noURIdir, "w", encoding="utf-8") as newUri:
-                    # opens the JSON file in write mode
-                        json.dump(uriList, newUri, ensure_ascii=False, indent=2)
-                        # pushes the data from uriList to the JSON file
-
-                    with open(noURIdir, "r", encoding="utf-8") as URIs:
-                    # loads the uri mapping file
-                        uriList = json.load(URIs)
-                        # stores the loaded file as uriList again, now with the new entry
+                    # if the user updates are enabled
+                        mainWin.labelSwap.emit("URI not found in CSV, but mapped URI was", 0)
 
             if finalURI in csvReader.index:
             # checks if the URI is on the CSV  
@@ -1362,7 +1944,7 @@ def song(pictureQueue):
             # if the track wasn't found in CSV
                 if enableUpdates:
                 # if the updates are enabled, lets user know the song wasn't found in CSV
-                    print(f"{Time()}[SHAA]: {csName} not found in CSV, using fallback values")
+                    mainWin.labelSwap.emit(f"{csName} not found in CSV, using fallback values", 1)
                 
                 ### Field 1 / Field 2 ###
 
@@ -1533,7 +2115,7 @@ def song(pictureQueue):
             txt.write(cppFull)
             # writes the full song information to the text file, which is read by the C++ program and then sent to Discord RPC
             if enableUpdates:
-                print(f"{Time()}[INFO]: Song data file updated")
+                mainWin.labelSwap.emit("Song data file updated", 0)
                 # if updates are enabled, prints an update
 
         songEvent.clear()
@@ -1558,7 +2140,7 @@ def looper():
         if not info or not info.get("item"):
             # checks if the info has something and if it can be called
             if enableErrors:
-                print(f"{Time()}[WARN]: No playing state detected, re-checking in 5 seconds\n")
+                mainWin.labelSwap.emit("No playing state detected, re-checking in 5 seconds", 2)
             time.sleep(5)
             # waits for a few seconds
             continue
@@ -1590,7 +2172,7 @@ def looper():
             songEvent.set()
             # since this only runs when the program first starts, sets an event immediately to song, to refresh data
             if enableUpdates:
-                print(f"{Time()}[SONG]: First song: {songName}, has been successfully processed\n")
+                mainWin.labelSwap.emit(f"First song: {songName}, has been successfully processed", 3)
                 # if user wants feedback, sends this
 
         songDur = ((info.get("item")).get("duration_ms")/1000)
@@ -1603,11 +2185,11 @@ def looper():
 
             if enableUpdates and not pauseUpdated:
                 # if console updates are enabled and this change wasn't triggered by a pause
-                print(f"\n{Time()}[SONG]: New song: {songName}, duration: {songDur:,.0f} seconds")
+                mainWin.labelSwap.emit(f"New song: {songName}, duration: {songDur:,.0f} seconds", 3)
                 # user update on new song (makes a new line before itself so it separates tracks)
             elif enableUpdates and pauseUpdated:
                 # if console updates are enabled and this change *was* triggered by a pause
-                print(f"\n{Time()}[SONG]: Unpaused: {songName}")
+                mainWin.labelSwap.emit(f"\nUnpaused: {songName}", 1)
 
             currentURI = songURI
             # changes the internal variable to match new song
@@ -1640,7 +2222,7 @@ def looper():
                 # sets the pause check to True, meaning it has been checked and acted on
                 if enableUpdates:
                     # if user updates are on
-                    print(f"\n{Time()}[SONG]: Paused on: {songName}")
+                    mainWin.labelSwap.emit(f"Paused on: {songName}", 1)
                     # user inform (new line to split from main updates, only prints once anyway)
             sleepfor = refreshTime
             # sets the sleep timer to the config-set refresh time
@@ -1659,7 +2241,7 @@ def looper():
                 
                 if enableUpdates:
                     # only prints update if user config set so *and* the song is about to end
-                    print(f"{Time()}[SONG]: New song in {sleepfor:,.0f} seconds")
+                    mainWin.labelSwap.emit(f"New song in {sleepfor:,.0f} seconds", 0)
                     # user inform on new song coming soon
 
         time.sleep(sleepfor)
@@ -1668,49 +2250,73 @@ def looper():
 
 ### Load Commands ###
 
+def startStart():
+    """The function that starts the starter"""
+    threading.Thread(target=mainStart, daemon=True).start()
+    # runs the runner in a thread
 
-idWriter()
-# runs the idWriter, which writes the ids.txt file
+def mainStart():
+    """The function that starts the actual program logic"""
 
-timeGrabber()
-# runs the hourGrabber, which gets total hours from the hours.txt file
+    shaaCheck()
+    # runs the SHA(A) checker function first, to load global variables
 
-bg = Background(picCycleList, picCycleType, picCycleTime, pictureQueue)
-# defines the background thread as the class containing all the picture function
-# passes the list, type, time and queue
+    eventer()
+    # runs the event reassigner (the spotify authorisation stuff)
 
-bg.start()
-# runs the "background" class, which handles the picture updates
+    bg = pictureClass(picCycleList, picCycleType, picCycleTime, pictureQueue)
+    # defines the background thread as the class containing all the picture function
+    # passes the list, type, time and queue
 
-picThread = threading.Thread(target = bg.picCycler)
-# creates a thread for the picture changer
-picThread.start()
-# starts the picture thread
+    bg.start()
+    # runs the "background" class, which handles the picture updates
 
-songThread = threading.Thread(target = song, args=(pictureQueue,))
-# creates the song thread
-songThread.start()
-# starts the song thread to get updated info
+    picThread = threading.Thread(target = bg.picCycler)
+    # creates a thread for the picture changer
+    picThread.start()
+    # starts the picture thread
 
-cppThread = threading.Thread(target = runCpp)
-# creates a thread for the C++ program to run in - this way it won't stop the main process
+    songThread = threading.Thread(target = song, args=(pictureQueue,))
+    # creates the song thread
+    songThread.start()
+    # starts the song thread to get updated info
 
-if dc_app_ID and sp_client_ID:
-    # if both the Application ID and Spotify Client ID are found
-    print(f"{Time()}[START]: Found Discord Application ID and Spotify Client ID, starting Discord RPC process\n")
-    # user inform
-    time.sleep(3)
-    # waits a couple seconds to make sure all details are set before calling
-    cppThread.start()
-    # starts the C++ thread
-else:
-    # if both aren't found
-    print(f"{Time()}[CRITICAL]: Required fields missing, please enter them in the config.ini file before starting the application! Exiting in 10 seconds...\n")
-    # user inform
-    time.sleep(10)
-    # wait 10 seconds
-    raise SystemExit
-    # end the program, can't really do much without AppID/Spotify Client ID
+    cppThread = threading.Thread(target = runCpp)
+    # creates a thread for the C++ program to run in - this way it won't stop the main process
 
-looper()
-# runs the looper, which manages the song refresh cycles
+    if dc_app_ID and sp_client_ID:
+        # if both the Application ID and Spotify Client ID are found
+        mainWin.labelSwap.emit(f"Found Discord Application ID and Spotify Client ID, starting Discord RPC process", 1)
+        # user inform
+        time.sleep(3)
+        # waits a couple seconds to make sure all details are set before calling
+        cppThread.start()
+        # starts the C++ thread
+    else:
+        # if both aren't found
+        mainWin.labelSwap.emit("Configuration error! Delete the config file if this error persists! Exiting...", 2)
+        # user inform
+        time.sleep(60)
+        # wait 10 seconds
+        raise SystemExit
+        # end the program, can't really do much without AppID/Spotify Client ID
+
+    looper()
+    # runs the looper, which manages the song refresh cycles
+
+
+
+
+
+### Window Start ###
+
+
+
+
+
+startApp = QApplication(sys.argv)
+# base app instance (passes command line arguments)
+mainWin = DSI_MainWindow()
+# creates a window
+startApp.exec()
+# exceutes the app task (runs the QApplication)

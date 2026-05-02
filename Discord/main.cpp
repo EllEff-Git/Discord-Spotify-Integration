@@ -13,7 +13,7 @@
 #include <codecvt>
 
 // version number (y.m.dd.hhmm)
-std::string DSIDver = "v0.3.26.0601";
+std::string DSIDver = "v0.5.2.0342";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -56,6 +56,9 @@ std::string oldSong = "";
 
 // flag to control application run state (starts as true to start running)
 std::atomic<bool> running = true;
+
+// flag to control rich presence update prints
+std::atomic<bool> rpcUpdated = false;
 
 
 
@@ -447,6 +450,16 @@ int main() {
 
                 // updates pauseChanged to false, so it doesn't double-activate
                 pauseChanged = false;
+                // if the update isn't a timer-based one
+                if (!requiredUpdate) {
+                    // updates the rpc update boolean to ensure it only prints once
+                    rpcUpdated = false;
+                }
+                // if the update is based only on the timer
+                else {
+                    // sets the bool to true, so it doesn't double-print
+                    rpcUpdated = true;
+                }
                 // updates requiredUpdate to false, so it doesn't double-activate
                 requiredUpdate = false;
                 // updates the last update timestamp to match system time
@@ -533,8 +546,11 @@ int main() {
 
                     // if it goes through fine
                     if(result.Successful()) {
-                        // updates user
-                        std::cout << "Rich Presence updated\n" << std::endl;
+                        // checks if rpc has been updated already, only prints if not
+                        if (!rpcUpdated) {
+                            // updates user
+                            std::cout << "Rich Presence updated\n" << std::endl;
+                        }
                         // sets the error states both to false, so they can go through next time
                         ::LargeImageFail = false;
                         ::SmallImageFail = false;
@@ -542,7 +558,9 @@ int main() {
                     // if it fails to push user RPC update
                     else { 
                         // prints out the error for debug (likely wrong format or missing filenames, etc)
-                        std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl; 
+                        std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl;
+                        // sets the update boolean to false
+                        rpcUpdated = false;
 
                         // if the error message contains "LargeImage"
                         if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {

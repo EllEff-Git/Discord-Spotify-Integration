@@ -24,9 +24,9 @@ It's easy to run, even easier to configure and features over a dozen simple, but
 
 <br/>
 
-*Note that the "Spotify Activity" string is determined by your Discord Application's name, and the "Activity" part is not set in stone* <br/>
+*Note that the "Spotify Activity" text is determined by your Discord Application's name, and the "Activity" part is not set in stone* <br/>
 
-*The pictures are also purely examples, and you can set as many large pictures as you'd like (the small corner one only supports one, (for now?)).* <br/>
+*The pictures are also purely examples, and you can set as many large pictures as you'd like (the small corner one only supports one).* <br/>
 
 <br/>
 
@@ -65,13 +65,21 @@ Once started, the program automatically re-authenticates with both Discord and S
 
 To access more information inside Discord activity (total playtime, total playtime per current song, total playcount and more), you'll need to use [Spotify Analyser](https://github.com/EllEff-Git/Spotify-Analyzer) and install DSI as an "addon" (DSI will run fully independently, but will use the CSV data from Spotify Analyser). <br/>
 
+*The program is designed and mainly tested as an "addon", if there are issues using it without Spotify Analyser, they may get fixed slower. Highly recommended to use with SHA, nor do I really even see the utility of DSI without it.* <br/>
+
+*If you'd like to compile the program yourself, you'll need the Discord Developer SDK from Discord's Developer dashboard yourself - I'm not sure it's within the ToS to provide that, but it's very easy to find once you make your Discord Application. Otherwise, the program parts are all compiled with pyinstaller, and all required infromation is included* <br/>
+
 <br/>
 
-Quick note on Track URIs: <br/>
-Spotify assigns URIs on a per-market basis, meaning sometimes, you may stumble across the same song from 2 different markets. <br/>
-While they're functionally same, they'll have different Track URIs. This obviously makes it impossible to check for, unless... <br/>
-The program allows for "mapping", where it collects the Track URIs from songs you listen to, and turns them into keys when you run the included URImap program. <br/>
-(Basically, they'll look like: "URI:URI2", and the program can check for both keys, if the first doesn't match records) <br/>
+Quick note on URIs: <br/>
+Spotify assigns songs a URI on a per-market basis, meaning sometimes, you may stumble across the same song from 2+ different markets. <br/>
+While they're functionally same, they'll have different URIs. This obviously makes it impossible to check for, unless... <br/>
+The program allows for "mapping", where it collects the URIs from songs you listen to, and turns them into keys when you run the included URImap program. <br/>
+*(Basically, they'll look like: "URI:URI2", and the program can check for both keys, if the first doesn't match records).* <br/>
+
+<br/>
+
+*This "mapping" is the most resource intensive part of the program - if you're noticing any issues, try disabling this first (though it'll only occur when listening to the song for the first time with the program on).* <br/>
 
 <br/>
 

@@ -1,2 +1,6 @@
 config.json
+# the main config, stores all DSI-related options
 shaaConfig.json
+# the Spotify History Analyser Addon options
+secretConfig.json
+# the "secret" options (client id, secret and redirect url)
