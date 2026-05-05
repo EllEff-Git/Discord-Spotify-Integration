@@ -1,4 +1,10 @@
 #define DISCORDPP_IMPLEMENTATION
+
+#define WIN32_LEAN_AND_MEAN
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <Windows.h>
+
 #include "discordpp.h"
 #include <iostream>
 #include <fstream>
@@ -9,11 +15,16 @@
 #include <csignal>
 #include <chrono>
 #include <limits.h>
-#include <Windows.h>
 #include <codecvt>
+#include <cstdint>
+#include <vector>
+#include "json.hpp"
 
-// version number (y.m.dd.hhmm)
-std::string DSIDver = "v0.5.2.0342";
+#pragma comment(lib, "Ws2_32.lib")
+using json = nlohmann::json;
+
+// version number (Y.MM.DD.HHMM)
+std::string DSIDver = "v0.5.5.0609";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -35,24 +46,17 @@ std::atomic<bool> SmallImageFail = false;
 std::atomic<bool> pauseState = false;
 // stores the previous pause state
 std::atomic<bool> pauseStateOld = false;
-// initialises the boolean that checks if the pause state has changed since last update
-std::atomic<bool> pauseChanged = false;
 
 // initialises a timestamp for checking when the RPC was last updated
 std::uint64_t lastUpdate = 0;
 // initialises a timestamp for current time
 std::uint64_t currentTime = 0;
-// initialises a boolean that checks if it's been >30s since last RPC update
-std::atomic<bool> requiredUpdate = false;
 
 // initialises a temp string for checks (0 ensures it's always a new song on program start)
 std::uint64_t unixOldStart = 0;
 
 // initialises a track ID variable
 std::uint64_t trackID, oldTrackID = 0;
-
-// initialises a temp string for checks (empty ensures it's always a new song on program start)
-std::string oldSong = "";
 
 // flag to control application run state (starts as true to start running)
 std::atomic<bool> running = true;
@@ -64,7 +68,7 @@ std::atomic<bool> rpcUpdated = false;
 
 // signal handler to stop the application
 void signalHandler(int signum) {
-  running.store(false);
+    running.store(false);
 }
 
 
@@ -192,7 +196,7 @@ int main() {
     // opens ids.txt, stops the program if can't (can't run the program without AppID)
     std::ifstream file(idDir);
     if (!file.is_open()) {
-        std::cerr << "Failed to open/read ids.txt, Discord RPC closed.\n" << std::endl;
+        std::cerr << "Failed to open/read ids.txt" << std::endl;
         return 1;
     }
 
@@ -236,18 +240,20 @@ int main() {
     // tries to replace the temp variable APPLICATION_ID with AppID (the "real" (live) number from ids.txt)
     try {
         APPLICATION_ID = std::stoull(AppID);
-    } 
+    }
+    // if it fails for any reason
     catch (...) {
-        std::cerr << "Invalid App ID, check config.ini\n" << std::endl;
+        // sends error message
+        std::cerr << "Invalid Application ID" << std::endl;
+        // return 1 = stop
         return 1;
-
     }
 
     // something something Discord's handler
     std::signal(SIGINT, signalHandler);
 
     // informs when DSI has successfully launched
-    std::cout << "Discord RPC started via DSIdiscord " << DSIDver << "\n" << std::endl;
+    std::cout << "Discord RPC started via DSIdiscord " << DSIDver << std::endl;
 
     // creates a Discord Client
     auto client = std::make_shared<discordpp::Client>();
@@ -257,6 +263,7 @@ int main() {
       // std::cout << "[" << EnumToString(severity) << "] " << message << std::endl;
     }, discordpp::LoggingSeverity::Info);
 
+    // flag for the RPC being active
     std::atomic<bool> RPCrunning = false;
 
     // sets up status callback to check client connection
@@ -265,351 +272,317 @@ int main() {
       // if discord succeeds at finding client, gets ready to change activity info
       if (status == discordpp::Client::Status::Ready) {
 
-        // checks if the RPC has already been started and is already running
+        // ensures the RPC isn't already active, sets to true if not and runs
         if (!RPCrunning.exchange(true)) {
 
-        // updates user
-        std::cout << "Loading Discord Status\n" << std::endl;
+            // updates user
+            std::cout << "Loading Discord Status" << std::endl;
 
-        // starts a new thread just for updating some fields
-        std::thread([client]() {
-        
-        // creates variables for the whole thread
+            // starts a new thread just for updating some fields
+            std::thread([client]() {
 
-        // sets up a temp song name
-        std::string songName = "Loading";
+            // sets up a temp song name
+            std::string songName = "Loading";
 
-        // sets up a temp album name
-        std::string albumName = "An Album";
+            // sets up a temp album name
+            std::string albumName = "An Album";
 
-        // initializes the song info
-        std::string songStuff = "Discord Spotify Integration";
+            // initializes the song info
+            std::string songStuff = "Discord Spotify Integration";
 
-        // sets an empty large image name
-        std::string LargeImage = "";
-        // small image is set above, since it doesn't have a changing method, like large image does
+            // sets an empty large image name
+            std::string LargeImage = "";
+            // small image is set above, since it doesn't have a changing method, like large image does
 
-        // the descriptions for the assets (hover elements)
-        std::string LargeText = "Large Text";
-        std::string SmallText = "Small Text";
+            // the descriptions for the assets (hover elements)
+            std::string LargeText = "Large Text";
+            std::string SmallText = "Small Text";
 
-        // placeholder URLs to pass
-        std::string SpotifyURL = "https://youtube.com";
-        std::string SmallURL = "https://twitter.com";
+            // placeholder URLs to pass (set to these because it helps debug, otherwise could be set to anything)
+            std::string SpotifyURL = "https://youtube.com";
+            std::string SmallURL = "https://twitter.com";
 
-        // placeholder UNIX timestamps
-        uint64_t unixStart = 0;
-        uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
+            // placeholder UNIX timestamps
+            uint64_t unixStart = 0;
+            uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
 
-        // placeholder pause state "boolean" (string at this stage)
-        std::string pauseStateStr = "false";
+            // starts a loop to refresh info
+            while (running) {
 
-        // defaults the "success" to not true
-        bool success = false;
+                // 32 integer variable for size
+                uint32_t size;
 
-        // starts a loop to refresh info
-        while (running) {
+                // reads bytes from the stdin (python) with a set size
+                if (!std::cin.read(reinterpret_cast<char*>(&size), sizeof(size))) {
+                    // if it fails, breaks
+                    break;
+                }
 
-            // sets up the prerequisite UNIX and trackID temp variables as empty strings
-            std::string unixStartStr, unixEndStr, trackIDstr;
+                // converts "network order" to bytes
+                size = ntohl(size);
+                // creates a buffer with the py-given size
+                std::vector<char> buffer(size);
 
-            // opens the file containing the song information (provided by the main python script) 
-            // the file is stored 2 directories above where the EXE resides, 
-            std::ifstream SongInfo("songData.txt", std::ios::binary);
+                // reads the amount of data as told by the lines above
+                if (!std::cin.read(buffer.data(), size)) {
+                    // if it fails, breaks
+                    break;
+                }
 
-            // once it's open, goes line-by-line and picks up the information
-            if (SongInfo.is_open()) {
+                // grabs the packet from the sent buffer
+                std::string packet(buffer.begin(), buffer.end());
 
-                // if the file was opened correctly, changes success to true
-                success = true;
+                // parses the received packet into a json form 
+                json data = json::parse(packet);
 
-                // updates user (this keeps printing constantly)
-                // std::cout << "Song File opened\n" << std::endl;
-
-                // creates an empty helper string
-                std::string line;
-
-                // initializes lineNum as 0 (starts at line 0)
-                int lineNum = 0;
-
-                // goes through the file 1 by 1
-                while(std::getline(SongInfo, line)) {
-                    // checks for "=" mark to indicate splits
-                    size_t pos = line.find('=');
-                    // checks each line for the "=" mark, then processes the line
-
-                    if(pos != std::string::npos) {
-                        std::string value = line.substr(pos + 1);
-                        // checks for empty space
-                        if (!value.empty() && value[0] == ' ')
-                            // removes any empty space
-                            value.erase(0, 1);
-                        if (!value.empty() && value.back() == '\r')
-                            // removes an invisible character
-                            value.pop_back();
-
-                        // line 0 is the name/artist and album of the song
-                        if (lineNum == 0) songName = value;
-                        // line 1 is the album name
-                        else if (lineNum == 1) albumName = value;
-                        // line 2 is the info on songStuff (minutes, plays, etc)
-                        else if (lineNum == 2) songStuff = value;
-                        // line 3 is largeImage
-                        else if (lineNum == 3) LargeImage = value;
-                        // line 4 is "large text" (total hours)
-                        else if (lineNum == 4) LargeText = value;
-                        // line 5 is the text on hover
-                        else if (lineNum == 5) SmallText = value;
-                        // line 6 is the URL of the song
-                        else if (lineNum == 6) SpotifyURL = value;
-                        // line 7 is the "small url"
-                        else if (lineNum == 7) SmallURL = value;
-                        // line 8 is the start time of the song, in UNIX (string now)
-                        else if (lineNum == 8) unixStartStr = value;
-                        // line 9 is the end time of the song, in UNIX (string now)
-                        else if (lineNum == 9) unixEndStr = value;
-                        // line 10 is a pause change state boolean
-                        else if (lineNum == 10) pauseStateStr = value;
-                        // line 11 is the track ID
-                        else if (lineNum == 11) trackIDstr = value;
-                        // adds 1 to lineNum so it moves to the next line
-                        lineNum++;
-                    }
-                } // closes the reader bracket
-
-                // tries to turn the UNIX timestamps and track ID from strings to integers (Discord only accepts ints as timestamps)
+                // tries to reassign all the variables from the data packet
                 try {
-                    unixStart = std::stoull(unixStartStr);
-                    unixEnd = std::stoull(unixEndStr);
-                    trackID = std::stoull(trackIDstr);
-                } 
-                // if the str -> int fails, sends an exception (e) as print
+                    // variables get grabbed from packet (ensures they use the correct type)
+                    songName = data["Song"].get<std::string>();
+                    albumName = data["Album"].get<std::string>();
+                    songStuff = data["State"].get<std::string>();
+                    LargeImage = data["Large Image"].get<std::string>();
+                    LargeText = data["Large Text"].get<std::string>();
+                    SmallText = data["Small Text"].get<std::string>();
+                    SpotifyURL = data["Spotify URL"].get<std::string>();
+                    SmallURL = data ["Small URL"].get<std::string>();
+                    unixStart = data["UNIX Start"].get<int64_t>();
+                    unixEnd = data["UNIX End"].get<int64_t>();
+                    pauseState = data["Pause"].get<bool>();
+                    trackID = data["Track ID"].get<int64_t>();
+                }
+                // if it fails
                 catch(const std::exception& e) {
-                std::cerr << "Timestamp in file is invalid" << "\n" << e.what() << "\n" << std::endl;
+                    // sends error message
+                    std::cerr << "Error with Python packet:" << e.what() << std::endl;
                 }
 
-                // changes pauseState to true if the string in the text file is "True"/"true" 
-                if (pauseStateStr == "True" || pauseStateStr == "true") {
-                    pauseState = true;
+                // sets up a boolean to check song status
+                bool songChanged = false;
+
+                // sets up a boolean to check pause state change
+                bool pauseChanged = false;
+
+                // sets up a boolean to check if an update is required due to timer
+                bool requiredUpdate = false;
+
+                // updates current time to match, well, current time
+                currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
+                // checks if the song has changed since the last update (trackIDs don't match)
+                // if it has, changes songChanged to true - this ensures the song changing or being paused gets caught
+                if (trackID != oldTrackID) {
+                    // sets the old value to match new
+                    oldTrackID = trackID;
+                    // sets the boolean to true so the next check goes through
+                    songChanged = true;
                 }
-
-            } // if(song.is_open) close bracket
-            else {
-              std::cout << "Error reading the song file\n" << std::endl;
-            }
-            
-            // closes the text file
-            SongInfo.close();
-
-            // sets up a boolean to check song status
-            bool songChanged = false;
-
-            // updates current time to match, well, current time
-            currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-
-            // checks if the song has changed since the last update (trackIDs don't match)
-            // if it has changes songChanged to true - this ensures the song changing or being paused gets caught
-            if (trackID != oldTrackID) {
-
-                // sets the old value to match new
-                oldTrackID = trackID;
-                // sets the boolean to true so the next check goes through
-                songChanged = true;
-            }
-            // checks if the song has been paused since last check
-            // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
-            if (pauseState != pauseStateOld) {
-                // sets the boolean to true so the next check goes through
-                pauseChanged = true;
-                // updates the previous pause state to match current
-                pauseStateOld.store(pauseState.load());
-            }
-            // checks if the last time RPC was updated was more than 30 seconds ago
-            if ((lastUpdate + 30) < currentTime) {
-                // changes the requiredUpdate to true to trigger an update
-                requiredUpdate = true;
-            }
-
-            // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
-            // checks if the length of the songName (details) field *with* album is eq or gr than 103 (cap of 108 for that field)
-            if ((songName + albumName).length() <= 103) {
-                songName = songName + " " + albumName;
-            }
-            // checks if the length of the songName (details) field *with* fallback string is eq or gr than 108 (cap of 108 for that field)
-            else if ((songName + albumFallback).length() <= 108) {
-                songName = songName + " " + albumFallback;
-            }
-            // if neither is true (either option would go over the cap)
-            else {
-                // does nothing, aka leaves songName alone
-            }
-
-            // only pushes the update if the file was read correctly and the song has changed or is paused *or* an update is required
-            // I found that if no update is pushed for a longer period of time, Discord may just lose the status completely and drop it
-            if (success && (songChanged || pauseChanged || requiredUpdate)) {
-
-                // updates pauseChanged to false, so it doesn't double-activate
-                pauseChanged = false;
-                // if the update isn't a timer-based one
-                if (!requiredUpdate) {
-                    // updates the rpc update boolean to ensure it only prints once
-                    rpcUpdated = false;
+                // checks if the song has been paused since last check
+                // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
+                if (pauseState != pauseStateOld) {
+                    // sets the boolean to true so the next check goes through
+                    pauseChanged = true;
+                    // updates the previous pause state to match current
+                    pauseStateOld.store(pauseState.load());
                 }
-                // if the update is based only on the timer
+                // checks if the last time RPC was updated was more than 30 seconds ago
+                if ((lastUpdate + 30) < currentTime) {
+                    // changes the requiredUpdate to true to trigger an update
+                    requiredUpdate = true;
+                }
+                // if it hasn't been that long, but something else triggered the update
                 else {
-                    // sets the bool to true, so it doesn't double-print
-                    rpcUpdated = true;
+                    // sets the boolean to false, to let the RPC update text show up
+                    requiredUpdate = false;
                 }
-                // updates requiredUpdate to false, so it doesn't double-activate
-                requiredUpdate = false;
-                // updates the last update timestamp to match system time
-                lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
-                // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)
-                songName = utfTrim(songName);
-                songStuff = utfTrim(songStuff);
-                LargeText = utfTrim(LargeText);
-                SmallText = utfTrim(SmallText);
-
-                // sets up rich presence details
-                discordpp::Activity activity;
-
-                // sets the rich presence to "Listening to:"
-                activity.SetType(discordpp::ActivityTypes::Listening);
-                // sets the "state" (song playtime, count, etc) - in games, equivalent is "Playing solo/duo..."
-                activity.SetState(songStuff);
-                // sets the "details" (song name) - in games, equivalent is "Competitive"
-                activity.SetDetails(songName);
-                // stateURL only works when a party size is set - which isn't available with this program
-                // activity.SetStateUrl("https://discord.com");
-
-                // sets up the rich presence assets (pictures)
-                discordpp::ActivityAssets assets;
-
-                // Large Image is the main picture
-                // if the field is still empty, doesn't push it through (will cause a fail otherwise)
-                if (LargeImage.empty() || LargeImage[0] == ' ') {
-                    std::cout << "Large Image field is empty or faulty, not pushing\n" << std::endl;
+                // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
+                // checks if the length of the songName (details) field *with* album is eq or less than 103 (cap of 108 for that field)
+                if ((songName + albumName).length() <= 103) {
+                    songName = songName + " " + albumName;
                 }
-                // if the field doesn't seem faulty
+                // checks if the length of the songName (details) field *with* fallback string is eq or less than 108 (cap of 108 for that field)
+                else if ((songName + albumFallback).length() <= 108) {
+                    songName = songName + " " + albumFallback;
+                }
+                // if neither is true (either option would go over the cap)
                 else {
-                    // if the large image has failed once, doesn't try to push a new one
-                    if (LargeImageFail) {   
+                    // does nothing, leaves songName alone
+                }
+
+                // only pushes the update if everything is fine, and the song has changed/paused/update is required
+                // I found that if no update is pushed for a longer period of time, Discord may just lose the status completely and drop it
+                if (songChanged || pauseChanged || requiredUpdate) {
+
+                    // if the update isn't a timer-based one (meaning something has actually changed)
+                    if (!requiredUpdate) {
+                        // updates the rpc update boolean to ensure it prints rpc status
+                        bool rpcUpdated = false;
                     }
-                    // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
+
+                    // updates the last update timestamp to match system time
+                    lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
+                    // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)
+                    songName = utfTrim(songName);
+                    songStuff = utfTrim(songStuff);
+                    LargeText = utfTrim(LargeText);
+                    SmallText = utfTrim(SmallText);
+
+                    // sets up rich presence details
+                    discordpp::Activity activity;
+
+                    // sets the rich presence to "Listening to:"
+                    activity.SetType(discordpp::ActivityTypes::Listening);
+                    // sets the "state" (song playtime, count, etc) - in games, equivalent is "Playing solo/duo..."
+                    activity.SetState(songStuff);
+                    // sets the "details" (song name) - in games, equivalent is "Competitive"
+                    activity.SetDetails(songName);
+                    // stateURL only works when a party size is set - which isn't available with this program
+                    // activity.SetStateUrl("https://discord.com");
+
+                    // sets up the rich presence assets (pictures)
+                    discordpp::ActivityAssets assets;
+
+                    // Large Image is the main picture
+                    // if the field is still empty, doesn't push it through (will cause a fail otherwise)
+                    if (LargeImage.empty() || LargeImage[0] == ' ') {
+                        std::cout << "Large Image field is empty or faulty" << std::endl;
+                    }
+                    // if the field doesn't seem faulty
                     else {
-                        assets.SetLargeImage(LargeImage);
-                    }
-                }
-    
-                // Large text appears on hovering the large image (and under the song info)
-                assets.SetLargeText(LargeText);
-                // Large URL is the Spotify link to the selected type (Artist, Song, Album, Playlist) of the currently playing track
-                assets.SetLargeUrl(SpotifyURL);
-
-
-                // Small URL is the link when you click the smaller picture
-                assets.SetSmallUrl(SmallURL);
-
-                // Small Image is the circle in the corner of Large Image, text is on hover
-                // if the field is still empty, doesn't push it through (will cause a fail otherwise)
-                if (SmallImage.empty() || SmallImage[0] == ' ') {
-                    std::cout << "Small Image field is empty or faulty, not pushing\n" << std::endl;
-                }
-                else {
-                    // if the small image has failed once, doesn't try to push a new one
-                    if (SmallImageFail) {
-                    }
-                    // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
-                    else{
-                    assets.SetSmallImage(SmallImage);
-                    }
-                }
-                // Small text is the text that appears when you hover over the small picture
-                assets.SetSmallText(SmallText);
-
-                // pushes assets to "activity"
-                activity.SetAssets(assets);
-
-                // sets up the rich presence timestamps
-                discordpp::ActivityTimestamps timestamps;
-
-                // sets the song's start time (in UNIX timestamp)
-                timestamps.SetStart(unixStart);
-                // sets the song's end time (in UNIX timestamp)
-                timestamps.SetEnd(unixEnd);
-                // pushes timestamps to "activity"
-                activity.SetTimestamps(timestamps);
-                
-                // updates user rich presence with given info
-                client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
-
-                    // if it goes through fine
-                    if(result.Successful()) {
-                        // checks if rpc has been updated already, only prints if not
-                        if (!rpcUpdated) {
-                            // updates user
-                            std::cout << "Rich Presence updated\n" << std::endl;
+                        // if the large image has failed once, doesn't try to push a new one
+                        if (LargeImageFail) {   
                         }
-                        // sets the error states both to false, so they can go through next time
-                        ::LargeImageFail = false;
-                        ::SmallImageFail = false;
+                        // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
+                        else {
+                            assets.SetLargeImage(LargeImage);
+                        }
                     }
-                    // if it fails to push user RPC update
-                    else { 
-                        // prints out the error for debug (likely wrong format or missing filenames, etc)
-                        std::cerr << "Rich Presence update failed. Reason:\n" << result.Error() << "\n" << std::endl;
-                        // sets the update boolean to false
-                        rpcUpdated = false;
+        
+                    // Large text appears on hovering the large image (and under the song info)
+                    assets.SetLargeText(LargeText);
+                    // Large URL is the Spotify link to the selected type (Artist, Song, Album, Playlist) of the currently playing track
+                    assets.SetLargeUrl(SpotifyURL);
 
-                        // if the error message contains "LargeImage"
-                        if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {
-                            // sets the fail state to true
-                            ::LargeImageFail = true;
-                            std::cout << "Attempting to fix large image error, please wait for the next data push\n" << std::endl;
+                    // Small URL is the link when you click the smaller picture
+                    assets.SetSmallUrl(SmallURL);
+
+                    // Small Image is the circle in the corner of Large Image, text is on hover
+                    // if the field is still empty, doesn't push it through (will cause a fail otherwise)
+                    if (SmallImage.empty() || SmallImage[0] == ' ') {
+                        std::cout << "Small Image field is empty or faulty" << std::endl;
+                    }
+                    else {
+                        // if the small image has failed once, doesn't try to push a new one
+                        if (SmallImageFail) {
                         }
-                        // if the error message contains "SmallImage"
-                        if (result.Error().find("SmallImage")!=std::string::npos && !SmallImageFail) {
-                            // sets the fail state to true
-                            ::SmallImageFail = true;
-                            std::cout << "Attempting to fix small image error, please wait for the next data push\n" << std::endl;
+                        // if the field isn't empty or "faulty" on the first go (or hasn't failed yet), sets the image
+                        else{
+                            assets.SetSmallImage(SmallImage);
                         }
-                    } // else close
+                    }
+                    // Small text is the text that appears when you hover over the small picture
+                    assets.SetSmallText(SmallText);
+
+                    // pushes assets to "activity"
+                    activity.SetAssets(assets);
+
+                    // sets up the rich presence timestamps
+                    discordpp::ActivityTimestamps timestamps;
+
+                    // sets the song's start time (in UNIX timestamp)
+                    timestamps.SetStart(unixStart);
+                    // sets the song's end time (in UNIX timestamp)
+                    timestamps.SetEnd(unixEnd);
+                    // pushes timestamps to "activity"
+                    activity.SetTimestamps(timestamps);
                     
-                }); // UpdateRichPresence close
+                    // updates user rich presence with given info
+                    client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
 
-            } // if(success) close
+                        // if it goes through fine
+                        if(result.Successful()) {
 
-            // if the song/pause hasn't changed and 30s hasn't passed
-            else {
-                // pauses the "thread" for a bit (prevents crazy CPU/disk usage for nothing)
+                            // checks if rpc has been updated already, only prints if not
+                            if (!rpcUpdated) {
+                                // updates user
+                                std::cout << "Rich Presence updated" << std::endl;
+                                // sets the bool to true, to prevent double-prints
+                                bool rpcUpdated = true;
+                            }
+                            // sets the error states both to false, so they can go through next time
+                            ::LargeImageFail = false;
+                            ::SmallImageFail = false;
+                        }
+                        // if it fails to push user RPC update
+                        else {
+                            // sets the update boolean to false
+                            rpcUpdated = false;
+                            
+                            // if the error message contains "connection error"
+                            if ((result.Error().find("Connection failed")!=std::string::npos)) {
+                                // sends generic connection error (this is more or less your connection -> Discord)
+                                std::cout << "Rich Presence update failed: Issue connecting to Discord API" << std::endl;
+                            }
+                            // if the error message contains "LargeImage"
+                            else if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {
+                                // sets the fail state to true
+                                ::LargeImageFail = true;
+                                std::cout << "Rich Presence update failed: Large Image error" << std::endl;
+                            }
+                            // if the error message contains "SmallImage"
+                            else if ((result.Error().find("SmallImage")!=std::string::npos) && !SmallImageFail) {
+                                // sets the fail state to true
+                                ::SmallImageFail = true;
+                                std::cout << "Rich Presence update failed: Small Image error" << std::endl;
+                            }
+                            // if the error is an empty external asset error
+                            // this is usually an issue with the Discord -> Spotify image grab (nothing you can do)
+                            else if ((result.Error().find("external assets")!=std::string::npos)) {
+                                std::cout << "Rich Presence update failed: Discord API asset error" << std::endl;
+                            }
+                            // if the error is something else
+                            else {
+                                std::cerr << "Rich Presence update failed:" << result.Error() << std::endl;
+                            }
+                        } // else close
+                        
+                    }); // UpdateRichPresence close
+
+                } // if there's a change/update requirement close
+
+                // if the song/pause hasn't changed and 30s hasn't passed
+                else {
+                    // pauses the "thread" for a bit (prevents crazy CPU spikes)
+                    std::this_thread::sleep_for(std::chrono::seconds(2));
+                    // goes back to start of loop
+                    continue;
+                }
+                
+                // pauses the update loop for 2 seconds (songData won't update that fast, so just lets program breathe)
                 std::this_thread::sleep_for(std::chrono::seconds(2));
-                // goes back to start of loop
-                continue;
-            }
-            
-            // pauses the update loop for 2 seconds (songData won't update that fast, so just lets program breathe)
-            std::this_thread::sleep_for(std::chrono::seconds(2));
-            
-            } // while(running) close bracket
+                
+                } // while(running) close bracket
 
-            // detaches itself from the main thread so as to not stop the discord communications updates
-            }).detach(); // thread close bracket
+                // detaches itself from the main thread so as to not stop the discord communications updates
+                }).detach(); // thread close bracket
+
+            } // if !RPC check
+
+        } // closes the "if status connection good" 
+
+        else if (error != discordpp::Client::Error::None) {
+            //std::cerr << "Connection Error: " << discordpp::Client::ErrorToString(error) << " - Details: " << errorDetail << std::endl;
+            std::cerr << "Failed to connect\n" << std::endl;
         }
-
-    } // closes the "if status connection good" 
-
-      else if (error != discordpp::Client::Error::None) {
-        //std::cerr << "Connection Error: " << discordpp::Client::ErrorToString(error) << " - Details: " << errorDetail << std::endl;
-        std::cerr << "Failed to connect\n" << std::endl;
-      }
     }); // client callback close bracket
 
 // initializes variables for tokens and time
 std::string savedAccessToken, savedRefreshToken;
 int64_t savedExpiryTime = 0;
 
-// reads the token.txt file (inside the build directory)
+// reads the token.txt file
 std::ifstream tknFile(tokenDir);
 if (tknFile.is_open()) {
     std::getline(tknFile, savedAccessToken);
@@ -628,17 +601,20 @@ auto saveToken = [tokenDir](const std::string& access, const std::string& refres
         tknFile << access << "\n" << refresh << "\n" << expiry << "\n";
         tknFile.close();
     } else {
-        std::cerr << "Failed to save tokens\n" << std::endl;
+        std::cerr << "Failed to save token\n" << std::endl;
     }
 };
 
 // starts Discord connection
 auto connectWithToken = [&](const std::string& access) {
     client->UpdateToken(discordpp::AuthorizationTokenType::Bearer, access, [client](discordpp::ClientResult result) {
+        // if the token is updated successfully
         if(result.Successful()) {
             // updates user
             std::cout << "Token loaded, connecting to Discord\n" << std::endl;
+            // connects to the client with the token
             client->Connect();
+        // if it's not
         } else {
             std::cerr << "Failed to update token\n" << std::endl;
         }
@@ -650,7 +626,8 @@ if (!savedAccessToken.empty() && currentTime < savedExpiryTime) {
 
     // token is fine, uses it
     connectWithToken(savedAccessToken);
-} 
+}
+// if token is expired (or not found)
 else {
     // token invalid/expired, reauthenticating
     auto codeVerifier = client->CreateAuthorizationCodeVerifier();

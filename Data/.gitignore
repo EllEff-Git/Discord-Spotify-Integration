@@ -4,3 +4,7 @@ shaaConfig.json
 # the Spotify History Analyser Addon options
 secretConfig.json
 # the "secret" options (client id, secret and redirect url)
+blacklist.json
+# the list of songs to hide from spotify activity
+URIlist.json
+# the list of URIs that have been stored thus far

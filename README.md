@@ -1,10 +1,10 @@
 <br/>
 
-**DSI** (*Discord Spotify Integration*) is a program that adds a customisable activity to Discord, displaying Spotify activity. <br/>
+**DSI** (*Discord Spotify Integration*) is a small, locally run program that adds a customisable Spotify listening activity, to replace the default Spotify connection. <br/>
 
 <br/>
 
-**DSI** is a lightweight, terminal-based program with effectively no resource requirements (less than a blank Chrome tab). <br/>
+**DSI** is a lightweight, Python/C++ program with minimal resource usage. <br/>
 
 <br/>
 
@@ -18,15 +18,17 @@ It's easy to run, even easier to configure and features over a dozen simple, but
 
 - If you'd like to customise your activity fields to your heart's content. <br/>
 
-- Unlike the default Spotify behavior, this uses the Activity method, which means it doesn't enter an AFK state and disable the view. <br/>
+- Unlike the default Spotify behavior, this uses the Activity method, which means it doesn't enter an "away" state and hide itself. <br/>
 
-- Using the Activity also means you can disable it on a per-server level in Discord's Activity Privacy <br/>
+- Using the Activity also means you can disable it on a per-server level in Discord's Activity Privacy. <br/>
+
+- If you prefer to hide certain songs, you can blacklist individual songs and display your favorites instead *(only for versions after v0.5.2.0537).* <br/>
 
 <br/>
 
-*Note that the "Spotify Activity" text is determined by your Discord Application's name, and the "Activity" part is not set in stone* <br/>
+*Note that the "Spotify Activity" text is determined by your Discord Application's name, and is not set in stone* <br/>
 
-*The pictures are also purely examples, and you can set as many large pictures as you'd like (the small corner one only supports one).* <br/>
+*The pictures are also purely examples, and you can set as many large pictures as you'd like, or let Spotify provide the song cover (the small, corner picture only supports one).* <br/>
 
 <br/>
 
@@ -51,40 +53,30 @@ Fully custom fields in both state and details, repeat state: <br/>
 <br/>
 
 
-Installation is as easy as unzipping, and the total setup shouldn't take more than 5 minutes. <br/>
+Installation is as easy as unzipping, and the total setup shouldn't take more than 5 minutes. Just head over to Releases, download the latest zip and extract all. <br/>
+
+For a full breakdown on the prerequisites (Discord/Spotify Developer applications), head to: <br/> 
+https://elleffnotelf.com/guides/discord-spotify-integration/. <br/>
 
 <br/>
 
-The basic function loop is a Python script which requests data from a linked Spotify account, writing the relevant, formatted fields to a text file, which is read by a C++ program and pushed to Discord's activity field. <br/>
+The basic loop is: a Python script requests data from a linked Spotify account, sends the formatted information to a C++ program, which updates the Discord activity. <br/>
 
 <br/>
 
-Once started, the program automatically re-authenticates with both Discord and Spotify, allowing you to keep it open for as long as you want. <br/>
-
-<br/>
-
-To access more information inside Discord activity (total playtime, total playtime per current song, total playcount and more), you'll need to use [Spotify Analyser](https://github.com/EllEff-Git/Spotify-Analyzer) and install DSI as an "addon" (DSI will run fully independently, but will use the CSV data from Spotify Analyser). <br/>
+To access more information inside Discord activity (total playtime, total playtime per current song, total playcount and more), you'll need to use [Spotify Analyser](https://github.com/EllEff-Git/Spotify-Analyzer) (SHA) and install DSI as an "addon" (DSI will run fully independently, but will use the CSV data created by Spotify Analyser). <br/>
 
 *The program is designed and mainly tested as an "addon", if there are issues using it without Spotify Analyser, they may get fixed slower. Highly recommended to use with SHA, nor do I really even see the utility of DSI without it.* <br/>
 
-*If you'd like to compile the program yourself, you'll need the Discord Developer SDK from Discord's Developer dashboard yourself - I'm not sure it's within the ToS to provide that, but it's very easy to find once you make your Discord Application. Otherwise, the program parts are all compiled with pyinstaller, and all required infromation is included* <br/>
+*If you'd like to build the program yourself, you'll need the Discord Developer SDK and the C++ JSON library. The program parts are all built with pyinstaller (Python) or the x64 native tools (C++), and all used icons are included in the repo* <br/>
 
 <br/>
 
-Quick note on URIs: <br/>
+Quick note on Spotify's URIs: <br/>
 Spotify assigns songs a URI on a per-market basis, meaning sometimes, you may stumble across the same song from 2+ different markets. <br/>
 While they're functionally same, they'll have different URIs. This obviously makes it impossible to check for, unless... <br/>
-The program allows for "mapping", where it collects the URIs from songs you listen to, and turns them into keys when you run the included URImap program. <br/>
-*(Basically, they'll look like: "URI:URI2", and the program can check for both keys, if the first doesn't match records).* <br/>
-
-<br/>
-
-*This "mapping" is the most resource intensive part of the program - if you're noticing any issues, try disabling this first (though it'll only occur when listening to the song for the first time with the program on).* <br/>
-
-<br/>
-
-For further information, installation and instructions: <br/>
-https://elleffnotelf.com/guides/Discord-Spotify-Integration <br/>
+The program performs "mapping", where it collects the URIs from songs you listen to, and turns them into keys if you run the included URImap program. <br/>
+*(Basically, they'll look like: "URI:URI2", and the program can check for both, if the first one doesn't match CSV data). This is only relevant if using with SHA, otherwise, there's nothing to do with the URIs* <br/>
 
 <br/>
 
