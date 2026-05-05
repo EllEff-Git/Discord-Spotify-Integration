@@ -4,7 +4,7 @@ from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 # Required for Spotify API access
 
-URIver = "v0.5.3.1900"
+URIver = "v0.5.5.0916"
 # the program version (y.m.dd.hhmm)
 
 
@@ -57,15 +57,17 @@ except Exception as err:
 
 
 # Required
-sp_client_ID = secretConfig["Spotify_Client_ID"]
-"""Spotify client ID, string"""
-sp_client_secret = secretConfig["Spotify_Client_Secret"]
-"""Spotify client secret, string"""
-sp_redirect = secretConfig["Spotify_Redirect_URI"]
-"""Spotify redirect URL, string"""
-MarketArea = jsonConfig["marketCode"]
-"""The 2-letter country identifier passed to spotify"""
-
+try:
+    sp_client_ID = secretConfig["Spotify_Client_ID"]
+    """Spotify client ID, string"""
+    sp_client_secret = secretConfig["Spotify_Client_Secret"]
+    """Spotify client secret, string"""
+    sp_redirect = secretConfig["Spotify_Redirect_URI"]
+    """Spotify redirect URL, string"""
+    MarketArea = jsonConfig["marketCode"]
+    """The 2-letter country identifier passed to spotify"""
+except Exception as err:
+    print(f"Error grabbing required info: {err}")
 
 # Session
 sessionID = requests.Session()
@@ -190,8 +192,6 @@ def mapper(start, end):
                     # doesn't do anything
             
             else:
-                print(f"{Time()} [ERROR]: Failure fetching {uri}:\n{Time()} [ERROR]: {error}")
-                # prints the error message
                 uriMap[uri] = uri
                 # uses the original URI for the current URI
 
