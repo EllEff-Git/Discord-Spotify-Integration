@@ -277,6 +277,9 @@ timePlayed = 0
 lastPlayStamp = 0
 """Variable to store timestamp for playtime calculation"""
 
+csName = csArtist = ""
+"""The current song/artist name"""
+
 dsiShoutoutStr = "// Data by DSI"
 """A shoutout string to DSI, disabled by default in config"""
 
@@ -619,10 +622,8 @@ class DSI_MainWindow(QMainWindow):
             self.mainLabel.setText(f"{text}")
             # sets the passed label's text to the passed text string
 
-        scroller = self.consoleScroll.verticalScrollBar()
-        # definition
-        scroller.setValue(scroller.maximum())
-        # uses the max value (pushes to bottom)
+        QTimer.singleShot(1000, self.autoScroll)
+        # runs the autoscroller after a second to let the text sit
 
 ### Song Details ###
 
@@ -680,6 +681,16 @@ class DSI_MainWindow(QMainWindow):
         self.songCounter.setText(f"Songs played: {trackCounter}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
         # sets the counter text to match
 
+### Auto-Scroll ###
+
+    def autoScroll(self):
+        """A function to scroll the 'console' to the bottom"""
+
+        scroller = self.consoleScroll.verticalScrollBar()
+        # definition
+        scroller.setValue(scroller.maximum())
+        # uses the max value (pushes to bottom)
+
 ### Blacklist Manager ###
 
     def blacklistManager(self, action:str, track:str, uri:str):
@@ -689,7 +700,7 @@ class DSI_MainWindow(QMainWindow):
         # if the action is to check a new song (song changed)
             if uri in blacklist:
             # if the passed URI exists in the blacklist
-                status = blacklist[uri]
+                status = blacklist[uri]["status"]
                 # grabs the stored "status" of the uri (starred, blacklisted)
             else:
             # if the URI doesn't exist in the blacklist
@@ -697,11 +708,11 @@ class DSI_MainWindow(QMainWindow):
                 # sets the status to none
 
             try:
-            # tries to grab the artist from the dictionary
-                artist = blacklistInfo["Artist Name"]
-                # grabs the artist name from the global dictionary
+            # tries to grab the artist
+                artist = csArtist
+                # grabs the artist name from the global variable
             except:
-            # if it fails (sometimes Spotify gives some bs data)
+            # if it fails (sometimes Spotify gives some empty data)
                 artist = "An Artist"
                 # preset string
 
@@ -710,7 +721,7 @@ class DSI_MainWindow(QMainWindow):
 
         elif action == "Remove" or action == "Unstar":
         # if the action is to remove the song from the blacklist or unfavorite it
-            blacklist[uri] = "none"
+            blacklist[uri] = {"status":"none"}
             # sets the blacklist entry for the URI to none
             status = "none"
             # sets the status to none, too
@@ -725,7 +736,7 @@ class DSI_MainWindow(QMainWindow):
 
         elif action == "Add":
         # if the action is to add the song to the blacklist
-            blacklist[uri] = "blacklisted"
+            blacklist[uri] = {"status":"blacklisted"}
             # sets the blacklist entry for the URI to blacklisted
             status = "blacklisted"
             # sets the status to blacklisted, too
@@ -747,7 +758,7 @@ class DSI_MainWindow(QMainWindow):
     def blacklistIntermediary(self, action:str):
         """A function that grabs the song name and URI to pass to manager"""
         
-        songName = blacklistInfo["Song Name"]
+        songName = csName
         # grabs the current text from the currently playing song (name)
         songURI = currentURI
         # grabs the global value of the current URI
@@ -1670,15 +1681,11 @@ def blacklistReader():
                 # reads the blacklist from file and stores in a global variable
         except:
         # if it fails
-            blacklist = {
-                "ID1": "none"
-            }
+            blacklist = {}
             # creates an empty map
     else:
     # if it doesn't (first time/deleted)
-        blacklist = {
-            "ID1": "none"
-        }
+        blacklist = {}
         # creates an empty map instead
 
 
@@ -1691,12 +1698,12 @@ def whitelistManager(action: str) -> list | None:
     favoriteList = []
     # a new empty list for the favorite songs to go into
 
-    for uri, status in blacklist.items():
+    for uri, statusDict in blacklist.items():
     # goes through each URI and its status in the blacklist
-        if isinstance(status, dict):
-        # if the status value is a dictionary (only true for favorited entries)
-            favoriteList.append(status["info"])
-            # adds the URI and the value's info dictionary to the list of favorites
+        if statusDict.get("status") == "starred":
+        # if the status is "starred"
+            favoriteList.append(statusDict)
+            # adds the info dictionary to the favorite list
     
     if action == "Add":
         if len(favoriteList) == 10:
@@ -1884,10 +1891,16 @@ def runCpp():
     
     for process in psutil.process_iter():
     # goes through the list of active processes
-        if process.name == cppExe:
-        # if the process name matches the DSIdiscord.exe name
-            process.kill()
-            # stops the process (sometimes when DSI is quit without the exit button, the discord subprocess doesn't die, and breaks the API connection when opening a new instance)
+        try:
+        # tries to kill matching names
+            if process.name() == cppExe or process.name() == "DSIdiscord":
+            # if the process name matches the DSIdiscord.exe name (or without the .exe)
+                process.kill()
+                # stops the process (sometimes when DSI is quit without the exit button, the discord subprocess doesn't die, and breaks the API connection when opening a new instance)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+        # if it fails due to missing process or access denied
+            pass
+            # doesn't do anything
 
     cppProgram = subprocess.Popen([cppPath], cwd=cppDir, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0, creationflags=subprocess.CREATE_NO_WINDOW)
     # opens the C++/Discord exe, passes the current working directory and captures output, errors and allows input
@@ -1930,7 +1943,7 @@ def cppPackets(packet: dict):
 def song(pictureQueue):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
     global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo
-    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed
+    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist
     # global -> local
 
     while True:
@@ -1997,9 +2010,9 @@ def song(pictureQueue):
         csProgress = int(csFull.get("progress_ms")/1000)
         # saves the current song progress in seconds
 
-        csUnixStart = int(time.time() - csProgress + 4)
+        csUnixStart = int(time.time() - csProgress + 2)
         # stores the start time of the song by taking current time and subtracting progress
-        # adds 4 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
+        # adds 2 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
         # this way, there shouldn't be a situation where Discord claims the song has ended when it's still playing on Spotify
         csUnixEnd = (csUnixStart + csLength)
         # stores the end time of the song (by adding up the start + duration)
@@ -2636,19 +2649,17 @@ def song(pictureQueue):
 
         if finalURI in blacklist:
         # if the song('s URI) is in the blacklist
-            if blacklist[finalURI] == "blacklisted":
+            if blacklist[finalURI]["status"] == "blacklisted":
             # if the song's URI in the blacklist returns a blacklisted value
                 favoriteList = whitelistManager("List")
                 # calls the whitelistmanager to list current favorite songs, stores it
 
                 if len(favoriteList) > 0:
                 # if there's more than 0 items in the list
-                    ran = random.randint(0, len(favoriteList)-1)
-                    # gets a random number between 0 and the length of the list
+                    pickedSong = random.choice(favoriteList)
+                    # gets a random song from the list of favorite songs
                     mainWin.labelSwap.emit("This song is blacklisted, using a favorited song instead...", 0)
                     # user inform
-                    pickedSong = favoriteList(ran)
-                    # gets a random item from the list
                     cppReplace = pickedSong["info"]
                     # gets the song's full dictionary
                     cppSongName = cppReplace["Song"]
