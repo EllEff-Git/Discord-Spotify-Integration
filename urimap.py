@@ -4,7 +4,7 @@ from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 # Required for Spotify API access
 
-URIver = "v0.5.5.0916"
+URIver = "v0.5.6.1358"
 # the program version (y.m.dd.hhmm)
 
 
@@ -25,13 +25,26 @@ uriPath = os.path.join(directory, "Data", "URImap.json")
 """The path to where URImap.json should/will live (inside DSI/Data/URImap.json)"""
 noURIpath = os.path.join(directory, "Data", "URIlist.json")
 """The path to where where URIlist.json should/will live (inside DSI/Data/URIlist.json)"""
-spCache = os.path.join(directory, "Data", "spotifycache.json")
+spCache = os.path.join(directory, "Data", "spotifycache-URI.json")
 """The path to the spotify cache (token)"""
+functionConfigPath = os.path.join(directory, "Data", "functionConfig.json")
+"""The path to the function config file"""
 configPath = os.path.join(directory, "Data", "config.json")
 """The path to the config file"""
 secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
 """The path to the 'secret' config file"""
 
+
+try:
+# tries to open the function config json file
+    with open(functionConfigPath, "r", encoding="utf-8") as fcCfg:
+    # opens the function config file in read mode
+        functionConfig = json.load(fcCfg)
+        # stores the loaded json file as functionConfig
+except Exception as err:
+# if there's an error
+    print(f"Error reading the function config file: {err}")
+    # user inform
 
 try:
 # tries to open the config json file
@@ -64,7 +77,7 @@ try:
     """Spotify client secret, string"""
     sp_redirect = secretConfig["Spotify_Redirect_URI"]
     """Spotify redirect URL, string"""
-    MarketArea = jsonConfig["marketCode"]
+    MarketArea = functionConfig["marketCode"]
     """The 2-letter country identifier passed to spotify"""
 except Exception as err:
     print(f"Error grabbing required info: {err}")

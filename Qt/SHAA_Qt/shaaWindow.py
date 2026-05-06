@@ -5,12 +5,18 @@ from PyQt6.QtWidgets import *
 import json, os, sys
 # Required for config management
 
+
+
 class Ui_SHAAWindow(object):
+    """The window class"""
     def setupUi(self, SHAAWindow):
     # setup (sorry if the docs are a bit weird, this was made with the Qt Creator, I wrote docs after <3)
         if not SHAAWindow.objectName():
+        # checks for a name 
             SHAAWindow.setObjectName(u"SHAAWindow")
+            # sets the name
         SHAAWindow.setMinimumSize(1455, 860)
+        # sets the window size 
         self.window = SHAAWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
@@ -22,7 +28,7 @@ class Ui_SHAAWindow(object):
         else:
         # if somehow not in a bundled (frozen) state
             self.cwd = os.path.dirname(__file__)
-            self.mainIcon = os.path.join(self.cwd, "icons", "dsiIcon.png")
+            self.mainIcon = os.path.join(self.cwd, "icons", "dist", "dsiIcon.png")
             # reassigns the path variables accordingly
 
         self.mainFolder = os.path.join(self.cwd, "..", "..")

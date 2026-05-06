@@ -15,14 +15,14 @@ class Ui_DSIWindow(object):
         # checks for a name 
             DSIWindow.setObjectName(u"DSIWindow")
             # sets the name
-        DSIWindow.setMinimumSize(1520, 1030)
-        # sets the window size (1520 pixels wide, 1030 tall)
+        DSIWindow.setMinimumSize(850, 750)
+        # sets the window size
         self.window = DSIWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
-        self.main = QWidget(DSIWindow)
+        self.centralWidget = QWidget(DSIWindow)
         # makes a QWidget out of the main window
-        self.main.setObjectName(u"main")
+        self.centralWidget.setObjectName(u"main")
         # sets the object name
 
         if getattr(sys, "frozen", False):
@@ -33,7 +33,7 @@ class Ui_DSIWindow(object):
         else:
         # if somehow not in a bundled (frozen) state
             self.cwd = os.path.dirname(__file__)
-            self.mainIcon = os.path.join(self.cwd, "icons", "dsiIcon.png")
+            self.mainIcon = os.path.join(self.cwd, "icons", "dist", "dsiIcon.png")
             # reassigns the path variables accordingly
 
         self.mainFolder = os.path.join(self.cwd, "..", "..")
@@ -41,13 +41,13 @@ class Ui_DSIWindow(object):
         self.configPath = os.path.join(self.mainFolder, "Data", "config.json")
         # stores the config file path
         self.shaaPath = os.path.join(self.mainFolder, "Qt", "SHAA_Qt", "shaaWindow.exe")
-        # stores the shaa configuration window path
+        # stores the SHAA configuration window path
 
         self.window.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
 
-        self.firstTime = False
-        # stores a boolean for the first time launch (False by default)
+        self.window.setWindowTitle("DSI Customisation Configurator")
+        # sets title name
 
         def readConfig() -> dict:
             """Function to read the config file, returns the json dictionary"""
@@ -62,15 +62,8 @@ class Ui_DSIWindow(object):
             except:
             # if it can't (file doesn't exist)
                 defaultConfig = {
-                    "disableCfgWin": False,
-                    "refreshTime": 10,
                     "enablePause": True,
                     "pauseText": "Paused on:",
-                    "clockStyle": "System Time",
-                    "enableURI": True,
-                    "marketCode": "",
-                    "printUpdates": True,
-                    "printErrors": True,
                     "smallPicURL": "",
                     "smallPic": "",
                     "smallPicHover": "",
@@ -88,8 +81,7 @@ class Ui_DSIWindow(object):
                     "pictureCycleBehavior": "Random"
                 }
                 # forms a new configuration file from preset defaults
-                self.firstTime = True
-                # sets the first time boolean to True (this will give a prompt)
+
                 with open(self.configPath, "w", encoding="utf-8") as cfg:
                 # "opens" the config (doesn't exist, so just makes a new one)
                     json.dump(defaultConfig, cfg, indent=3)
@@ -100,12 +92,199 @@ class Ui_DSIWindow(object):
         self.loadedConfig = readConfig()
         # runs the config reader to get new config info, stores it
 
-        self.clockStyleOptions = ["System Time", "Uptime", "Off"]
-        # stores all the clock style options in a list
-        self.loadedClockStyle = self.loadedConfig["clockStyle"]
-        # gets the loaded clock style from config
-        self.clockStyleOptions.remove(self.loadedClockStyle)
-        # removes the loaded clock style from the list
+### Window Layout ###
+
+        self.fullWindowLayout = QGridLayout(self.centralWidget)
+        self.fullWindowLayout.setSpacing(15)
+        self.fullWindowLayout.setContentsMargins(15, 0, 20, 15)
+        # the main layout, contains all other widgets and layouts
+
+        self.fullWindowLayout.setColumnMinimumWidth(0, 225)
+        self.fullWindowLayout.setColumnMinimumWidth(1, 400)
+        self.fullWindowLayout.setColumnMinimumWidth(2, 225)
+        # sets minimum widths for all columns
+
+
+
+### Basic Booleans (0 / 0) ###
+
+        self.basicBooleanGrid = QGridLayout()
+        self.basicBooleanGrid.setHorizontalSpacing(5)
+        self.basicBooleanGrid.setVerticalSpacing(10)
+        self.basicBooleanGrid.setContentsMargins(10, 10, 10, 10)
+        # the basic boolean layout 
+
+        self.fullWindowLayout.addLayout(self.basicBooleanGrid, 0, 0)
+        # adds to main layout
+
+    ### Pause ###
+
+        self.pauseBoolean = QCheckBox("Enable Pause Text")
+        # the checkbox for the pause enabling
+        self.pauseBoolean.setChecked(self.loadedConfig["enablePause"])
+        # ticks the box automatically
+        self.pauseBoolean.setToolTip("Whether to enable the pause text on paused songs")
+        # tooltip
+
+        self.pauseText = QLineEdit()
+        # the pause text entry
+        self.pauseText.setText(self.loadedConfig["pauseText"])
+        # sets the text from the config
+        self.pauseText.setToolTip("The text to add before the first element, when playback is paused")
+        # tooltip
+
+        self.pauseLine = QFrame()
+        # the line under the pause text
+        self.pauseLine.setFrameShape(QFrame.Shape.HLine)
+        self.pauseLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.basicBooleanGrid.addWidget(self.pauseBoolean, 0, 0)
+        self.basicBooleanGrid.addWidget(self.pauseText, 1, 0)
+        self.basicBooleanGrid.addWidget(self.pauseLine, 2, 0)
+        # adds to the layout
+
+    ### Song ###
+
+        self.enableSong = QCheckBox("Enable Song Name")
+        # the song boolean
+        
+        self.enableSong.setChecked(self.loadedConfig["enableSong"])
+        # ticks the box automatically
+        self.enableSong.setToolTip("Whether to add the song name to the presence string")
+        # tooltip
+
+        self.songLine = QFrame()
+        # the line under song boolean
+        self.songLine.setFrameShape(QFrame.Shape.HLine)
+        self.songLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.basicBooleanGrid.addWidget(self.enableSong, 3, 0)
+        self.basicBooleanGrid.addWidget(self.songLine, 4, 0)
+        # adds to layout
+           
+    ### Artist ###
+
+        self.enableArtist = QCheckBox("Enable Artist Name")
+        # the artist boolean
+        self.enableArtist.setChecked(self.loadedConfig["enableArtist"])
+        # ticks the box automatically
+        self.enableArtist.setToolTip("Whether to add the artist name(s) to the presence string")
+        # tooltip
+
+        self.artistLine = QFrame()
+        # the line under song boolean
+        self.artistLine.setFrameShape(QFrame.Shape.HLine)
+        self.artistLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.basicBooleanGrid.addWidget(self.enableArtist, 5, 0)
+        self.basicBooleanGrid.addWidget(self.artistLine, 6, 0)
+        # adds to layout
+
+
+    ### Album ###
+
+        self.enableAlbum = QCheckBox("Enable Album Name")
+        # the album boolean
+        self.enableAlbum.setChecked(self.loadedConfig["enableAlbum"])
+        # ticks the box automatically
+        self.enableAlbum.setToolTip("Whether to add the album name to the presence string")
+        # tooltip
+
+        self.albumLine = QFrame()
+        # the line under song boolean
+        self.albumLine.setFrameShape(QFrame.Shape.HLine)
+        self.albumLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.basicBooleanGrid.addWidget(self.enableAlbum, 7, 0)
+        self.basicBooleanGrid.addWidget(self.albumLine, 8, 0)
+        # adds to layout
+
+
+
+### URL Grid (0 / 1) ###
+
+        self.urlGrid = QGridLayout()
+        self.urlGrid.setHorizontalSpacing(5)
+        self.urlGrid.setVerticalSpacing(10)
+        self.urlGrid.setContentsMargins(10, 10, 10, 10)
+        # the grid that holds the URL stuff
+
+        self.fullWindowLayout.addLayout(self.urlGrid, 0, 1)
+        # adds to main layout
+
+    ### Round Picture URL ###
+
+        self.roundURLHeader = QLabel()
+        # the header for the round picture URL
+        self.roundURLHeader.setText("Round Picture Redirect")
+        # sets the text
+
+        self.roundURLText = QLineEdit()
+        # the round picture URL text entry
+        self.roundURLText.setText(self.loadedConfig["smallPicURL"])
+        # sets the URL from the config automatically
+        self.roundURLText.setToolTip("The link to redirect to when someone clicks on the small, round picture")
+        # tooltip
+
+        self.roundURLLine = QFrame()
+        # the round url text line
+        self.roundURLLine.setFrameShape(QFrame.Shape.HLine)
+        self.roundURLLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.urlGrid.addWidget(self.roundURLHeader, 0, 0)
+        self.urlGrid.addWidget(self.roundURLText, 1, 0)
+        self.urlGrid.addWidget(self.roundURLLine, 2, 0)
+        # adds to layout
+
+    ### Round Pic (Discord) ###
+
+        self.roundPicHeader = QLabel()
+        # the round picture header text
+        self.roundPicHeader.setText("Round Picture")
+        # sets the text
+
+        self.roundPicText = QLineEdit()
+        # the round picture text entry
+        self.roundPicText.setText(self.loadedConfig["smallPic"])
+        # sets the picture name from the config file
+        self.roundPicText.setToolTip("The name/link of the picture to load in the round frame\nYou can find it from your Developer Dashboard or link a picture")
+        # tooltip
+
+        self.roundPicLine = QFrame()
+        # the round url text line
+        self.roundPicLine.setFrameShape(QFrame.Shape.HLine)
+        self.roundPicLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.urlGrid.addWidget(self.roundPicHeader, 3, 0)
+        self.urlGrid.addWidget(self.roundPicText, 4, 0)
+        self.urlGrid.addWidget(self.roundPicLine, 5, 0)
+        # adds to layout
+
+    ### Round Pic Hover ###
+
+        self.roundPicHoverHeader = QLabel()
+        # round picture hover text header
+        self.roundPicHoverHeader.setText("Round Picture Hover")
+        # sets the text
+
+        self.roundPicHoverText = QLineEdit()
+        # the round picture hover text entry
+        self.roundPicHoverText.setText(self.loadedConfig["smallPicHover"])
+        # sets the text from the config file
+        self.roundPicHoverText.setToolTip("The text to display when hovering over the round picture")
+        # tooltip
+
+        self.roundPicHoverLine = QFrame()
+        # the line under the hover text
+        self.roundPicHoverLine.setFrameShape(QFrame.Shape.HLine)
+        self.roundPicHoverLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.urlGrid.addWidget(self.roundPicHoverHeader, 6, 0)
+        self.urlGrid.addWidget(self.roundPicHoverText, 7, 0)
+        self.urlGrid.addWidget(self.roundPicHoverLine, 8, 0)
+        # adds to layout
+
+    ### Spotify URL ###
 
         self.spotifyURLoptions = ["Track", "Album", "Artist", "Playlist"]
         # stores all the URL options in a list
@@ -114,6 +293,257 @@ class Ui_DSIWindow(object):
         self.spotifyURLoptions.remove(self.loadedURLoption)
         # removes the loaded URL option from the list
 
+        self.spotifyURLHeader = QLabel()
+        # the header for the Spotify URL
+        self.spotifyURLHeader.setText("Spotify Link Type")
+        # sets the text
+
+        self.spotifyURLSelection = QComboBox()
+        # the dropdown menu of URL options
+        self.spotifyURLSelection.addItem(f"{self.loadedURLoption}")
+        self.spotifyURLSelection.addItem(f"{self.spotifyURLoptions[0]}")
+        self.spotifyURLSelection.addItem(f"{self.spotifyURLoptions[1]}")
+        self.spotifyURLSelection.addItem(f"{self.spotifyURLoptions[2]}")
+        # adds all the options
+        self.spotifyURLSelection.setToolTip("The type of link that gets set into the large picture and song detail fields\n"
+            "Note that Playlist requires an active playlist, otherwise defaults to Round Picture URL until an active playlist is found")
+        # tooltip
+
+        self.spotifyURLLine = QFrame()
+        # the line under the hover text
+        self.spotifyURLLine.setFrameShape(QFrame.Shape.HLine)
+        self.spotifyURLLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.urlGrid.addWidget(self.spotifyURLHeader, 9, 0)
+        self.urlGrid.addWidget(self.spotifyURLSelection, 10, 0)
+        self.urlGrid.addWidget(self.spotifyURLLine, 11, 0)
+        # adds to layout
+
+    ### Album Fallback ###
+
+        self.albumFallbackHeader = QLabel()
+        # the album fallback header text
+        self.albumFallbackHeader.setText("Album Fallback Text")
+        # sets the text
+
+        self.albumFallbackText = QLineEdit()
+        # the album fallback text entry
+        self.albumFallbackText.setText(self.loadedConfig["albumFallback"])
+        # sets the text from the config file
+        self.albumFallbackText.setToolTip("The text to use in the album's place, if the string is too long\n"
+                                          "This happens when the presence string exceeds 128 characters")
+        # tooltip
+
+        self.urlGrid.addWidget(self.albumFallbackHeader, 12, 0)
+        self.urlGrid.addWidget(self.albumFallbackText, 13, 0)
+        # adds to layout
+
+### Styling Grid (0 / 2) ###
+
+        self.stylingGrid = QGridLayout()
+        self.stylingGrid.setHorizontalSpacing(5)
+        self.stylingGrid.setVerticalSpacing(10)
+        self.stylingGrid.setContentsMargins(10, 10, 10, 10)
+        # the grid that holds the right side entries
+        
+        self.fullWindowLayout.addLayout(self.stylingGrid, 0, 2)
+        # adds the styling grid to the layout
+
+   ### Pre-Text ###
+
+        self.preTextHeader = QLabel()
+        # the pre text header
+        self.preTextHeader.setText("Pre-Text")
+        # sets the text
+
+        self.preText = QLineEdit()
+        # the pre text
+        self.preText.setText(self.loadedConfig["preText"])
+        # sets the text from loaded config automatically
+        self.preText.setToolTip("Text placed before the first element (may be omitted)")
+        # tooltip
+
+        self.preTextLine = QFrame()
+        # the line under preText
+        self.preTextLine.setFrameShape(QFrame.Shape.HLine)
+        self.preTextLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.stylingGrid.addWidget(self.preTextHeader, 0, 0)
+        self.stylingGrid.addWidget(self.preText, 1, 0)
+        self.stylingGrid.addWidget(self.preTextLine, 2, 0)
+        # adds to layout
+
+    ### Post-Text ###
+
+        self.postTextHeader = QLabel()
+        # the post text header
+        self.postTextHeader.setText("Post-Text")
+        # sets the text
+
+        self.postText = QLineEdit()
+        # the post text entry
+        self.postText.setText(self.loadedConfig["postText"])
+        # sets the text from loaded config automatically
+        self.postText.setToolTip("Text placed before the last element (may be omitted)")
+        # tooltip
+
+        self.postTextLine = QFrame()
+        # the line under postText
+        self.postTextLine.setFrameShape(QFrame.Shape.HLine)
+        self.postTextLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.stylingGrid.addWidget(self.postTextHeader, 3, 0)
+        self.stylingGrid.addWidget(self.postText, 4, 0)
+        self.stylingGrid.addWidget(self.postTextLine, 5, 0)
+        # adds to layout
+
+    ### Left Spacer ###
+  
+        self.songSpacerLHeader = QLabel()
+        # the left spacer header
+        self.songSpacerLHeader.setText("Left Spacer")
+        # sets the text
+
+        self.songSpacerL = QLineEdit()
+        # the left spacer entry
+        self.songSpacerL.setText(self.loadedConfig["spacerL"])
+        # loads the text from the config
+        self.songSpacerL.setToolTip("The string/spacer placed after the first element\nDefault: \u227a")
+        # the left spacer tooltip
+
+        self.spacerLLine = QFrame()
+        # the line after left spacer
+        self.spacerLLine.setFrameShape(QFrame.Shape.HLine)
+        self.spacerLLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.stylingGrid.addWidget(self.songSpacerLHeader, 6, 0)
+        self.stylingGrid.addWidget(self.songSpacerL, 7, 0)
+        self.stylingGrid.addWidget(self.spacerLLine, 8, 0)
+        # adds to layout
+
+    ### Right Spacer ###
+
+        self.songSpacerRHeader = QLabel()
+        # the right spacer header
+        self.songSpacerRHeader.setText("Right Spacer")
+        # sets the text
+
+        self.songSpacerR = QLineEdit()
+        # the right spacer entry
+        self.songSpacerR.setText(self.loadedConfig["spacerR"])
+        # loads the text from the config
+        self.songSpacerR.setToolTip("The string/spacer placed after the second element\nDefault: \u227b")
+        # tooltip
+
+        self.spacerRLine = QFrame()
+        # the line under right spacer
+        self.spacerRLine.setFrameShape(QFrame.Shape.HLine)
+        self.spacerRLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.stylingGrid.addWidget(self.songSpacerRHeader, 9, 0)
+        self.stylingGrid.addWidget(self.songSpacerR, 10, 0)
+        self.stylingGrid.addWidget(self.spacerRLine, 11, 0)
+        # adds to layout
+
+
+
+### Buttons (2 / 0) ###
+
+        self.buttonLayout = QGridLayout()
+        # this layout just contains 2 buttons, the shaa button and the starter button
+
+        self.fullWindowLayout.addLayout(self.buttonLayout, 2, 0)
+        # adds the vertical (button) layout to the full layout
+
+        self.shaaConfigureButton = QPushButton()
+        # the button that opens the SHAA configuration window
+        self.shaaConfigureButton.setText("Configure SHAA Details")
+        # sets the text
+        self.shaaConfigureButton.setToolTip("Opens a new window to configure SHAA details")
+        # tooltip
+        self.shaaConfigureButton.setMinimumSize(250, 60)
+        # sets a minimum size
+
+        self.dsiStarterButton = QPushButton()
+        # the button that closes this window and continues previous function (DSI or func config)
+        self.dsiStarterButton.setText("Start DSI\n"
+            "Ensure you press this to save the config!")
+        # sets the text
+        self.dsiStarterButton.setToolTip("Closes this window and continues DSI process")
+        # tooltip
+        self.dsiStarterButton.setMinimumSize(250, 60)
+        # sets a minimum size
+
+        self.buttonLayout.addWidget(self.shaaConfigureButton, 0, 0)
+        # adds the button to the layout
+        self.buttonLayout.addWidget(self.dsiStarterButton, 1, 0)
+        # adds the start button to the layout
+
+        self.shaaConfigureButton.clicked.connect(self.runShaaWindow)
+        # runs the SHAA configuration window when pressed
+        self.dsiStarterButton.clicked.connect(self.writeConfig)
+        # "connects" the starter button to the config writer (also closes the window)
+
+
+
+### Song Preview Text (2 / 1) ###
+
+        self.previewBox = QGridLayout()
+        self.previewBox.setSpacing(5)
+        self.previewBox.setContentsMargins(20, 10, 20, 10)
+        # vertical layout
+
+        self.fullWindowLayout.addLayout(self.previewBox, 2, 1)
+        # adds the preview box layout to the main layout
+
+    ### Preview Text ###
+
+        if self.loadedConfig["enablePause"]:
+        # if the config option is true
+            self.songPreviewText = f"{self.loadedConfig["pauseText"]} a song {self.loadedConfig["spacerL"]} an artist {self.loadedConfig["spacerR"]} {self.loadedConfig["albumFallback"]}"
+            # creates a songPreviewText string to be used as a preview for the full styling in "real-time"
+        else:
+        # if it's not
+            self.songPreviewText = f"A song {self.loadedConfig["spacerL"]} an artist {self.loadedConfig["spacerR"]} {self.loadedConfig["albumFallback"]}"
+            # uses no pause text 
+
+        self.previewHeader = QLabel()
+        # the tooltip for the preview string
+        self.previewHeader.setText("Discord Presence String Preview:")
+        # sets text
+
+        self.previewText = QLabel()
+        # the preview string for how the song should look in Discord (gets constructed below)
+        self.previewText.setText(self.songPreviewText)
+        # sets the text to the premade string
+        self.previewText.setToolTip("This is roughly what the Discord song field will look like")
+        # tooltip
+
+        self.previewSpacerTop = QSpacerItem(20, 120, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.previewSpacerBottom = QSpacerItem(20, 50, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        # adds a new layout for the string preview
+
+        self.previewBox.addItem(self.previewSpacerTop, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.previewBox.addWidget(self.previewHeader, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.previewBox.addWidget(self.previewText, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.previewBox.addItem(self.previewSpacerBottom, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds to layout
+
+
+
+### Picture Cycle Main (2 / 2) ###
+
+        self.pictureGrid = QGridLayout()
+        self.pictureGrid.setHorizontalSpacing(5)
+        self.pictureGrid.setVerticalSpacing(10)
+        self.pictureGrid.setContentsMargins(10, 10, 10, 10)
+        # the layout that hosts the picture-related options
+
+        self.fullWindowLayout.addLayout(self.pictureGrid, 2, 2)
+        # adds the picture grid (bottom right) to the main layout
+
+    ### Picture Cycle Types ###
+
         self.picCycleTypes = ["Spotify", "File", "None"]
         # stores the options for the picture cycling in a list
         self.loadedPicCycleType = self.loadedConfig["pictureCycleType"]
@@ -121,745 +551,118 @@ class Ui_DSIWindow(object):
         self.picCycleTypes.remove(self.loadedPicCycleType)
         # removes the loaded type from the list
 
-        # self.picCycleBehaviors = ["Random", "Sequence", "Once", "None"]
+        self.pictureCycleHeader = QLabel()
+        # the header for the picCyclerType
+        self.pictureCycleHeader.setText("Large Picture Type")
+        # sets the text
+
+        self.pictureCycleType = QComboBox()
+        self.pictureCycleType.addItem(self.loadedPicCycleType)
+        self.pictureCycleType.addItem(self.picCycleTypes[0])
+        self.pictureCycleType.addItem(self.picCycleTypes[1])
+        # dropdown for the type of cycling
+
+        self.pictureCycleType.setToolTip("What to display in the big picture\n"
+                                        "'Spotify' uses Spotify's album covers\n"
+                                        "'File' reads from pictureList.txt\n"
+                                        "'None' doesn't load a picture")
+        # tooltip
+
+        self.pictureCycleTypeLine = QFrame()
+        self.pictureCycleTypeLine.setFrameShape(QFrame.Shape.HLine)
+        self.pictureCycleTypeLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.pictureGrid.addWidget(self.pictureCycleHeader, 0, 0)
+        self.pictureGrid.addWidget(self.pictureCycleType, 1, 0)
+        self.pictureGrid.addWidget(self.pictureCycleTypeLine, 2, 0)
+        # adds to grid
+
+    ### Picture Cycle Time ###
+
+        self.pictureCycleTimeHeader = QLabel()
+        # the header for the picture cycle time
+        self.pictureCycleTimeHeader.setText("Large Picture Timer")
+        # sets the text
+
+        self.pictureCycleTime = QLineEdit()
+        # a text field that accepts the picture cycling time (int)
+        self.pictureCycleTime.setText(str(self.loadedConfig["pictureCycleTime"]))
+        # sets the text from the config
+        self.pictureCycleTime.setToolTip("How long to wait between picture changes\nOnly applies if using 'File' in Large Picture Type")
+        # tooltip
+
+        self.pictureCycleTimeLine = QFrame()
+        # the line under picture cycling time
+        self.pictureCycleTimeLine.setFrameShape(QFrame.Shape.HLine)
+        self.pictureCycleTimeLine.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.pictureGrid.addWidget(self.pictureCycleTimeHeader, 3, 0)
+        self.pictureGrid.addWidget(self.pictureCycleTime, 4, 0)
+        self.pictureGrid.addWidget(self.pictureCycleTimeLine, 5, 0)
+        # adds to grid
+
+    ### Picture Cycle Behavior ###
+
+        self.picCycleBehaviors = ["Random", "Sequence", "Once", "None"]
         # stores the options for the picture cycling behavior in a list
-        # self.loadedPicCycleBehavior = self.loadedConfig["pictureCycleBehavior"]
+        self.loadedPicCycleBehavior = self.loadedConfig["pictureCycleBehavior"]
         # gets the loaded option for the behavior
-        # self.picCycleBehaviors.remove(self.loadedPicCycleBehavior)
+        self.picCycleBehaviors.remove(self.loadedPicCycleBehavior)
         # removes the loaded type
 
-        self.songPreviewText = "A Song - an artist - an album"
-        # creates a songPreviewText string to be used as a preview for the full styling in "real-time"
-
-        self.gridLayoutWidget_2 = QWidget(self.main)
-        self.gridLayoutWidget_2.setObjectName(u"gridLayoutWidget_2")
-        self.gridLayoutWidget_2.setGeometry(QRect(0, 0, 1515, 1010))
-        # the "main" ('background') layout in the background, sets size and name
-
-        self.fullWindowLayout = QGridLayout(self.gridLayoutWidget_2)
-        self.fullWindowLayout.setSpacing(15)
-        self.fullWindowLayout.setObjectName(u"fullWindowLayout")
-        self.fullWindowLayout.setContentsMargins(15, 0, 20, 15)
-        # the *actual* main layout, contains all other widgets and layouts
-
-        self.pictureGrid = QGridLayout()
-        self.pictureGrid.setObjectName(u"pictureGrid")
-        self.pictureGrid.setHorizontalSpacing(5)
-        self.pictureGrid.setVerticalSpacing(10)
-        self.pictureGrid.setContentsMargins(10, 10, 10, 10)
-        # the layout that hosts the picture-related options
-
-        self.line_12 = QFrame(self.gridLayoutWidget_2)
-        self.line_12.setObjectName(u"line_12")
-        self.line_12.setFrameShape(QFrame.Shape.HLine)
-        self.line_12.setFrameShadow(QFrame.Shadow.Sunken)
-        # a horizontal line
-        self.pictureGrid.addWidget(self.line_12, 3, 0, 1, 1)
-        # adds the line
-
-        self.pictureCycleTime = QLineEdit(self.gridLayoutWidget_2)
-        self.pictureCycleTime.setObjectName(u"pictureCycleTime")
-        # a text field that accepts the picture cycling time (int)
-        self.pictureGrid.addWidget(self.pictureCycleTime, 5, 0, 1, 1)
-        # adds the time input field
-
-        self.line_13 = QFrame(self.gridLayoutWidget_2)
-        self.line_13.setObjectName(u"line_13")
-        self.line_13.setFrameShape(QFrame.Shape.HLine)
-        self.line_13.setFrameShadow(QFrame.Shadow.Sunken)
-        # a horizontal line
-        self.pictureGrid.addWidget(self.line_13, 7, 0, 1, 1)
-        # adds the line
-
-        #self.pictureCycleBehaviorHeader = QLabel(self.gridLayoutWidget_2)
-        #self.pictureCycleBehaviorHeader.setObjectName(u"pictureCycleBehaviorHeader")
+        self.pictureCycleBehaviorHeader = QLabel()
         # label (text field) for the cycle behavior, above the selection
-        #self.pictureGrid.addWidget(self.pictureCycleBehaviorHeader, 8, 0, 1, 1)
-        # adds the label
+        self.pictureCycleBehaviorHeader.setText("Large Picture Behavior")
+        # sets the text
 
-        #self.pictureCycleTooltip = QLabel(self.gridLayoutWidget_2)
-        #self.pictureCycleTooltip.setObjectName(u"pictureCycleTooltip")
-        # the tooltip label for the picCycler
-        #self.pictureGrid.addWidget(self.pictureCycleTooltip, 2, 0, 1, 1)
-        # adds the tooltip to the grid
+        self.pictureCycleBehavior = QComboBox()
+        self.pictureCycleBehavior.addItem(self.loadedPicCycleBehavior)
+        self.pictureCycleBehavior.addItem(self.picCycleBehaviors[0])
+        self.pictureCycleBehavior.addItem(self.picCycleBehaviors[1])
+        self.pictureCycleBehavior.addItem(self.picCycleBehaviors[2])
+        # a dropdown for the cycling behavior
+        self.pictureCycleBehavior.setToolTip("How to change the pictures\n"
+                                                "Only applies if using 'File' in Large Picture Type"
+                                                "'Random' picks a random picture every time\n"
+                                                "'Sequence' picks the pictures in order\n"
+                                                "'Once' picks a random picture once\n"
+                                                "'None' leaves the picture empty")
+        # tooltip
 
-        #self.pictureCycleBehavior = QComboBox(self.gridLayoutWidget_2)
-        #self.pictureCycleBehavior.addItem("")
-        #self.pictureCycleBehavior.addItem("")
-        #self.pictureCycleBehavior.addItem("")
-        #self.pictureCycleBehavior.addItem("")
-        #self.pictureCycleBehavior.setObjectName(u"pictureCycleBehavior")
-        # a combobox (dropdown) for the cycling behavior (gets the strings from the translate I guess)
-        #self.pictureGrid.addWidget(self.pictureCycleBehavior, 9, 0, 1, 1)
-        # adds the combobox to the picture grid
+        self.pictureGrid.addWidget(self.pictureCycleBehaviorHeader, 6, 0)
+        self.pictureGrid.addWidget(self.pictureCycleBehavior, 7, 0)
+        # adds to the layout
 
-        self.pictureCycleTimeHeader = QLabel(self.gridLayoutWidget_2)
-        self.pictureCycleTimeHeader.setObjectName(u"pictureCycleTimeHeader")
-        # the header for the picture cycle time
-        self.pictureGrid.addWidget(self.pictureCycleTimeHeader, 4, 0, 1, 1)
-        # adds the header to the grid
+    ### Central Widget ###
 
-        self.pictureCycleHeader = QLabel(self.gridLayoutWidget_2)
-        self.pictureCycleHeader.setObjectName(u"pictureCycleHeader")
-        # the header for the cycle type?
-        self.pictureGrid.addWidget(self.pictureCycleHeader, 0, 0, 1, 1)
-        # adds to grid
+        DSIWindow.setCentralWidget(self.centralWidget)
+        # sets central widget
 
-        self.pictureCycleType = QComboBox(self.gridLayoutWidget_2)
-        self.pictureCycleType.addItem("")
-        self.pictureCycleType.addItem("")
-        self.pictureCycleType.addItem("")
-        self.pictureCycleType.setObjectName(u"pictureCycleType")
-        # dropdown for the type of cycling
-        self.pictureGrid.addWidget(self.pictureCycleType, 1, 0, 1, 1)
-        # adds to grid
+### Connects ###
 
-        self.pictureCycleTimeTooltip = QLabel(self.gridLayoutWidget_2)
-        self.pictureCycleTimeTooltip.setObjectName(u"pictureCycleTimeTooltip")
-        # tooltip for the time
-        self.pictureGrid.addWidget(self.pictureCycleTimeTooltip, 6, 0, 1, 1)
-        # adds to grid
-
-        self.fullWindowLayout.addLayout(self.pictureGrid, 2, 2, 1, 1)
-        # adds the picture grid (bottom right) to the main layout
-
-        self.previewBox = QVBoxLayout()
-        self.previewBox.setSpacing(5)
-        self.previewBox.setObjectName(u"previewBox")
-        self.previewBox.setContentsMargins(20, 10, 20, 10)
-        self.verticalSpacer_2 = QSpacerItem(20, 50, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        # adds a new layout for the string preview
-        self.previewBox.addItem(self.verticalSpacer_2)
-        # a vertical spacer, to keep the strings roughly in the middle of the box
-
-        self.previewTooltip = QLabel(self.gridLayoutWidget_2)
-        self.previewTooltip.setObjectName(u"previewTooltip")
-        # the tooltip for the preview string
-        self.previewBox.addWidget(self.previewTooltip)
-        # adds to layout
-
-        self.previewText = QLabel(self.gridLayoutWidget_2)
-        self.previewText.setObjectName(u"previewText")
-        # the preview string for how the song should look in Discord (gets constructed below)
-        self.previewBox.addWidget(self.previewText)
-        # adds to layout
-
-        self.verticalSpacer = QSpacerItem(20, 120, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
-        # a second vertical spacer to keep the strings in the middle (one pushes down, other pushes up)
-        self.previewBox.addItem(self.verticalSpacer)
-        # adds the spacer to the layout
-
-        self.fullWindowLayout.addLayout(self.previewBox, 2, 1, 1, 1)
-        # adds the preview box layout to the main layout
-
-        self.basicBooleanGrid = QGridLayout()
-        self.basicBooleanGrid.setObjectName(u"basicBooleanGrid")
-        self.basicBooleanGrid.setHorizontalSpacing(5)
-        self.basicBooleanGrid.setVerticalSpacing(10)
-        self.basicBooleanGrid.setContentsMargins(10, 10, 10, 10)
-        self.printUpdatesTooltip = QLabel(self.gridLayoutWidget_2)
-        self.printUpdatesTooltip.setObjectName(u"printUpdatesTooltip")
-
-        self.basicBooleanGrid.addWidget(self.printUpdatesTooltip, 17, 0, 1, 1)
-
-        self.enableURIMapBoolean = QCheckBox(self.gridLayoutWidget_2)
-        self.enableURIMapBoolean.setObjectName(u"enableURIMapBoolean")
-        if self.loadedConfig["enableURI"]:
-        # if the config option is set to True
-            self.enableURIMapBoolean.setChecked(True)
-            # ticks the box automatically
-
-        self.basicBooleanGrid.addWidget(self.enableURIMapBoolean, 9, 0, 1, 1)
-
-        self.marketCodeHeader = QLabel(self.gridLayoutWidget_2)
-        self.marketCodeHeader.setObjectName(u"marketCodeHeader")
-
-        self.basicBooleanGrid.addWidget(self.marketCodeHeader, 12, 0, 1, 1)
-
-        self.printErrorsBoolean = QCheckBox(self.gridLayoutWidget_2)
-        self.printErrorsBoolean.setObjectName(u"printErrorsBoolean")
-        if self.loadedConfig["printErrors"]:
-        # if the config option is set to True
-            self.printErrorsBoolean.setChecked(True)
-            # ticks the box automatically
-
-        self.basicBooleanGrid.addWidget(self.printErrorsBoolean, 19, 0, 1, 1)
-
-        self.clockStyleTooltip = QLabel(self.gridLayoutWidget_2)
-        self.clockStyleTooltip.setObjectName(u"clockStyleTooltip")
-
-        self.basicBooleanGrid.addWidget(self.clockStyleTooltip, 24, 0, 1, 1)
-
-        self.apiTimerNum = QLineEdit(self.gridLayoutWidget_2)
-        self.apiTimerNum.setObjectName(u"apiTimerNum")
-
-        self.basicBooleanGrid.addWidget(self.apiTimerNum, 1, 0, 1, 1)
-
-        self.line_17 = QFrame(self.gridLayoutWidget_2)
-        self.line_17.setObjectName(u"line_17")
-        self.line_17.setFrameShape(QFrame.Shape.HLine)
-        self.line_17.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line_17, 21, 0, 1, 1)
-
-        self.line_16 = QFrame(self.gridLayoutWidget_2)
-        self.line_16.setObjectName(u"line_16")
-        self.line_16.setFrameShape(QFrame.Shape.HLine)
-        self.line_16.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line_16, 15, 0, 1, 1)
-
-        self.apiTimerHeader = QLabel(self.gridLayoutWidget_2)
-        self.apiTimerHeader.setObjectName(u"apiTimerHeader")
-
-        self.basicBooleanGrid.addWidget(self.apiTimerHeader, 0, 0, 1, 1)
-
-        self.pauseBoolean = QCheckBox(self.gridLayoutWidget_2)
-        self.pauseBoolean.setObjectName(u"pauseBoolean")
-        if self.loadedConfig["enablePause"]:
-        # if the config option is set to True
-            self.pauseBoolean.setChecked(True)
-            # ticks the box automatically
         self.pauseBoolean.stateChanged.connect(self.previewStringWriter)
-        # if the state changes, calls the previewWriter
+        # if the state changes, calls the previewStringWriter
+        self.enableSong.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewStringWriter
+        self.enableArtist.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewStringWriter
+        self.enableAlbum.stateChanged.connect(self.previewStringWriter)
+        # if the state changes, calls the previewStringWriter
 
-        self.basicBooleanGrid.addWidget(self.pauseBoolean, 4, 0, 1, 1)
-
-        self.line_4 = QFrame(self.gridLayoutWidget_2)
-        self.line_4.setObjectName(u"line_4")
-        self.line_4.setFrameShape(QFrame.Shape.HLine)
-        self.line_4.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line_4, 18, 0, 1, 1)
-
-        self.clockStyleHeader = QLabel(self.gridLayoutWidget_2)
-        self.clockStyleHeader.setObjectName(u"clockStyleHeader")
-
-        self.basicBooleanGrid.addWidget(self.clockStyleHeader, 22, 0, 1, 1)
-
-        self.clockStyleSelection = QComboBox(self.gridLayoutWidget_2)
-        self.clockStyleSelection.addItem("")
-        self.clockStyleSelection.addItem("")
-        self.clockStyleSelection.addItem("")
-        self.clockStyleSelection.setObjectName(u"clockStyleSelection")
-
-        self.basicBooleanGrid.addWidget(self.clockStyleSelection, 23, 0, 1, 1)
-
-        self.printUpdatesBoolean = QCheckBox(self.gridLayoutWidget_2)
-        self.printUpdatesBoolean.setObjectName(u"printUpdatesBoolean")
-        if self.loadedConfig["printUpdates"]:
-        # if the config option is set to True
-            self.printUpdatesBoolean.setChecked(True)
-            # ticks the box automatically
-
-        self.basicBooleanGrid.addWidget(self.printUpdatesBoolean, 16, 0, 1, 1)
-
-        self.marketCode = QLineEdit(self.gridLayoutWidget_2)
-        self.marketCode.setObjectName(u"marketCode")
-
-        self.basicBooleanGrid.addWidget(self.marketCode, 13, 0, 1, 1)
-
-        self.pauseTooltip = QLabel(self.gridLayoutWidget_2)
-        self.pauseTooltip.setObjectName(u"pauseTooltip")
-
-        self.basicBooleanGrid.addWidget(self.pauseTooltip, 7, 0, 1, 1)
-
-        self.line = QFrame(self.gridLayoutWidget_2)
-        self.line.setObjectName(u"line")
-        self.line.setFrameShape(QFrame.Shape.HLine)
-        self.line.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line, 3, 0, 1, 1)
-
-        self.pauseText = QLineEdit(self.gridLayoutWidget_2)
-        self.pauseText.setObjectName(u"pauseText")
         self.pauseText.textChanged.connect(self.previewStringWriter)
         # if the text changes, calls the previewStringWriter
-
-        self.basicBooleanGrid.addWidget(self.pauseText, 6, 0, 1, 1)
-
-        self.line_2 = QFrame(self.gridLayoutWidget_2)
-        self.line_2.setObjectName(u"line_2")
-        self.line_2.setFrameShape(QFrame.Shape.HLine)
-        self.line_2.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line_2, 8, 0, 1, 1)
-
-        self.printErrorsTooltip = QLabel(self.gridLayoutWidget_2)
-        self.printErrorsTooltip.setObjectName(u"printErrorsTooltip")
-
-        self.basicBooleanGrid.addWidget(self.printErrorsTooltip, 20, 0, 1, 1)
-
-        self.marketCodeTooltip = QLabel(self.gridLayoutWidget_2)
-        self.marketCodeTooltip.setObjectName(u"marketCodeTooltip")
-
-        self.basicBooleanGrid.addWidget(self.marketCodeTooltip, 14, 0, 1, 1)
-
-        self.enableURIMapTooltip = QLabel(self.gridLayoutWidget_2)
-        self.enableURIMapTooltip.setObjectName(u"enableURIMapTooltip")
-
-        self.basicBooleanGrid.addWidget(self.enableURIMapTooltip, 10, 0, 1, 1)
-
-        self.line_3 = QFrame(self.gridLayoutWidget_2)
-        self.line_3.setObjectName(u"line_3")
-        self.line_3.setFrameShape(QFrame.Shape.HLine)
-        self.line_3.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.basicBooleanGrid.addWidget(self.line_3, 11, 0, 1, 1)
-
-        self.apiTimerTooltip = QLabel(self.gridLayoutWidget_2)
-        self.apiTimerTooltip.setObjectName(u"apiTimerTooltip")
-
-        self.basicBooleanGrid.addWidget(self.apiTimerTooltip, 2, 0, 1, 1)
-
-
-        self.fullWindowLayout.addLayout(self.basicBooleanGrid, 0, 0, 2, 1)
-
-        self.verticalLayout = QVBoxLayout()
-        self.verticalLayout.setObjectName(u"verticalLayout")
-        # this layout just contains 2 buttons, the shaa button and the starter button
-
-        self.shaaConfigureButton = QPushButton(self.gridLayoutWidget_2)
-        # the button that opens the SHAA configuration window
-        self.shaaConfigureButton.setObjectName(u"shaaConfigureButton")
-        self.shaaConfigureButton.clicked.connect(self.runShaaWindow)
-        # runs the SHAA configuration window when pressed
-        self.shaaConfigureButton.setMinimumHeight(55)
-        # sets a minimum height of 55px
-        self.verticalLayout.addWidget(self.shaaConfigureButton)
-        # adds the button to the layout
-
-        self.dsiStarterButton = QPushButton(self.gridLayoutWidget_2)
-        self.dsiStarterButton.setObjectName(u"dsiStarterButton")
-        self.dsiStarterButton.clicked.connect(self.writeConfig)
-        # "connects" the starter button to the config writer (also closes the window)
-        self.dsiStarterButton.setMinimumHeight(55)
-        # sets a minimum size of 55px
-
-        self.verticalLayout.addWidget(self.dsiStarterButton)
-        # adds the start button to the layout
-
-        self.fullWindowLayout.addLayout(self.verticalLayout, 2, 0, 1, 1)
-        # adds the vertical (button) layout to the full layout
-
-        self.urlGrid = QGridLayout()
-        self.urlGrid.setObjectName(u"urlGrid")
-        self.urlGrid.setHorizontalSpacing(5)
-        self.urlGrid.setVerticalSpacing(10)
-        self.urlGrid.setContentsMargins(10, 10, 10, 10)
-        self.roundURLTooltip = QLabel(self.gridLayoutWidget_2)
-        self.roundURLTooltip.setObjectName(u"roundURLTooltip")
-
-        self.urlGrid.addWidget(self.roundURLTooltip, 2, 1, 1, 1)
-
-        self.line_6 = QFrame(self.gridLayoutWidget_2)
-        self.line_6.setObjectName(u"line_6")
-        self.line_6.setFrameShape(QFrame.Shape.HLine)
-        self.line_6.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.urlGrid.addWidget(self.line_6, 3, 1, 1, 1)
-
-        self.line_15 = QFrame(self.gridLayoutWidget_2)
-        self.line_15.setObjectName(u"line_15")
-        self.line_15.setFrameShape(QFrame.Shape.HLine)
-        self.line_15.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.urlGrid.addWidget(self.line_15, 11, 1, 1, 1)
-
-        self.spotifyURLHeader = QLabel(self.gridLayoutWidget_2)
-        self.spotifyURLHeader.setObjectName(u"spotifyURLHeader")
-
-        self.urlGrid.addWidget(self.spotifyURLHeader, 12, 1, 1, 1)
-
-        self.roundURLText = QLineEdit(self.gridLayoutWidget_2)
-        self.roundURLText.setObjectName(u"roundURLText")
-        self.roundURLText.setText(self.loadedConfig["smallPicURL"])
-        # sets the URL from the config automatically
-
-        self.urlGrid.addWidget(self.roundURLText, 1, 1, 1, 1)
-
-        self.roundPicHeader = QLabel(self.gridLayoutWidget_2)
-        self.roundPicHeader.setObjectName(u"roundPicHeader")
-
-        self.urlGrid.addWidget(self.roundPicHeader, 4, 1, 1, 1)
-
-        self.spotifyURLTooltip = QLabel(self.gridLayoutWidget_2)
-        self.spotifyURLTooltip.setObjectName(u"spotifyURLTooltip")
-
-        self.urlGrid.addWidget(self.spotifyURLTooltip, 14, 1, 1, 1)
-
-        self.line_8 = QFrame(self.gridLayoutWidget_2)
-        self.line_8.setObjectName(u"line_8")
-        self.line_8.setFrameShape(QFrame.Shape.HLine)
-        self.line_8.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.urlGrid.addWidget(self.line_8, 15, 1, 1, 1)
-
-        self.albumFallbackTooltip = QLabel(self.gridLayoutWidget_2)
-        self.albumFallbackTooltip.setObjectName(u"albumFallbackTooltip")
-
-        self.urlGrid.addWidget(self.albumFallbackTooltip, 18, 1, 1, 1)
-
-        self.albumFallbackHeader = QLabel(self.gridLayoutWidget_2)
-        self.albumFallbackHeader.setObjectName(u"albumFallbackHeader")
-
-        self.urlGrid.addWidget(self.albumFallbackHeader, 16, 1, 1, 1)
-
-        self.albumFallbackText = QLineEdit(self.gridLayoutWidget_2)
-        self.albumFallbackText.setObjectName(u"albumFallbackText")
-
-        self.urlGrid.addWidget(self.albumFallbackText, 17, 1, 1, 1)
-
-        self.roundPicHoverText = QLineEdit(self.gridLayoutWidget_2)
-        self.roundPicHoverText.setObjectName(u"roundPicHoverText")
-        self.roundPicHoverText.setText(self.loadedConfig["smallPicHover"])
-        # sets the text from the config file
-
-        self.urlGrid.addWidget(self.roundPicHoverText, 9, 1, 1, 1)
-
-        self.roundPicTooltip = QLabel(self.gridLayoutWidget_2)
-        self.roundPicTooltip.setObjectName(u"roundPicTooltip")
-
-        self.urlGrid.addWidget(self.roundPicTooltip, 6, 1, 1, 1)
-
-        self.roundURLHeader = QLabel(self.gridLayoutWidget_2)
-        self.roundURLHeader.setObjectName(u"roundURLHeader")
-
-        self.urlGrid.addWidget(self.roundURLHeader, 0, 1, 1, 1)
-
-        self.roundPicHoverTooltip = QLabel(self.gridLayoutWidget_2)
-        self.roundPicHoverTooltip.setObjectName(u"roundPicHoverTooltip")
-
-        self.urlGrid.addWidget(self.roundPicHoverTooltip, 10, 1, 1, 1)
-
-        self.roundPicText = QLineEdit(self.gridLayoutWidget_2)
-        self.roundPicText.setObjectName(u"roundPicText")
-        self.roundPicText.setText(self.loadedConfig["smallPic"])
-        # sets the picture name from the config file
-
-        self.urlGrid.addWidget(self.roundPicText, 5, 1, 1, 1)
-
-        self.spotifyURLSelection = QComboBox(self.gridLayoutWidget_2)
-        self.spotifyURLSelection.addItem("")
-        self.spotifyURLSelection.addItem("")
-        self.spotifyURLSelection.addItem("")
-        self.spotifyURLSelection.addItem("")
-        self.spotifyURLSelection.setObjectName(u"spotifyURLSelection")
-
-        self.urlGrid.addWidget(self.spotifyURLSelection, 13, 1, 1, 1)
-
-        self.line_14 = QFrame(self.gridLayoutWidget_2)
-        self.line_14.setObjectName(u"line_14")
-        self.line_14.setFrameShape(QFrame.Shape.HLine)
-        self.line_14.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.urlGrid.addWidget(self.line_14, 7, 1, 1, 1)
-
-        self.roundPicHoverHeader = QLabel(self.gridLayoutWidget_2)
-        self.roundPicHoverHeader.setObjectName(u"roundPicHoverHeader")
-
-        self.urlGrid.addWidget(self.roundPicHoverHeader, 8, 1, 1, 1)
-
-
-        self.fullWindowLayout.addLayout(self.urlGrid, 0, 1, 2, 1)
-
-        self.stylingGrid = QGridLayout()
-        self.stylingGrid.setObjectName(u"stylingGrid")
-        self.stylingGrid.setHorizontalSpacing(5)
-        self.stylingGrid.setVerticalSpacing(10)
-        self.stylingGrid.setContentsMargins(10, 10, 10, 10)
-        
-        self.enableAlbumTooltip = QLabel(self.gridLayoutWidget_2)
-        self.enableAlbumTooltip.setObjectName(u"enableAlbumTooltip")
-
-        self.stylingGrid.addWidget(self.enableAlbumTooltip, 23, 0, 1, 1)
-
-        self.line_10 = QFrame(self.gridLayoutWidget_2)
-        self.line_10.setObjectName(u"line_10")
-        self.line_10.setFrameShape(QFrame.Shape.HLine)
-        self.line_10.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_10, 15, 0, 1, 1)
-
-        self.songSpacerR = QLineEdit(self.gridLayoutWidget_2)
-        self.songSpacerR.setObjectName(u"songSpacerR")
-        self.songSpacerR.textChanged.connect(self.previewStringWriter)
-        # if the text changes, calls the previewWriter
-
-        self.stylingGrid.addWidget(self.songSpacerR, 13, 0, 1, 1)
-
-        self.preTextHeader = QLabel(self.gridLayoutWidget_2)
-        self.preTextHeader.setObjectName(u"preTextHeader")
-
-        self.stylingGrid.addWidget(self.preTextHeader, 0, 0, 1, 1)
-
-        self.preTextTooltip = QLabel(self.gridLayoutWidget_2)
-        self.preTextTooltip.setObjectName(u"preTextTooltip")
-
-        self.stylingGrid.addWidget(self.preTextTooltip, 2, 0, 1, 1)
-
-        self.line_18 = QFrame(self.gridLayoutWidget_2)
-        self.line_18.setObjectName(u"line_18")
-        self.line_18.setFrameShape(QFrame.Shape.HLine)
-        self.line_18.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_18, 3, 0, 1, 1)
-
-        self.postTextHeader = QLabel(self.gridLayoutWidget_2)
-        self.postTextHeader.setObjectName(u"postTextHeader")
-
-        self.stylingGrid.addWidget(self.postTextHeader, 4, 0, 1, 1)
-
-        self.postTextTooltip = QLabel(self.gridLayoutWidget_2)
-        self.postTextTooltip.setObjectName(u"postTextTooltip")
-
-        self.stylingGrid.addWidget(self.postTextTooltip, 6, 0, 1, 1)
-
-        self.line_5 = QFrame(self.gridLayoutWidget_2)
-        self.line_5.setObjectName(u"line_5")
-        self.line_5.setFrameShape(QFrame.Shape.HLine)
-        self.line_5.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_5, 7, 0, 1, 1)
-
-        self.enableAlbum = QCheckBox(self.gridLayoutWidget_2)
-        self.enableAlbum.setObjectName(u"enableAlbum")
-        if self.loadedConfig["enableAlbum"]:
-        # if the config option is set to True
-            self.enableAlbum.setChecked(True)
-            # ticks the box automatically
-        self.enableAlbum.stateChanged.connect(self.previewStringWriter)
-        # if the state changes, calls the previewWriter
-
-        self.stylingGrid.addWidget(self.enableAlbum, 22, 0, 1, 1)
-
-        self.line_11 = QFrame(self.gridLayoutWidget_2)
-        self.line_11.setObjectName(u"line_11")
-        self.line_11.setFrameShape(QFrame.Shape.HLine)
-        self.line_11.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_11, 11, 0, 1, 1)
-
-        self.enableSong = QCheckBox(self.gridLayoutWidget_2)
-        self.enableSong.setObjectName(u"enableSong")
-        if self.loadedConfig["enableSong"]:
-        # if the config option is set to True
-            self.enableSong.setChecked(True)
-            # ticks the box automatically
-        self.enableSong.stateChanged.connect(self.previewStringWriter)
-        # if the state changes, calls the previewWriter
-
-        self.stylingGrid.addWidget(self.enableSong, 16, 0, 1, 1)
-
-        self.songSpacerRHeader = QLabel(self.gridLayoutWidget_2)
-        self.songSpacerRHeader.setObjectName(u"songSpacerRHeader")
-
-        self.stylingGrid.addWidget(self.songSpacerRHeader, 12, 0, 1, 1)
-
-        self.songSpacerL = QLineEdit(self.gridLayoutWidget_2)
-        self.songSpacerL.setObjectName(u"songSpacerL")
-        self.songSpacerL.textChanged.connect(self.previewStringWriter)
-        # if the text changes, calls the previewWriter
-
-        self.stylingGrid.addWidget(self.songSpacerL, 9, 0, 1, 1)
-
-        self.songSpacerLHeader = QLabel(self.gridLayoutWidget_2)
-        self.songSpacerLHeader.setObjectName(u"songSpacerLHeader")
-
-        self.stylingGrid.addWidget(self.songSpacerLHeader, 8, 0, 1, 1)
-
-        self.songSpacerLTooltip = QLabel(self.gridLayoutWidget_2)
-        self.songSpacerLTooltip.setObjectName(u"songSpacerLTooltip")
-
-        self.stylingGrid.addWidget(self.songSpacerLTooltip, 10, 0, 1, 1)
-
-        self.enableArtist = QCheckBox(self.gridLayoutWidget_2)
-        self.enableArtist.setObjectName(u"enableArtist")
-        if self.loadedConfig["enableArtist"]:
-        # if the config option is set to True
-            self.enableArtist.setChecked(True)
-            # ticks the box automatically
-        self.enableArtist.stateChanged.connect(self.previewStringWriter)
-        # if the state changes, calls the previewWriter
-
-        self.stylingGrid.addWidget(self.enableArtist, 19, 0, 1, 1)
-
-        self.preText = QLineEdit(self.gridLayoutWidget_2)
-        self.preText.setObjectName(u"preText")
-        self.preText.setText(self.loadedConfig["preText"])
-        # sets the text from loaded config automatically
+        self.albumFallbackText.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewStringWriter
         self.preText.textChanged.connect(self.previewStringWriter)
-        # if the text changes, calls the stringWriter
-
-        self.stylingGrid.addWidget(self.preText, 1, 0, 1, 1)
-
-        self.postText = QLineEdit(self.gridLayoutWidget_2)
-        self.postText.setObjectName(u"postText")
-        self.postText.setText(self.loadedConfig["postText"])
-        # sets the text from loaded config automatically
+        # if the text changes, calls the previewStringWriter
         self.postText.textChanged.connect(self.previewStringWriter)
-        # if the text changes, calls the stringWriter
+        # if the text changes, calls the previewStringWriter
+        self.songSpacerL.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewStringWriter
+        self.songSpacerR.textChanged.connect(self.previewStringWriter)
+        # if the text changes, calls the previewStringWriter
 
-        self.stylingGrid.addWidget(self.postText, 5, 0, 1, 1)
-
-        self.enableSongTooltip = QLabel(self.gridLayoutWidget_2)
-        self.enableSongTooltip.setObjectName(u"enableSongTooltip")
-
-        self.stylingGrid.addWidget(self.enableSongTooltip, 17, 0, 1, 1)
-
-        self.line_9 = QFrame(self.gridLayoutWidget_2)
-        self.line_9.setObjectName(u"line_9")
-        self.line_9.setFrameShape(QFrame.Shape.HLine)
-        self.line_9.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_9, 18, 0, 1, 1)
-
-        self.line_7 = QFrame(self.gridLayoutWidget_2)
-        self.line_7.setObjectName(u"line_7")
-        self.line_7.setFrameShape(QFrame.Shape.HLine)
-        self.line_7.setFrameShadow(QFrame.Shadow.Sunken)
-
-        self.stylingGrid.addWidget(self.line_7, 21, 0, 1, 1)
-
-        self.songSpacerRTooltip = QLabel(self.gridLayoutWidget_2)
-        self.songSpacerRTooltip.setObjectName(u"songSpacerRTooltip")
-
-        self.stylingGrid.addWidget(self.songSpacerRTooltip, 14, 0, 1, 1)
-
-        self.enableArtistTooltip = QLabel(self.gridLayoutWidget_2)
-        self.enableArtistTooltip.setObjectName(u"enableArtistTooltip")
-
-        self.stylingGrid.addWidget(self.enableArtistTooltip, 20, 0, 1, 1)
-
-        self.fullWindowLayout.addLayout(self.stylingGrid, 0, 2, 2, 1)
-
-        DSIWindow.setCentralWidget(self.main)
-        self.menubar = QMenuBar(DSIWindow)
-        self.menubar.setObjectName(u"menubar")
-        self.menubar.setGeometry(QRect(0, 0, 1523, 21))
-        DSIWindow.setMenuBar(self.menubar)
-        self.statusbar = QStatusBar(DSIWindow)
-        self.statusbar.setObjectName(u"statusbar")
-        DSIWindow.setStatusBar(self.statusbar)
-
-        self.retranslateUi(DSIWindow)
-        # applies the translation function to the DSIWindow (basically everything)
-
-        QMetaObject.connectSlotsByName(DSIWindow)
-        # connects the DSIWindow
-
-    def retranslateUi(self, DSIWindow):
-        """Function to 'translate' the strings, I suppose (auto-generated by Qt Creator)"""
-
-        DSIWindow.setWindowTitle(QCoreApplication.translate("DSI Configuration", u"DSI Configuration", None))
-        # the title of the whole window
-
-        self.pictureCycleTimeHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Time", None))
-        self.pictureCycleTime.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["pictureCycleTime"]}", None))
-        # gets the config option for the time
-        self.pictureCycleTimeTooltip.setText(QCoreApplication.translate("DSIWindow", u"How many minutes are awaited between picture swaps ('Song' swaps every track swap)", None))
-
-        #self.pictureCycleBehaviorHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Behavior", None))
-        #self.pictureCycleTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How to cycle the big picture<br>Setting to Spotify uses the active album cover (disables cycler)<br>Setting to File reads the picture links from pictureList.txt<br>Setting to None loads no picture (disables cycler)</p></body></html>", None))
-        #self.pictureCycleBehavior.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleBehavior}", None))
-        # takes the loaded config option to display as first
-        #self.pictureCycleBehavior.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[0]}", None))
-        #self.pictureCycleBehavior.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[1]}", None))
-        #self.pictureCycleBehavior.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.picCycleBehaviors[2]}", None))
-        # the other three get loaded in order
-
-        self.pictureCycleHeader.setText(QCoreApplication.translate("DSIWindow", u"Picture Cycle Type", None))
-        self.pictureCycleType.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedPicCycleType}", None))
-        # gets the loaded type from cofnig to display as first
-        self.pictureCycleType.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.picCycleTypes[0]}", None))
-        self.pictureCycleType.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.picCycleTypes[1]}", None))
-        # the other two get loaded in order
-
-        self.previewTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p align=\"center\">Discord Presence String Preview:</p></body></html>", None))
-        self.previewText.setText(QCoreApplication.translate("DSIWindow", f"<html><head/><body><p align=\"center\">{self.songPreviewText}</p></body></html>", None))
-        # the song preview text field, uses the formed string
-
-        self.enableURIMapBoolean.setText(QCoreApplication.translate("DSIWindow", u"Enable URI Mapping", None))
-        self.printErrorsBoolean.setText(QCoreApplication.translate("DSIWindow", u"Show Program Errors", None))
-
-        self.clockStyleTooltip.setText(QCoreApplication.translate("DSIWindow", u"What type of clock (if any) to use in the console", None))
-        self.apiTimerNum.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["refreshTime"]}", None))
-        self.apiTimerHeader.setText(QCoreApplication.translate("DSIWindow", u"Spotify API Check Timer:", None))
-
-        self.pauseBoolean.setText(QCoreApplication.translate("DSIWindow", u"Enable Pause Text", None))
-
-        self.clockStyleHeader.setText(QCoreApplication.translate("DSIWindow", u"Console Clock Style", None))
-        self.clockStyleSelection.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedClockStyle}", None))
-        # the clock style option - loads the stored style from config to use as the first one
-        self.clockStyleSelection.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.clockStyleOptions[0]}", None))
-        self.clockStyleSelection.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.clockStyleOptions[1]}", None))
-        # the other two styles are the only ones left in the list of options (after the config one is removed), this way the first one always matches the config
-
-        self.printUpdatesBoolean.setText(QCoreApplication.translate("DSIWindow", u"Show Program Status", None))
-        self.printUpdatesTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display the current status of the program in the console", None))
-
-        self.marketCodeHeader.setText(QCoreApplication.translate("DSIWindow", u"Market Area Code:", None))
-        self.marketCode.setText(self.loadedConfig["marketCode"])
-        # loads the market code from config (can be empty, is empty by default)
-        self.marketCodeTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>Your &quot;market area&quot; (the country your Spotify accounts belongs to)<br/>Only used if running the URIMap function<br/>Uses a 2-letter country code (ex. US, JP, DE, SN, CH...)</p></body></html>", None))
-
-        self.pauseTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to add before the first element, when playback is paused", None))
-        self.pauseText.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["pauseText"]}", None))
-        # takes the pause text from the loaded config 
-
-        self.printErrorsTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to display potential program and API errors in the console", None))
-        self.enableURIMapTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to enable the URI mapping function", None))
-        self.apiTimerTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>How many seconds are waited before sending a new API call<br/>Minimum of 2, recommended range 5 - 15</p></body></html>", None))
-        self.shaaConfigureButton.setText(QCoreApplication.translate("DSIWindow", u"Configure SHAA Details\n"
-            "(Opens a new window)", None))
-        
-        self.dsiStarterButton.setText(QCoreApplication.translate("DSIWindow", u"Start DSI\n"
-            "(Closes this window, runs DSI)\n"
-            "Ensure you press this to save the config!", None))
-        # the "start" button (really a save + exit, but it lets the DSI function continue)
-        self.roundURLTooltip.setText(QCoreApplication.translate("DSIWindow", u"What static URL to set in the round, smaller picture", None))
-        self.spotifyURLHeader.setText(QCoreApplication.translate("DSIWindow", u"Spotify URL Type:", None))
-        self.roundPicHeader.setText(QCoreApplication.translate("DSIWindow", u"Round Picture:", None))
-        self.spotifyURLTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The link type for the URL that gets set into the link fields (large picture and song detail click)<br/>Note that Playlist requires an active playlist, otherwise defaults to Round Picture URL until an active playlist is found</p></body></html>", None))
-        self.roundPicTooltip.setText(QCoreApplication.translate("DSIWindow", u"The name of the picture to load in the round frame (name from Developer Dashboard or link to a picture)", None))
-        self.roundURLHeader.setText(QCoreApplication.translate("DSIWindow", u"Round Picture URL:", None))
-
-        self.roundPicHoverHeader.setText(QCoreApplication.translate("DSIWindow", u"Round Picture Hover Text:", None))
-        self.roundPicHoverTooltip.setText(QCoreApplication.translate("DSIWindow", u"The text to display when hovering over the round picture", None))
-
-        self.spotifyURLSelection.setItemText(0, QCoreApplication.translate("DSIWindow", f"{self.loadedURLoption}", None))
-        # uses the loaded URL option as the first one
-        self.spotifyURLSelection.setItemText(1, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[0]}", None))
-        self.spotifyURLSelection.setItemText(2, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[1]}", None))
-        self.spotifyURLSelection.setItemText(3, QCoreApplication.translate("DSIWindow", f"{self.spotifyURLoptions[2]}", None))
-        # uses the remaining ones from the list, in order
-        
-        self.preTextHeader.setText(QCoreApplication.translate("DSIWindow", u"Pre-text:", None))
-        self.preTextTooltip.setText(QCoreApplication.translate("DSIWindow", u"Text placed before the first element (may be omitted)", None))
-        self.postTextHeader.setText(QCoreApplication.translate("DSIWindow", u"Post-text:", None))
-        self.postTextTooltip.setText(QCoreApplication.translate("DSIWindow", u"Text placed before the last element (may be omitted)", None))
-
-        self.albumFallbackHeader.setText(QCoreApplication.translate("DSIWindow", u"Album Fallback Text:", None))
-        self.albumFallbackText.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["albumFallback"]}", None))
-        self.albumFallbackTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The text to use in the album's place, if the string is too long<br>This happens when the presence string exceeds 128 characters</p></body></html>", None))
-
-        self.songSpacerLHeader.setText(QCoreApplication.translate("DSIWindow", u"Left Spacer", None))
-        self.songSpacerL.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["spacerL"]}", None))
-        self.songSpacerLTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The string/spacer placed after the first element<br>Default: \u227a</p></body></html>", None))
-
-        self.songSpacerRHeader.setText(QCoreApplication.translate("DSIWindow", u"Right Spacer", None))
-        self.songSpacerR.setText(QCoreApplication.translate("DSIWindow", f"{self.loadedConfig["spacerR"]}", None))
-        self.songSpacerRTooltip.setText(QCoreApplication.translate("DSIWindow", u"<html><head/><body><p>The string/spacer placed after the second element<br>Default: \u227b</p></body></html>", None))
-
-        self.enableSong.setText(QCoreApplication.translate("DSIWindow", u"Enable Song", None))
-        self.enableSongTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the song name to the presence string", None))
-
-        self.enableArtist.setText(QCoreApplication.translate("DSIWindow", u"Enable Artist", None))
-        self.enableArtistTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the artist's name(s) to the presence string", None))
-
-        self.enableAlbum.setText(QCoreApplication.translate("DSIWindow", u"Enable Album", None))
-        self.enableAlbumTooltip.setText(QCoreApplication.translate("DSIWindow", u"Whether to add the album name to the presence string", None))
-
+### SHAA Window ###
 
     def runShaaWindow(self):
         """Function to run the SHAA configuration window"""
@@ -870,18 +673,13 @@ class Ui_DSIWindow(object):
         asyncio.run(asyncRunner())
         # runs the async runner
 
+### Config Write ###
+
     def writeConfig(self):
         """Function to write the config json file (and exit)"""
         configuration = {
-            "disableCfgWin": False,
-            "refreshTime": float(self.apiTimerNum.text()),
             "enablePause": self.pauseBoolean.isChecked(),
             "pauseText": self.pauseText.text(),
-            "clockStyle": self.clockStyleSelection.currentText(),
-            "enableURI": self.enableURIMapBoolean.isChecked(),
-            "marketCode": self.marketCode.text(),
-            "printUpdates": self.printUpdatesBoolean.isChecked(),
-            "printErrors": self.printErrorsBoolean.isChecked(),
             "smallPicURL": self.roundURLText.text(),
             "smallPic": self.roundPicText.text(),
             "smallPicHover": self.roundPicHoverText.text(),
@@ -896,7 +694,7 @@ class Ui_DSIWindow(object):
             "albumFallback": self.albumFallbackText.text(),
             "pictureCycleType": self.pictureCycleType.currentText(),
             "pictureCycleTime": int(self.pictureCycleTime.text()),
-            "pictureCycleBehavior": "Random" #self.pictureCycleBehavior.currentText()
+            "pictureCycleBehavior": self.pictureCycleBehavior.currentText()
         }
         # forms a configuration based on the states of each of the fields
 
@@ -906,7 +704,9 @@ class Ui_DSIWindow(object):
             # dumps everything in
 
         self.window.close()
-        # closes the whole process
+        # closes the whole window
+
+### Preview String ###
 
     def previewStringWriter(self):
         """Function to modify/write the preview string"""
@@ -965,8 +765,8 @@ class Ui_DSIWindow(object):
             # adds the right spacer
         if self.enableAlbum.isChecked():
         # if the album is enabled
-            previewTextList.append("An album")
-            # adds a string
+            previewTextList.append(self.albumFallbackText.text())
+            # adds the album fallback string
         if self.postText.text():
         # if the postText is defined
             previewTextList.append(self.postText.text())
@@ -974,8 +774,12 @@ class Ui_DSIWindow(object):
 
         self.songPreviewText = " ".join(previewTextList)
         # forms a string from the subparts (which is then entered into the preview string display)
-        self.previewText.setText(QCoreApplication.translate("DSIWindow", f"<html><head/><body><p align=\"center\">{self.songPreviewText}</p></body></html>", None))
-        # uses the set "translate" method to apply the new text (this way it's centered, may swap to a different form of centering later)
+        self.previewText.setText(f"{self.songPreviewText}")
+        # sets the preview string from the formed one
+
+
+### Starter ###
+
 
 if __name__ == "__main__":
 # runs at start

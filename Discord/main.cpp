@@ -23,8 +23,10 @@
 #pragma comment(lib, "Ws2_32.lib")
 using json = nlohmann::json;
 
+
+
 // version number (Y.MM.DD.HHMM)
-std::string DSIDver = "v0.5.5.0609";
+std::string DSIDver = "v0.5.6.1330";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -35,7 +37,7 @@ std::string SmallImage = "";
 // sets up an album fallback string
 std::string albumFallback = "An Album";
 
-// initialises bools for image failing
+// initialises bools for image(s) failing
 // this is not common, but prevents more than 1 failure
 // large image failure state
 std::atomic<bool> LargeImageFail = false;
@@ -51,9 +53,6 @@ std::atomic<bool> pauseStateOld = false;
 std::uint64_t lastUpdate = 0;
 // initialises a timestamp for current time
 std::uint64_t currentTime = 0;
-
-// initialises a temp string for checks (0 ensures it's always a new song on program start)
-std::uint64_t unixOldStart = 0;
 
 // initialises a track ID variable
 std::uint64_t trackID, oldTrackID = 0;
@@ -275,6 +274,9 @@ int main() {
         // ensures the RPC isn't already active, sets to true if not and runs
         if (!RPCrunning.exchange(true)) {
 
+            // updates lastUpdate once to prevent required update right away
+            lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
             // updates user
             std::cout << "Loading Discord Status" << std::endl;
 
@@ -306,56 +308,16 @@ int main() {
             uint64_t unixStart = 0;
             uint64_t unixEnd = 0; // both set to 0, if the timestamps are missing in songData, falls back to displaying program uptime
 
+            // gets the STDIN from python
+            HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+            // byte count variable
+            DWORD byteCount;
+
             // starts a loop to refresh info
             while (running) {
 
-                // 32 integer variable for size
-                uint32_t size;
-
-                // reads bytes from the stdin (python) with a set size
-                if (!std::cin.read(reinterpret_cast<char*>(&size), sizeof(size))) {
-                    // if it fails, breaks
-                    break;
-                }
-
-                // converts "network order" to bytes
-                size = ntohl(size);
-                // creates a buffer with the py-given size
-                std::vector<char> buffer(size);
-
-                // reads the amount of data as told by the lines above
-                if (!std::cin.read(buffer.data(), size)) {
-                    // if it fails, breaks
-                    break;
-                }
-
-                // grabs the packet from the sent buffer
-                std::string packet(buffer.begin(), buffer.end());
-
-                // parses the received packet into a json form 
-                json data = json::parse(packet);
-
-                // tries to reassign all the variables from the data packet
-                try {
-                    // variables get grabbed from packet (ensures they use the correct type)
-                    songName = data["Song"].get<std::string>();
-                    albumName = data["Album"].get<std::string>();
-                    songStuff = data["State"].get<std::string>();
-                    LargeImage = data["Large Image"].get<std::string>();
-                    LargeText = data["Large Text"].get<std::string>();
-                    SmallText = data["Small Text"].get<std::string>();
-                    SpotifyURL = data["Spotify URL"].get<std::string>();
-                    SmallURL = data ["Small URL"].get<std::string>();
-                    unixStart = data["UNIX Start"].get<int64_t>();
-                    unixEnd = data["UNIX End"].get<int64_t>();
-                    pauseState = data["Pause"].get<bool>();
-                    trackID = data["Track ID"].get<int64_t>();
-                }
-                // if it fails
-                catch(const std::exception& e) {
-                    // sends error message
-                    std::cerr << "Error with Python packet:" << e.what() << std::endl;
-                }
+                // sets up a boolean to check if an update is required due to timer
+                bool requiredUpdate = false;
 
                 // sets up a boolean to check song status
                 bool songChanged = false;
@@ -363,52 +325,103 @@ int main() {
                 // sets up a boolean to check pause state change
                 bool pauseChanged = false;
 
-                // sets up a boolean to check if an update is required due to timer
-                bool requiredUpdate = false;
-
                 // updates current time to match, well, current time
                 currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
-                // checks if the song has changed since the last update (trackIDs don't match)
-                // if it has, changes songChanged to true - this ensures the song changing or being paused gets caught
-                if (trackID != oldTrackID) {
-                    // sets the old value to match new
-                    oldTrackID = trackID;
-                    // sets the boolean to true so the next check goes through
-                    songChanged = true;
-                }
-                // checks if the song has been paused since last check
-                // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
-                if (pauseState != pauseStateOld) {
-                    // sets the boolean to true so the next check goes through
-                    pauseChanged = true;
-                    // updates the previous pause state to match current
-                    pauseStateOld.store(pauseState.load());
-                }
-                // checks if the last time RPC was updated was more than 30 seconds ago
-                if ((lastUpdate + 30) < currentTime) {
+                // checks if the last time RPC was updated was more than 15 seconds ago
+                if ((lastUpdate + 15) < currentTime) {
                     // changes the requiredUpdate to true to trigger an update
-                    requiredUpdate = true;
-                }
-                // if it hasn't been that long, but something else triggered the update
-                else {
-                    // sets the boolean to false, to let the RPC update text show up
-                    requiredUpdate = false;
+                    bool requiredUpdate = true;
                 }
 
-                // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
-                // checks if the length of the songName (details) field *with* album is eq or less than 103 (cap of 108 for that field)
-                if ((songName + albumName).length() <= 103) {
-                    songName = songName + " " + albumName;
+                // the stdin byte size variable
+                uint32_t stdinSize;
+
+                // a boolean to check if the packet size is valid
+                bool packetValid = ReadFile(hStdin, &stdinSize, sizeof(stdinSize), &byteCount, nullptr) || byteCount != sizeof(stdinSize);
+
+                // checks if packet size is (in)valid
+                if (!packetValid) {
+                    // if it isn't, checks if the update is(n't) required yet
+                    if (!requiredUpdate) {
+                        // if that's not true either, waits for 250ms
+                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                        // then resets to while start
+                        continue;
+                    }
+                    // if the timer has passed the required update timer, it'll move on to the next part (re-sending old data to keep RPC up)
                 }
-                // checks if the length of the songName (details) field *with* fallback string is eq or less than 108 (cap of 108 for that field)
-                else if ((songName + albumFallback).length() <= 108) {
-                    songName = songName + " " + albumFallback;
-                }
-                // if neither is true (either option would go over the cap)
-                else {
-                    // does nothing, leaves songName alone
-                }
+
+                // if the packet is valid
+                if (packetValid) {
+                    
+                    // variables for validation
+                    uint32_t size = ntohl(stdinSize);
+                    std::vector<char> buffer(size);
+
+                    // checks the packet contents
+                    if (!ReadFile(hStdin, buffer.data(), size, &byteCount, nullptr) || byteCount != size) {
+                        // couldn't read the packet, waits
+                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                        // resets
+                        continue;
+                    }
+
+                    // grabs the packet from the sent buffer
+                    std::string packet(buffer.begin(), buffer.end());
+
+                    // parses the received packet into a json form 
+                    json data = json::parse(packet);
+
+                    // tries to reassign all the variables from the data packet
+                    try {
+                        // variables get grabbed from packet (ensures they use the correct type)
+                        songName = data["Song"].get<std::string>();
+                        albumName = data["Album"].get<std::string>();
+                        songStuff = data["State"].get<std::string>();
+                        LargeImage = data["Large Image"].get<std::string>();
+                        LargeText = data["Large Text"].get<std::string>();
+                        SmallText = data["Small Text"].get<std::string>();
+                        SpotifyURL = data["Spotify URL"].get<std::string>();
+                        SmallURL = data ["Small URL"].get<std::string>();
+                        unixStart = data["UNIX Start"].get<int64_t>();
+                        unixEnd = data["UNIX End"].get<int64_t>();
+                        pauseState = data["Pause"].get<bool>();
+                        trackID = data["Track ID"].get<int64_t>();
+                    }
+                    // if it fails
+                    catch(const std::exception& e) {
+                        // sends error message
+                        std::cerr << "Error with Python packet:" << e.what() << std::endl;
+                    }
+
+                    // checks if the song has changed since the last update (trackIDs don't match)
+                    // if it has, changes songChanged to true - this ensures the song changing or being paused gets caught
+                    if (trackID != oldTrackID) {
+                        // sets the old value to match new
+                        oldTrackID = trackID;
+                        // sets the boolean to true so the next check goes through
+                        songChanged = true;
+                    }
+                    // checks if the song has been paused since last check
+                    // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
+                    if (pauseState != pauseStateOld) {
+                        // sets the boolean to true so the next check goes through
+                        pauseChanged = true;
+                        // updates the previous pause state to match current
+                        pauseStateOld.store(pauseState.load());
+                    }
+
+                    // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
+                    // checks if the length of the songName (details) field *with* album is eq or less than 103 (cap of 108 for that field)
+                    if ((songName + albumName).length() <= 103) {
+                        songName = songName + " " + albumName;
+                    }
+                    // checks if the length of the songName (details) field *with* fallback string is eq or less than 108 (cap of 108 for that field)
+                    else if ((songName + albumFallback).length() <= 108) {
+                        songName = songName + " " + albumFallback;
+                    }
+                } // packetValid check close
 
                 // only pushes the update if everything is fine, and the song has changed/paused/update is required
                 // I found that if no update is pushed for a longer period of time, Discord may just lose the status completely and drop it
@@ -419,9 +432,6 @@ int main() {
                         // updates the rpc update boolean to ensure it prints rpc status
                         bool rpcUpdated = false;
                     }
-
-                    // updates the last update timestamp to match system time
-                    lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
                     // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)
                     songName = utfTrim(songName);
@@ -504,6 +514,9 @@ int main() {
                         // if it goes through fine
                         if(result.Successful()) {
 
+                            // updates the last update timestamp to match system time
+                            lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+
                             // checks if rpc has been updated already, only prints if not
                             if (!rpcUpdated) {
                                 // updates user
@@ -552,7 +565,7 @@ int main() {
 
                 } // if there's a change/update requirement close
 
-                // if the song/pause hasn't changed and 30s hasn't passed
+                // if the song/pause hasn't changed and 15s hasn't passed
                 else {
                     // pauses the "thread" for a bit (prevents crazy CPU spikes)
                     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -560,7 +573,7 @@ int main() {
                     continue;
                 }
                 
-                // pauses the update loop for 2 seconds (songData won't update that fast, so just lets program breathe)
+                // pauses the update loop for 2 seconds
                 std::this_thread::sleep_for(std::chrono::seconds(2));
                 
                 } // while(running) close bracket

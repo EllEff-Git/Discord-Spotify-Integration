@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import *
 
 
 
-DSIver = "0.5.5.0916"
+DSIver = "0.5.6.1518"
 """The program version (Y.M.DD.HHMM)"""
 
 
@@ -38,6 +38,12 @@ directory = None
 """The base directory of the program, where DSI.exe resides"""
 iconPath = None
 """The path of the app icon png"""
+yellowStatusPath = None
+"""The yellow status icon png path"""
+redStatusPath = None
+"""The red status icon png path"""
+greenStatusPath = None
+"""The green status icon png path"""
 
 
 if getattr(sys, "frozen", False):
@@ -45,11 +51,19 @@ if getattr(sys, "frozen", False):
     directory = os.path.dirname(sys.executable)
     iconPath = os.path.join(sys._MEIPASS, "dsiIcon.png")
     # reassigns the path variables accordingly
+    yellowStatusPath = os.path.join(sys._MEIPASS, "dsiStatusYellow.png")
+    redStatusPath = os.path.join(sys._MEIPASS, "dsiStatusRed.png")
+    greenStatusPath = os.path.join(sys._MEIPASS, "dsiStatusGreen.png")
+    # reassigns the status icon paths
 else:
 # if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
-    iconPath = os.path.join(directory, "icons", "dsiIcon.png")
+    iconPath = os.path.join(directory, "icons", "dist", "dsiIcon.png")
     # reassigns the path variables accordingly
+    yellowStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusYellow.png")
+    redStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusRed.png")
+    greenStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusGreen.png")
+    # reassigns the status icon paths
 
 dataDir = os.path.join(directory, "Data")
 # the Data folder directory
@@ -69,14 +83,26 @@ if not os.path.exists(dataDir):
 
 ### Config ###
 
-secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
-"""The main configuration file, contains client secret info"""
+
+
+functionConfigPath = os.path.join(directory, "Data", "functionConfig.json")
+"""The DSI functionality config json file"""
+functionConfigWin = os.path.join(directory, "Qt", "Func_Qt", "funcWindow.exe")
+"""The DSI functionality configurator program/window"""
+
 dsiConfigPath = os.path.join(directory, "Data", "config.json")
 """The DSI configuration json file"""
 dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "dsiWindow.exe")
 """The DSI configurator program/window"""
+
+secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
+"""The main configuration file, contains client secret info"""
+
 shaaConfigPath = os.path.join(directory, "Data", "shaaConfig.json")
 """The SHAA x DSI configuration json file"""
+
+statsPath = os.path.join(directory, "Data", "statistics.json")
+"""The DSI statistics file path"""
 
 ### Token/ID ###
 
@@ -120,11 +146,14 @@ cppDir = os.path.dirname(cppPath)
 ### Global Variables ###
 
 
+
+functionConfig = {}
+"""The config file for functionality"""
 secretConfig = {}
 """The config file with client IDs and such"""
-jsonConfig = None
-"""The config file for the main function"""
-shaaConfig = None
+jsonConfig = {}
+"""The config file with DSI customisation config"""
+shaaConfig = {}
 """The config file specifically for SHA(A) features"""
 blacklist = {}
 """The blacklist of songs from blacklist.json"""
@@ -141,9 +170,11 @@ dc_app_ID = None
 """Discord Application ID, string"""
 
 skipConfigWindow = False
-"""Whether to skip the configuration window or not"""
+"""Whether to skip the configuration window or not, bool"""
+consoleLength = 25
+"""The stored line amount for the pseudo-console, int"""
 refreshTime = 10.0
-"""Program update cycle interval time, float"""
+"""Program update cycle interval time, float/int"""
 
 enablePause = True
 """The "paused on" text enabler, boolean"""
@@ -235,11 +266,11 @@ detailOptions = ["hours", "minutes", "seconds", "volume", "repeat", "shuffle", "
 
 # URL List #
 spotifyURLlist = ["track", "Track", "album", "Album", "artist", "Artist", "playlist", "Playlist"]
-"""Makes a list of all the possible options for spotify URL types"""
+"""A list of all the possible options for spotify URL types"""
 
 # Picture Cycling Methods #
 pictureBehaviorList = ["random", "sequence", "once", "none"]
-"""Makes a list of all the possible options for picture cycling types"""
+"""A list of all the possible options for picture cycling types"""
 
 pauseStart = None
 """Makes a starter variable that stores a timestamp when a pause occurs"""
@@ -302,6 +333,8 @@ class DSI_MainWindow(QMainWindow):
     # a signal to call the song blacklist manager
     detailTag = pyqtSignal(str, int)
     # a signal to call the song detail manager
+    programReady = pyqtSignal()
+    # a signal to signal the readiness state of the program
 
     def __init__(self):
         super().__init__()
@@ -315,12 +348,16 @@ class DSI_MainWindow(QMainWindow):
         # stores the version in self
         self.mainIcon = iconPath
         # the program's main icon
+        self.yellowStatus = QIcon(yellowStatusPath)
+        self.redStatus = QIcon(redStatusPath)
+        self.greenStatus = QIcon(greenStatusPath)
+        # the status icons
         self.programName = f"DSI Starter v{self.version}"
         # stores the program name
 
-        self.windowSizeX = max(900, int(startApp.primaryScreen().size().width() / 3))
-        self.windowSizeY = max(800, int(startApp.primaryScreen().size().height() / 3))
-        # base window sizes (min of 1000 pixels ~33% of the main monitor's width and height)
+        self.windowSizeX = max(900, int(startApp.primaryScreen().size().width() / 2))
+        self.windowSizeY = max(800, int(startApp.primaryScreen().size().height() / 2))
+        # base window sizes (uses the larger of the two, 900/800 or ~33% of the monitor's width/height)
 
     ### Basic Window Setup ###
 
@@ -328,8 +365,11 @@ class DSI_MainWindow(QMainWindow):
         # the window title
         self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
-        self.setMinimumSize(QSize(self.windowSizeX, self.windowSizeY))
-        # the window size
+        self.setMinimumSize(QSize(900, 800))
+        # the window size minimums
+
+        # self.setBaseSize(QSize(self.windowSizeX, self.windowSizeY))
+        # the base size (how it appears)
 
     ### UI Element Base ###
 
@@ -375,7 +415,7 @@ class DSI_MainWindow(QMainWindow):
         # allows the widget to be resized
         self.consoleScroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # disables the scroll bar
-        self.consoleScroll.setMinimumSize(500, 525)
+        self.consoleScroll.setMinimumSize(400, 525)
         # sets a minimum height
         self.consoleScroll.setStyleSheet("""
             QScrollArea {
@@ -398,7 +438,7 @@ class DSI_MainWindow(QMainWindow):
         # centers the label to the bottom
         self.mainLabel.setWordWrap(True)
         # makes the text wrap if it's too wide
-        self.mainLabel.setMinimumWidth(500)
+        self.mainLabel.setMinimumWidth(400)
         # sets a minimum size for the label
         self.consoleScroll.setWidget(self.mainLabel)
         # sets the console to use the mainLabel
@@ -450,29 +490,139 @@ class DSI_MainWindow(QMainWindow):
 
         self.songCounter = QLabel()
         # details label
-        self.songCounter.setMinimumSize(100, 30)
-        # sets a size so it doesn't fidget
+        self.songCounter.setMaximumSize(150, 60)
+        # sets max size
         self.songCounter.setToolTip("Current DSI session stats")
         # tooltip
         self.songCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
         # aligns left
         self.songDetailLayout.addWidget(self.songCounter, 0, 0)
-        # adds the counter to the middle
+        # adds the counter
 
-    ### Grid Equaliser ###
+        self.globalSongCounter = QLabel()
+        # global details label
+        self.globalSongCounter.setMaximumSize(150, 60)
+        # sets max size
+        self.globalSongCounter.setToolTip("Global DSI stats")
+        # tooltip
+        self.globalSongCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        # aligns left
+        self.songDetailLayout.addWidget(self.globalSongCounter, 0, 0)
+        # adds the global counter
+        self.globalSongCounter.hide()
+        # hides the stats by default
 
-        self.stabiliserLayout = QGridLayout()
-        # a layout that just holds the opposite of the songdetail layout
-        self.mainLayout.addLayout(self.stabiliserLayout, 4, 4, alignment=Qt.AlignmentFlag.AlignRight)
-        # adds the layout to the main in the mirrored spot bottom row, right col
-        self.stabiliserLabel = QLabel()
-        # adds a label to have something inside
-        self.stabiliserLabel.setMinimumSize(100, 30)
-        # sets the size to match songCounter
-        self.stabiliserLabel.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # aligns right
-        self.stabiliserLayout.addWidget(self.stabiliserLabel, 0, 0)
-        # adds the label to counter
+        self.globalStats = statsWriter("Load")
+        # loads the old statistics from file, stores in variable
+
+        globalTimePlayed = self.globalStats["Time Played"]
+        # loads the total time played
+        globalTimeString = f"{(globalTimePlayed / 3600):,.1f}"
+        # splits the seconds into hours
+
+        globalAvgDuration = self.globalStats["Avg Duration"]
+        # grabs the average duration seconds from variable
+
+        if globalAvgDuration >= 60:
+        # if the average duration is over a minute
+            gAvgMin, gAvgSec = divmod(globalAvgDuration, 60)
+            # divides the seconds to minutes and seconds
+            globalAvgString = f"{gAvgMin}:{gAvgSec:02d}"
+            # forms a string from the two
+        else:
+        # if the average duration is less than a minute
+            globalAvgString = f"0:{globalAvgDuration:02d}"
+            # forms a string from just the duration, leading 0 added
+        
+        self.globalSongCounter.setText(f"Songs played: {self.globalStats["Songs Played"]}\nTime played: {globalTimeString} hours\nAverage duration: {globalAvgString}")
+        # sets the counter text to match
+
+    ### Function Elements ###
+
+        self.functionLayout = QGridLayout()
+        # a layout that holds functional buttons
+
+        self.mainLayout.addLayout(self.functionLayout, 4, 4, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the layout to the main in the mirrored spot bottom row, right column
+
+        self.swapStatsButton = QPushButton("Swap Statistics")
+        # a button to swap between global and session statistics
+        self.swapStatsButton.setMinimumSize(60, 30)
+        # sets minimum size
+        self.swapStatsButton.setToolTip("Swap statistics view between global and session")
+        # tooltip
+        self.functionLayout.addWidget(self.swapStatsButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the button
+        self.swapStatsButton.clicked.connect(lambda: self.songDetails("Swap"))
+        # connects the button click to the details swapping
+        self.swapStatsButton.hide()
+        # hides the button on start
+
+    ### Status Elements ###
+
+        self.statusLayout = QGridLayout()
+        # a layout that holds the status elements
+
+        self.mainLayout.addLayout(self.statusLayout, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the layout to the main in the middle right position
+
+        self.spotifyStatusIcon = QPushButton()
+        # the Spotify API status indicator
+        self.spotifyStatusIcon.setIcon(self.greenStatus)
+        self.spotifyStatusIcon.setIconSize(QSize(16,16))
+        # forms the icon
+        self.spotifyStatusIcon.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+            }
+        """)
+        # makes the button part invisible
+        self.spotifyStatusIcon.setFixedSize(18, 18)
+        # sets the max size of the button slightly larger than the icon
+        self.statusLayout.addWidget(self.spotifyStatusIcon, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds the icon to the top left corner
+
+        self.spotifyStatusLabel = QLabel("Spotify API")
+        # the Spotify API status label
+        self.spotifyStatusLabel.setToolTip("Spotify API status indicator")
+        # tooltip
+        self.spotifyStatusLabel.setMinimumSize(70, 30)
+        # sets minimum size
+        self.statusLayout.addWidget(self.spotifyStatusLabel, 0, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the label next to its icon (right side)
+
+        self.discordStatusIcon = QPushButton()
+        # the Discord API status indicator
+        self.discordStatusIcon.setIcon(self.greenStatus)
+        self.discordStatusIcon.setIconSize(QSize(16,16))
+        # forms the icon
+        self.discordStatusIcon.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background: transparent;
+            }
+        """)
+        # makes the button part invisible
+        self.discordStatusIcon.setFixedSize(18, 18)
+        # sets the max size of the button slightly larger than the icon
+        self.statusLayout.addWidget(self.discordStatusIcon, 1, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds the icon to the bottom left corner
+
+        self.discordStatusLabel = QLabel("Discord API")
+        # the Discord API status label
+        self.discordStatusLabel.setToolTip("Discord API status indicator")
+        # tooltip
+        self.discordStatusLabel.setMinimumSize(70, 30)
+        # sets minimum size
+        self.statusLayout.addWidget(self.discordStatusLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the label next to its icon (right side)
+
+        self.spotifyStatusIcon.hide()
+        self.spotifyStatusLabel.hide()
+        self.discordStatusIcon.hide()
+        self.discordStatusLabel.hide()
+        # hides the statuses until they become useful
     
     ### Blacklist Elements ###
 
@@ -495,8 +645,10 @@ class DSI_MainWindow(QMainWindow):
 
         self.blacklistSongName = QLabel()
         # the label that stores the song name
-        self.blacklistSongName.setMinimumSize(250, 50)
+        self.blacklistSongName.setMinimumSize(400, 50)
         # sets a size so it doesn't fidget
+        self.blacklistSongName.setWordWrap(True)
+        # allows text to wrap if it's too long
         self.blacklistSongName.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # aligns the text to the center of the field
         self.blacklistLayout.addWidget(self.blacklistSongName, 1, 0)
@@ -548,7 +700,9 @@ class DSI_MainWindow(QMainWindow):
         # connects the label swap signal to the change label function
         self.readyTag.connect(startStart)
         # connects the ready tag to the program logic starter
-        self.exitButton.clicked.connect(self.stopper)
+        self.programReady.connect(self.programReadyState)
+        # connects the program ready tag to the program ready state function
+        self.exitButton.clicked.connect(lambda: self.stopper("Shut Down"))
         # connects the exit button to the program stopping function
 
     ### Blacklist Intermediary ###
@@ -568,8 +722,8 @@ class DSI_MainWindow(QMainWindow):
 
         self.multiLabel = False
         # sets the multi-string label to false to begin with
-        self.lines = deque(maxlen = 25)
-        # creates a "deque" to hold a max of 25 items (strings), to form a "pseudo-console"
+        self.lines = deque(maxlen = consoleLength)
+        # creates a "deque" to hold lines (strings), to form a "pseudo-console"
 
     ### Run Arguments ###
 
@@ -625,9 +779,34 @@ class DSI_MainWindow(QMainWindow):
         QTimer.singleShot(1000, self.autoScroll)
         # runs the autoscroller after a second to let the text sit
 
+### Icon Changer ###
+
+    def iconChanger(self, widget: str, status: str):
+        """A function to change the status icons"""
+        if status == "Green":
+        # green status = green icon
+            icon = self.greenStatus
+            # sets the green status icon as active
+        elif status == "Yellow":
+        # yellow status = yellow icon
+            icon = self.yellowStatus
+            # sets the yellow status icon as active
+        elif status == "Red":
+            icon = self.redStatus
+            # sets the red status icon as active
+
+        if widget == "Spotify":
+        # if the widget in question is the Spotify API icon
+            self.spotifyStatusIcon.setIcon(icon)
+            # sets the Spotify API status icon to match
+        elif widget == "Discord":
+        # if the widget in question is the Discord API icon
+            self.discordStatusIcon.setIcon(icon)
+            # sets the Discord API status icon to match
+
 ### Song Details ###
 
-    def songDetails(self):
+    def songDetails(self, action:str = None):
         """A function to manage the song detail statistics (duration, averages...)"""
         global timePlayed, lastPlayStamp
         # global -> local
@@ -680,6 +859,19 @@ class DSI_MainWindow(QMainWindow):
 
         self.songCounter.setText(f"Songs played: {trackCounter}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
         # sets the counter text to match
+
+        if action == "Swap":
+        # if the action is to swap the counters from session to global
+            if self.songCounter.isVisible():
+            # if the song counter (session) is visible
+                self.songCounter.hide()
+                self.globalSongCounter.show()
+                # swaps them around
+            else:
+            # if it's not visible
+                self.globalSongCounter.hide()
+                self.songCounter.show()
+                # swaps them around (opposite)
 
 ### Auto-Scroll ###
 
@@ -819,40 +1011,98 @@ class DSI_MainWindow(QMainWindow):
 
 ### Program Closer ###
 
-    def stopper(self):
-        """A function to close the program"""
+    def stopper(self, severity: str):
+        """A function to close the program gracefully, saving progress"""
         global blacklist, uriList
         # global -> local
 
         self.blacklistButtons("init")
         # calls the button manager with init (hides all)
 
-        self.labelSwap.emit("Shutting down...", 3)
+        self.labelSwap.emit("Saving session details...", 3)
         # user update
 
         self.blacklistWriter()
         # calls the blacklist writer to save the blacklist
         uriWriter(uriList)
         # calls the URI writer with the current list of URIs to save it
+        statsWriter("Save")
+        # calls the statistics writer with Save
 
-        try:
-        # tries to stop the C++ program
-            cppProgram.terminate()
-            # "graceful" stop
-        except:
-        # if it can't (refusal or not running)
-            try:
-            # tries a more "forceful" kill
-                cppProgram.kill()
-                # stops it
-            except:
-            # if that fails, likely not active or something else is wrong
-                None
-                # doesn't do anything (more than likely at this point it's not running)
+        if severity == "Shut Down":
+        # if the passed severity is to shut down everything (otherwise this can be used as a "quicksave" function)
 
-        self.close()
-        # closes the window
+            self.labelSwap.emit("Shutting down...", 3)
+            # user update
 
+            cppThreadEvent.set()
+            # tells the cppThread to stop
+            if cppThread.is_alive():
+            # checks if the thread is alive
+                try:
+                # tries to wait for the end
+                    self.labelSwap.emit("Waiting for the Discord component to shut down...", 3)
+                    # user update
+                    while cppThread.is_alive():
+                    # while the C++ thread is still active
+                        for attempt in range(25):
+                        # tries 25 times (5 seconds)
+                            cppThread.join(timeout=0.2)
+                            # waits 0.2 seconds per attempt to check if the thread is dead already 
+                            startApp.processEvents()
+                            # lets the window keep going
+                        break
+                        # if it goes over the attempts, breaks
+                except RuntimeError:
+                # if it fails
+                    pass
+                    # moves on
+
+            songThreadEvent.set()
+            # tells the song thread to stop
+            if songThread.is_alive():
+            # checks if the thread is alive
+                try:
+                    songThread.join(timeout=1)
+                    # waits for the thread to close
+                except RuntimeError:
+                # if it fails
+                    pass
+                    # moves on
+
+            self.close()
+            # closes the window
+            startApp.quit()
+            # quits the application
+            raise SystemExit
+            # stops everything
+
+### Program Component Restarter ###
+
+    def restarter(self, function: str):
+        """A function to restart specific functions in case they fail"""
+
+        if function == "C++":
+        # if the passed function is the C++ thread 
+            if cppThread.is_alive():
+            # checks if the thread is still alive
+                cppThreadEvent.set()
+                # stops it by setting the flag
+                cppThread.join()
+                # waits for the thread to stop
+            cppThread.start()
+            # starts the thread
+        
+        elif function == "Song":
+        # if the passed function is the Song thread
+            if songThread.is_alive():
+            # checks if the thread is still alive
+                songThreadEvent.set()
+                # stops it by setting the flag
+                songThread.join()
+                # waits for the thread to stop
+            songThread.start()
+            # starts the thread
 
 ### Required Stuff Grab ###
 
@@ -1058,27 +1308,26 @@ class DSI_MainWindow(QMainWindow):
 
     def configRun(self): 
         """Function to run the configuration window(s)"""
-        global jsonConfig, shaaConfig, disableShaa, skipConfigWindow
+        global functionConfig, jsonConfig, shaaConfig, disableShaa, skipConfigWindow
         # global -> local
 
-        if os.path.exists(dsiConfigPath):
-        # checks if the config already exists (not first time) and the skipping is enabled
-            self.labelSwap.emit("Found configuration, reading...", 0)
+        if os.path.exists(functionConfigPath):
+        # if the functionality-related config exists
+            self.labelSwap.emit("Found functionality configuration, reading...", 0)
             # user update
             try:
             # tries to open the json file
-                with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+                with open(functionConfigPath, "r", encoding="utf-8") as fncCfg:
                 # opens the config file in read mode
-                    jsonConfig = json.load(jsCfg)
-                    # stores the loaded json file as jsonConfig
+                    functionConfig = json.load(fncCfg)
+                    # stores the loaded json file as functionConfig
             except Exception as err:
             # if there's an error
                 self.labelSwap.emit(f"Error reading the configuration file: {err}", 2)
-                # user inform
-
+                # user inform            
             try:
             # tries to read the config
-                skipCfgWin = jsonConfig["disableCfgWin"]
+                skipCfgWin = functionConfig["disableCfgWin"]
                 # whether to prompt user with config window or not, boolean
                 if skipCfgWin:
                 # if the boolean is True
@@ -1094,14 +1343,37 @@ class DSI_MainWindow(QMainWindow):
         # if the config file doesn't exist
             skipCfgWin = False
             # sets the config to false
-            
+
         if not skipCfgWin:
         # if the file doesn't exist or config needs to be rechecked
+            mainConfig = subprocess.run([functionConfigWin], check=True)#, creationflags=subprocess.CREATE_NO_WINDOW)
+            # runs the functionality configurator (as blocking), continues task once it's done writing config
+            if not mainConfig.returncode == 1:
+            # checks if the return code isn't 1 (0 is bad, 1 is good)
+                self.labelSwap.emit(f"Configuration complete, proceeding...", 0)
+                # sends the return code
+
+        if os.path.exists(dsiConfigPath):
+        # checks if the config already exists (not first time) and the skipping is enabled
+            self.labelSwap.emit("Found customisation configuration, reading...", 0)
+            # user update
+            try:
+            # tries to open the json file
+                with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+                # opens the config file in read mode
+                    jsonConfig = json.load(jsCfg)
+                    # stores the loaded json file as jsonConfig
+            except Exception as err:
+            # if there's an error
+                self.labelSwap.emit(f"Error reading the configuration file: {err}", 2)
+                # user inform
+        else:
+        # if the dsi configuration doesn't exist
             dsiConfig = subprocess.run([dsiConfigWindow], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the dsi configurator (as blocking), continues task once it's done writing config
             if not dsiConfig.returncode == 1:
             # checks if the return code isn't 1 (0 is bad, 1 is good)
-                self.labelSwap.emit(f"Configuration complete, proceeding...", 0)
+                self.labelSwap.emit(f"Customisation configuration complete, proceeding...", 0)
                 # sends the return code
 
         if os.path.exists(shaaConfigPath):
@@ -1136,10 +1408,10 @@ class DSI_MainWindow(QMainWindow):
     
     def mainConfigLoad(self):
         """Function that loads and stores the config options"""
-        global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors, enableMapping, timestampStyle, startTime
+        global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors, enableMapping, timestampStyle, startTime, consoleLength
         # global -> local
 
-        refreshTime = jsonConfig["refreshTime"]
+        refreshTime = functionConfig["refreshTime"]
         # grabs the refresh time from config
 
         if refreshTime < 2:
@@ -1149,11 +1421,12 @@ class DSI_MainWindow(QMainWindow):
 
         enablePause = jsonConfig["enablePause"]
         pauseStateText = jsonConfig["pauseText"]
-        enableUpdates = jsonConfig["printUpdates"]
-        enableErrors = jsonConfig["printErrors"]
-        enableMapping = jsonConfig["enableURI"]
-        timestampStyle = jsonConfig["clockStyle"]
-        # loads all options from config
+        enableUpdates = functionConfig["printUpdates"]
+        enableErrors = functionConfig["printErrors"]
+        enableMapping = functionConfig["enableURI"]
+        timestampStyle = functionConfig["clockStyle"]
+        consoleLength = functionConfig["consoleLength"]
+        # loads all options from configs
 
         self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
         # user update
@@ -1273,6 +1546,7 @@ class DSI_MainWindow(QMainWindow):
             songInfoFormatDetailsSpacer = shaaConfig["songInfoDetailsSpacer"]
             songInfoDetailsDoubleSpace = shaaConfig["songInfoDetailsDoubleSpace"]
             dsiShoutout = shaaConfig["dsiShoutout"]
+            # grabs everything from config
 
         else:
         # if the disableShaa is set to True
@@ -1431,6 +1705,9 @@ class DSI_MainWindow(QMainWindow):
         """Function that finalizes the window class' progress"""
         self.multiLabel = True
         # sets the boolean to true, allowing further "prints" to utilise more than 1 line of output
+        self.lines = deque(maxlen = consoleLength)
+        # redefines the line variable again with the correct console length from config
+
         self.setWindowTitle(f"Discord Spotify Integration v{self.version}")
         # sets a new title (starter -> real)
 
@@ -1438,11 +1715,9 @@ class DSI_MainWindow(QMainWindow):
         self.submitButton.deleteLater()
         # deletes the now useless buttons
 
-        self.mainLayout.setColumnMinimumWidth(0, 100)
         self.mainLayout.setColumnMinimumWidth(1, 0)
-        self.mainLayout.setColumnMinimumWidth(2, 500)
+        self.mainLayout.setColumnMinimumWidth(2, 400)
         self.mainLayout.setColumnMinimumWidth(3, 0)
-        self.mainLayout.setColumnMinimumWidth(4, 100)
         # sets the minimum width for columns
 
         self.mainLayout.setColumnStretch(0, 0)
@@ -1453,11 +1728,24 @@ class DSI_MainWindow(QMainWindow):
         # stops each column from expanding on their own
 
         self.blacklistSongName.show()
-        # enables the song name field again
+        # enables the song name field
 
         self.readyTag.emit()
-        # sends a signal to the ready tag to allow progress
+        # sends a signal to the ready tag to allow progress (starts the threads)
 
+### Program Ready State ###
+
+    def programReadyState(self):
+        """Function that activates things after the rest of the program is caught up"""
+
+        self.swapStatsButton.show()
+        # enables the stats swap button
+
+        self.spotifyStatusIcon.show()
+        self.spotifyStatusLabel.show()
+        self.discordStatusIcon.show()
+        self.discordStatusLabel.show()
+        # enables all the status icons
 
 
 
@@ -1485,6 +1773,8 @@ authorisation = None
 
 main = None
 """Handles the authentication and user identification"""
+
+
 
 def eventer():
     """Function that reassigns the required global objects"""
@@ -1534,11 +1824,15 @@ def authPlayback():
                 # if it's not the first attempt, meaning the reconnect attempt print has already been pushed once (and the error isn't due to token)
                     mainWin.labelSwap.emit("Reconnect successful!", 0)
                     # prints user update
+                    mainWin.iconChanger("Spotify", "Green")
+                    # ensures the icon is green
 
                 elif enableErrors and tokenRefresh:
                 # if the tokenrefresh flag is set to true, that means a connectionError occurred at least once
                     mainWin.labelSwap.emit("Token refreshed successfully!", 0)
                     # prints user update with more specific info
+                    mainWin.iconChanger("Spotify", "Green")
+                    # ensures the icon is green
 
                 return success
                 # sends back the successfully found dictionary to the calling function (should only be looper)
@@ -1569,6 +1863,8 @@ def authPlayback():
                         # user inform
                         time.sleep(2)
                         # sleeps for 2 seconds (because there's a function-wide 3-second cooldown added on top)
+                        mainWin.iconChanger("Spotify", "Yellow")
+                        # ensures the icon is yellow
 
                     elif isinstance(error, SpotifyException) and error.http_status == 429:
                     # if the error is due to a rate limit (429 error code from Spotify)
@@ -1578,21 +1874,29 @@ def authPlayback():
                         # user inform that should include a timer (sometimes it's weird, negative or doesn't exist)
                         time.sleep(int(retryTimer))
                         # sleeps for the duration of retryTimer (+3s due to global cooldown)
+                        mainWin.iconChanger("Spotify", "Yellow")
+                        # ensures the icon is yellow
 
-                    elif isinstance(error, SpotifyException) and error.http_status == 500:
+                    elif isinstance(error, SpotifyException) and (error.http_status == 500 or error.http_status == 503):
                     # if the error is 500 (internal error fail)
-                        mainWin.labelSwap.emit(f"Spotify internal error (Code 500).\nAttempting to reconnect ({attempt+1}/3)]", 2)
-                        # should never happen, but rarely does
+                        mainWin.labelSwap.emit(f"Spotify internal error.\nAttempting to reconnect ({attempt+1}/3)]", 2)
+                        # "should never happen" (according to Spotify docs), but does occasionally
+                        mainWin.iconChanger("Spotify", "Yellow")
+                        # ensures the icon is yellow
 
                     else:
                     # if the error is anything else
                         mainWin.labelSwap.emit(f"Spotify error: {error}.\nAttempting to reconnect ({attempt+1}/3)", 2)
                         # generic user update
+                        mainWin.iconChanger("Spotify", "Yellow")
+                        # ensures the icon is yellow
 
                 if attempt == 2:
                 # if it's the last attempt (range(3) = 0,1,2) and it fails
-                    mainWin.labelSwap.emit(f"All attempts to reconnect failed due to {error}\nPlease manually restart DSI. Exiting...", 4)
+                    mainWin.labelSwap.emit(f"All attempts to reconnect failed due to {error}\nExiting...", 4)
                     # user update
+                    mainWin.iconChanger("Spotify", "Red")
+                    # calls the icon changer with red icon
                     time.sleep(600)
                     # waits 10 minutes
                     mainWin.stopper()
@@ -1663,6 +1967,61 @@ def uriWriter(URIs: list):
     # opens the unfound URI file in write mode
         json.dump(URIs, nURI, indent=3)
         # "dumps" the list of URIs into the file (with indent)
+
+
+
+def statsWriter(action: str):
+    """Function that adds the current stats to file"""
+    if os.path.exists(statsPath):
+    # if the statistics file exists
+        with open(statsPath) as stats:
+        # opens the statistics file in read mode
+            globalStats = json.load(stats)
+            # loads the global (across sessions) statistics
+    else:
+    # if the file doesn't exist
+        globalStats = {
+            "Songs Played": 0,
+            "Time Played": 0,
+            "Avg Duration": 0,
+            }
+        # sets default 0 values for all statistics
+    
+    if action == "Load":
+    # if the action is to load
+        return globalStats
+        # returns the dictionary
+
+    elif action == "Save":
+    # if the action is to save
+        globalSongsPlayed = globalStats["Songs Played"]
+        globalTimePlayed = globalStats["Time Played"]
+        # grabs each statistic individually
+        
+        totalSongsPlayed = int(globalSongsPlayed + trackCounter)
+        # adds up the total amount of songs played
+        totalTimePlayed = int(globalTimePlayed + timePlayed)
+        # adds up the total time spent playing
+        if totalSongsPlayed > 1:
+        # if there's been at least 1 song
+            totalAvgDuration = int(totalTimePlayed / (totalSongsPlayed - 1))
+            # calculates the total average duration (seconds)
+        else:
+        # if not
+            totalAvgDuration = totalTimePlayed
+            # just takes the time played
+
+        totalStats = {
+            "Songs Played": totalSongsPlayed,
+            "Time Played": totalTimePlayed,
+            "Avg Duration": totalAvgDuration
+            }
+        # forms a new dictionary with the new stats
+
+        with open(statsPath, "w", encoding="utf-8") as stats:
+        # opens the statistics file in write mode
+            json.dump(totalStats, stats, indent=3)
+            # dumps the statistics to file
 
 
 
@@ -1884,7 +2243,7 @@ class pictureClass(threading.Thread):
 
 
 
-def runCpp():
+def runCpp(event):
     """Function to run the C++ / Discord RPC program"""
     global cppProgram
     # global -> local
@@ -1900,27 +2259,86 @@ def runCpp():
         except (psutil.NoSuchProcess, psutil.AccessDenied):
         # if it fails due to missing process or access denied
             pass
-            # doesn't do anything
+            # doesn't do anything (can't do anything)
 
     cppProgram = subprocess.Popen([cppPath], cwd=cppDir, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0, creationflags=subprocess.CREATE_NO_WINDOW)
     # opens the C++/Discord exe, passes the current working directory and captures output, errors and allows input
-    if enableUpdates:
-    # if user prints are enabled
-        while True:
-        # while the loop is alive
-            lineRaw = cppProgram.stdout.readline()
-            # gets every output line in bytes
-            if not lineRaw:
-            # if there's nothing there
+
+    def cppQueueManager(output: any, cppQueue: any):
+        """Function to manage the C++ output queue"""
+        for line in iter(output.readline, b''):
+        # for every line in the output
+            cppQueue.put(line)
+            # puts the line into a queue
+        output.close()
+        # stops listening
+
+    cppQueue = queue.Queue()
+    # creates a queue for C++ output
+    threading.Thread(target = cppQueueManager, daemon=True, args=(cppProgram.stdout, cppQueue,)).start()
+    # makes a thread for the C++ queue manager, passes the C++ output and the queue
+
+    while True:
+    # while the process is running
+        if cppThreadEvent.is_set():
+        # if the event is set
+            cppProgram.terminate()
+            # kills the C++ program
+            try:
+            # checks for response
+                cppProgram.wait(timeout=2)
+                # waits 2 seconds
+            except subprocess.TimeoutExpired:
+            # if it fails
+                cppProgram.kill()
+                # kills the C++ program
+            break
+            # stops
+
+        try:
+        # tries to grab a new line from the cppQueue 
+            lineRaw = cppQueue.get_nowait()
+            # non-blocking wait to grab new output
+        except queue.Empty:
+        # if the queue is empty
+            lineRaw = None
+            # sets the line to empty so it doesn't progress
+
+        if enableUpdates and lineRaw:
+        # if user prints are enabled and there's something to print
+            if not lineRaw and cppProgram.poll() is not None:
+            # if there's no output and the program isn't responding
                 break
-                # resets
+                # stops
             line = lineRaw.decode("utf-8", errors="ignore").strip()
             # decodes bytes -> text, ignores any errors and removes whitespace
             if line:
             # every time the C++ file sends something as output, this program takes it
-                mainWin.labelSwap.emit(f"{line.rstrip()}", 0)
-                # prints it after a line ends
+                if "RPC started" in line:
+                # if the line is about the startup info
+                    mainWin.labelSwap.emit(line, 3)
+                    # updates the console with code 3 (newline)
+                else:
+                # if it's anything else
+                    mainWin.labelSwap.emit(line, 0)
+                    # code 0 is nothing extra
+            
+                if "updated" in line:
+                # if the line contains "updated" (means the RPC update went through)
+                    mainWin.iconChanger("Discord", "Green")
+                    # ensures the icon is green
+                elif "failed" in line.lower():
+                # if the line contains "failed"/"Failed" (means the RPC update didn't go through)
+                    mainWin.iconChanger("Discord", "Yellow")
+                    # ensures the icon is yellow
 
+    cppProgram.wait()
+    # waits for the program to close
+
+
+
+
+        
 
 
 def cppPackets(packet: dict):
@@ -1940,14 +2358,14 @@ def cppPackets(packet: dict):
 
 
 
-def song(pictureQueue):
+def song(pictureQueue, event):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
     global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo
     global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist
     # global -> local
 
-    while True:
-    # while the loop is active, keeps repeating
+    while not songThreadEvent.is_set():
+    # while the event isn't set, keeps looping
 
         songEvent.wait()
         # waits for looper() to set an event
@@ -2234,13 +2652,6 @@ def song(pictureQueue):
                 altURI = uriMap.get(csURI)
                 # creates an alteranate variable from the JSON map by checking with the current URI
 
-                if finalURI in csvReader.index:
-                # checks if the URI is on the CSV (this check is just to prevent double prints)
-                    if enableUpdates:
-                    # if the user updates are enabled
-                        mainWin.labelSwap.emit("Current song found in CSV", 0)
-                        # user update
-
                 if finalURI not in uriList:
                 # if the URI is not in the URI list yet
                     if enableUpdates:
@@ -2260,7 +2671,11 @@ def song(pictureQueue):
                         # user update
 
             if finalURI in csvReader.index:
-            # checks if the URI is in the CSV  
+            # checks if the URI is in the CSV
+                if enableUpdates:
+                # if the user updates are enabled
+                    mainWin.labelSwap.emit(f"{csName} found in CSV", 0)
+                    # user update
 
             ### Plays / Field 1 ###
 
@@ -2779,6 +3194,8 @@ def looper():
             # adds 1 to counter
             lastPlayStamp = songStart
             # sets the first song's start time as the initial timestamp for stats calculation
+            mainWin.programReady.emit()
+            # tells the program ready state function to enable post-process items
             picEvent.set()
             # since this only runs when the program first starts, sets an event immediately to picCycler, to grab a new picture
             songEvent.set()
@@ -2857,7 +3274,33 @@ def looper():
         # sleeps for the determined time
 
 
+
 ### Load Commands ###
+
+
+
+bg = pictureClass(picCycleList, picCycleType, picCycleTime, pictureQueue)
+# defines the background thread as the class containing all the picture function
+# passes the list, type, time and queue
+
+picThread = threading.Thread(target = bg.picCycler, daemon=True)
+# creates a thread for the picture changer
+
+songThreadEvent = threading.Event()
+# a threading event used to close the songThread
+songThread = threading.Thread(target = song, daemon=True, args=(pictureQueue, songThreadEvent,))
+# creates the song thread
+
+cppThreadEvent = threading.Event()
+# a threading event used to close the cppThread
+cppThread = threading.Thread(target = runCpp, daemon=True, args=(cppThreadEvent,))
+# creates a thread for the C++ program to run in - this way it won't stop the main process
+
+
+
+### Start Functions ###
+
+
 
 def startStart():
     """The function that starts the starter"""
@@ -2876,25 +3319,14 @@ def mainStart():
     eventer()
     # runs the event reassigner (the spotify authorisation stuff)
 
-    bg = pictureClass(picCycleList, picCycleType, picCycleTime, pictureQueue)
-    # defines the background thread as the class containing all the picture function
-    # passes the list, type, time and queue
-
     bg.start()
     # runs the "background" class, which handles the picture updates
 
-    picThread = threading.Thread(target = bg.picCycler)
-    # creates a thread for the picture changer
     picThread.start()
     # starts the picture thread
 
-    songThread = threading.Thread(target = song, args=(pictureQueue,))
-    # creates the song thread
     songThread.start()
     # starts the song thread to get updated info
-
-    cppThread = threading.Thread(target = runCpp)
-    # creates a thread for the C++ program to run in - this way it won't stop the main process
 
     if dc_app_ID and sp_client_ID:
         # if both the Application ID and Spotify Client ID are found
@@ -2918,11 +3350,7 @@ def mainStart():
 
 
 
-
-
 ### Window Start ###
-
-
 
 
 

@@ -1,0 +1,6 @@
+funcWindow.spec
+funcWindow.exe
+build
+dist
+__pycache__
+.qtcreator
