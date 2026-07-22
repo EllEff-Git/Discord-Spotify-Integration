@@ -25,7 +25,7 @@ from PyQt6.QtWidgets import *
 
 
 
-DSIver = "0.5.6.1518"
+DSIver = "0.7.22.1848"
 """The program version (Y.M.DD.HHMM)"""
 
 
@@ -277,6 +277,9 @@ pauseStart = None
 
 currentInfo = None
 """Song info dictionary"""
+
+cppFull = None
+"""Currently playing song dict sent to the C++ program"""
 
 blacklistInfo = None
 """Dictionary containing the current song's info"""
@@ -534,29 +537,46 @@ class DSI_MainWindow(QMainWindow):
             globalAvgString = f"0:{globalAvgDuration:02d}"
             # forms a string from just the duration, leading 0 added
         
-        self.globalSongCounter.setText(f"Songs played: {self.globalStats["Songs Played"]}\nTime played: {globalTimeString} hours\nAverage duration: {globalAvgString}")
+        globalSongsPlayed = self.globalStats["Songs Played"]
+        # grabs the songs played count from global stats variable
+        
+        self.globalSongCounter.setText(f"Songs played: {globalSongsPlayed:,.0f}\nTime played: {globalTimeString} hours\nAverage duration: {globalAvgString}")
         # sets the counter text to match
 
     ### Function Elements ###
 
         self.functionLayout = QGridLayout()
         # a layout that holds functional buttons
-
         self.mainLayout.addLayout(self.functionLayout, 4, 4, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the layout to the main in the mirrored spot bottom row, right column
 
         self.swapStatsButton = QPushButton("Swap Statistics")
         # a button to swap between global and session statistics
-        self.swapStatsButton.setMinimumSize(60, 30)
-        # sets minimum size
+        self.swapStatsButton.setFixedSize(125, 40)
+        # sets fixed size
         self.swapStatsButton.setToolTip("Swap statistics view between global and session")
         # tooltip
-        self.functionLayout.addWidget(self.swapStatsButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the button
+
         self.swapStatsButton.clicked.connect(lambda: self.songDetails("Swap"))
         # connects the button click to the details swapping
         self.swapStatsButton.hide()
         # hides the button on start
+
+        self.debugInfoButton = QPushButton("Song Details")
+        # a button to display API-level details about the song
+        self.debugInfoButton.setFixedSize(125, 40)
+        # sets fixed size
+        self.debugInfoButton.setToolTip("Display details about the currently playing song")
+        # tooltip
+
+        self.debugInfoButton.clicked.connect(self.songDetailsWindow)
+        # connects the button click to the detail display
+        self.debugInfoButton.hide()
+        # hides the button on start
+
+        self.functionLayout.addWidget(self.swapStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.debugInfoButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the buttons
 
     ### Status Elements ###
 
@@ -857,7 +877,7 @@ class DSI_MainWindow(QMainWindow):
             formatTimePlayed = f"{int(timePlayed / 60)} minutes"
             # formats the time played from seconds to minutes
 
-        self.songCounter.setText(f"Songs played: {trackCounter}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
+        self.songCounter.setText(f"Songs played: {trackCounter:,.0f}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
         # sets the counter text to match
 
         if action == "Swap":
@@ -872,6 +892,43 @@ class DSI_MainWindow(QMainWindow):
                 self.globalSongCounter.hide()
                 self.songCounter.show()
                 # swaps them around (opposite)
+
+
+
+### Song Details Window ###
+
+    def songDetailsWindow(self):
+        """A function to display a small window containing song details"""
+
+        info = QDialog(self)
+        # makes a dialog window
+        info.setWindowTitle(f"Details for {cppFull["Song Raw"]}")
+        # sets the window title based on currently variable-stored song
+        info.resize(400, 120)
+        # window size
+
+        infoText = (f"Song: {cppFull["Song Raw"]} by {cppFull["Artist"]}\n"
+        f"Album: {cppFull["Album"]}\n"
+        f"Spotify URI: {cppFull["URI"]}\n"
+        f"Statistics: {cppFull["Playcount"]} plays, {cppFull["Playtime"]} minutes")
+        # makes a text field with details about the current song
+
+        details = QPlainTextEdit(info)
+        # makes the field of text inside the info window (easy to copy from)
+        details.setReadOnly(True)
+        # read-only
+        details.setPlainText(infoText)
+        # sets the song details in the text field
+
+        detailWindowLayout = QVBoxLayout(info)
+        # adds a layout to the window
+        detailWindowLayout.addWidget(details)
+        # adds the text field
+
+        info.exec()
+        # executes (shows)
+
+
 
 ### Auto-Scroll ###
 
@@ -1739,7 +1796,8 @@ class DSI_MainWindow(QMainWindow):
         """Function that activates things after the rest of the program is caught up"""
 
         self.swapStatsButton.show()
-        # enables the stats swap button
+        self.debugInfoButton.show()
+        # enables the function buttons button
 
         self.spotifyStatusIcon.show()
         self.spotifyStatusLabel.show()
@@ -1790,7 +1848,7 @@ def eventer():
         )
     # this assignment can only be made *after* the client UI window runs (because that handles the config -> global var)
 
-    main = spotipy.Spotify(auth_manager = authorisation, requests_session = sessionID)
+    main = spotipy.Spotify(auth_manager = authorisation)#, requests_session = sessionID)
     # same deal with this
 
 
@@ -1816,7 +1874,7 @@ def authPlayback():
 
             try:
             # first tries to send an API request to Spotify
-                
+
                 success = main.current_playback()
                 # if it works, returns the Spotify playback package (dictionary)
 
@@ -1838,58 +1896,92 @@ def authPlayback():
                 # sends back the successfully found dictionary to the calling function (should only be looper)
                 
 
-            except (SpotifyException, requests.exceptions.RequestException, ConnectionResetError) as error:
+            except Exception as error:
             # if it fails to acquire a Spotify playback package
 
-                if enableErrors:
-                # if error printing is enabled
+                # this section individually checks for a few specific errors, because they were the most common that I had 
+                # (token refreshing isn't *really* an error but is classed as such internally)
+                # while printing 2-3 lines of error code is "helpful", it doesn't really help when the error is a simple, "self-fixing" one
 
-                    # this section individually checks for a few specific errors, because they were the most common that I had 
-                    # (token refreshing isn't *really* an error but is classed as such internally)
-                    # while printing 2-3 lines of error code is "helpful", it doesn't really help when the error is a simple, "self-fixing" one
-                    # this is why these (token expiry, read timeout, 429 and 500) are checked for first, so it doesn't print a massive chunk of useless info
-
-                    if isinstance(error, requests.exceptions.ConnectionError):
-                    # if the error is a connection error (more than likely due to token expiry)
+                if isinstance(error, requests.exceptions.ConnectionError):
+                # if the error is a connection error (more than likely due to token expiry)
+                    if enableErrors:
+                    # if error-printing is enabled
                         mainWin.labelSwap.emit(f"Refreshing Spotify token...", 1)
                         # doesn't sleep because this is a token error and should get "fixed" nearly instantly
                         # expected to print just about every 3600 seconds (1h)
-                        tokenRefresh = True
-                        # sets the tokenRefresh flag to true so the next print is more relevant (purely QoL)
+                    tokenRefresh = True
+                    # sets the tokenRefresh flag to true so the next print is more relevant (purely QoL)
 
-                    elif isinstance(error, requests.exceptions.ReadTimeout):
-                    # if the error is a read timeout (sort of random)
+                elif isinstance(error, requests.exceptions.ReadTimeout):
+                # if the error is a read timeout (sort of random)
+                    if enableErrors:
+                    # if error-printing is enabled
                         mainWin.labelSwap.emit(f"Spotify API timeout.\nRetrying in 5 seconds ({attempt+1}/3)", 2)
                         # user inform
-                        time.sleep(2)
-                        # sleeps for 2 seconds (because there's a function-wide 3-second cooldown added on top)
-                        mainWin.iconChanger("Spotify", "Yellow")
-                        # ensures the icon is yellow
+                    time.sleep(2)
+                    # sleeps for 2 seconds (because there's a function-wide 3-second cooldown added on top)
+                    mainWin.iconChanger("Spotify", "Yellow")
+                    # ensures the icon is yellow
 
-                    elif isinstance(error, SpotifyException) and error.http_status == 429:
-                    # if the error is due to a rate limit (429 error code from Spotify)
-                        retryTimer = error.headers.get("Retry-After", 5)
-                        # gets the retry cooldown timer (or 5, if none is found)
+                elif isinstance(error, SpotifyException) and error.http_status == 429:
+                # if the error is due to a rate limit (429 error code from Spotify)
+                    retryTimer = error.headers.get("Retry-After", 5)
+                    # gets the retry cooldown timer (or 5, if none is found)
+                    if enableErrors:
+                    # if error-printing is enabled
                         mainWin.labelSwap.emit(f"This application is being rate limited by Spotify.\nRetrying in {retryTimer} ({attempt+1}/3)", 2)
                         # user inform that should include a timer (sometimes it's weird, negative or doesn't exist)
-                        time.sleep(int(retryTimer))
-                        # sleeps for the duration of retryTimer (+3s due to global cooldown)
-                        mainWin.iconChanger("Spotify", "Yellow")
-                        # ensures the icon is yellow
+                    time.sleep(int(retryTimer))
+                    # sleeps for the duration of retryTimer (+3s due to global cooldown)
+                    mainWin.iconChanger("Spotify", "Yellow")
+                    # ensures the icon is yellow
 
-                    elif isinstance(error, SpotifyException) and (error.http_status == 500 or error.http_status == 503):
-                    # if the error is 500 (internal error fail)
-                        mainWin.labelSwap.emit(f"Spotify internal error.\nAttempting to reconnect ({attempt+1}/3)]", 2)
-                        # "should never happen" (according to Spotify docs), but does occasionally
-                        mainWin.iconChanger("Spotify", "Yellow")
-                        # ensures the icon is yellow
+                elif isinstance(error, SpotifyException) and (error.http_status == 500 or error.http_status == 503):
+                # if the error is 500 (internal error fail)
+                    if enableErrors:
+                    # if error-printing is enabled
+                        mainWin.labelSwap.emit(f"Spotify internal error.\nAttempting to reconnect ({attempt+1}/3)", 2)
+                        # "should never happen" (according to Spotify docs), but does occasionally (typically Spotify-side maintenance or servers down)
+                    mainWin.iconChanger("Spotify", "Yellow")
+                    # ensures the icon is yellow
 
+                elif isinstance(error, SpotifyException) and (error.http_status == 401):
+                # if the error is 401 (access token error, forbidden action, etc)
+                    if enableErrors:
+                    # if error-printing is enabled
+                        mainWin.labelSwap.emit(f"Spotify access error.\nAttempting to reconnect ({attempt+1}/3)", 2)
+                        # user inform on token error
+                    mainWin.iconChanger("Spotify", "Yellow")
+                    # sets the icon yellow to indicate some type of error
+                    time.sleep(1)
+                    # waits a second
+
+                elif isinstance(error, SpotifyException) and (error.http_status == 400):
+                # if the error is 400 (access denied, token expired)
+                    if error.headers.get("error") and error.headers.get("error") == "invalid_grant":
+                    # if the error header is given and its reason is "invalid_grant" (refresh token expired)
+                        mainWin.labelSwap.emit(f"Spotify refresh token expired, please re-login", 2)
+                        # user update on login requirement (doesn't consider errors because this requires user interaction)
+                        spotifyLogin()
+                        # calls the spotify re-login to delete the cache file and force a login
+                        tokenRefresh = True
+                        # sets the token boolean to True (QoL)
                     else:
-                    # if the error is anything else
+                    # not that error, likely just temporary
+                        if enableErrors:
+                        # if error-printing is enabled
+                            mainWin.labelSwap.emit(f"Spotify error: {error}.\nAttempting to reconnect ({attempt+1}/3)", 2)
+                            # generic user update
+
+                else:
+                # if the error is anything else
+                    if enableErrors:
+                    # if error-printing is enabled
                         mainWin.labelSwap.emit(f"Spotify error: {error}.\nAttempting to reconnect ({attempt+1}/3)", 2)
                         # generic user update
-                        mainWin.iconChanger("Spotify", "Yellow")
-                        # ensures the icon is yellow
+                    mainWin.iconChanger("Spotify", "Yellow")
+                    # ensures the icon is yellow
 
                 if attempt == 2:
                 # if it's the last attempt (range(3) = 0,1,2) and it fails
@@ -1904,6 +1996,27 @@ def authPlayback():
 
                 time.sleep(3)
                 # waits 3 seconds to give it some time
+
+
+
+def spotifyLogin():
+    """Function to (re)connect to a Spotify account"""
+    global authorisation, main
+    # global -> local
+
+    with spotifyLock:
+    # uses the thread lock to prevent it from accessing the API while this is reconnecting
+
+        if os.path.exists(spCache):
+        # if there's a spotify token cache file
+            os.remove(spCache)
+            # deletes it
+
+        time.sleep(5)
+        # waits a short amount of time
+
+        eventer()
+        # calls the eventer to re-create a spotipy instance (to ideally remove old, cached credentials from use)
 
 
 
@@ -2361,7 +2474,7 @@ def cppPackets(packet: dict):
 def song(pictureQueue, event):
     """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
     global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo
-    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist
+    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist, cppFull
     # global -> local
 
     while not songThreadEvent.is_set():
@@ -2403,6 +2516,11 @@ def song(pictureQueue, event):
 
         isLocalSong = csItem.get("is_local")
         # checks if the song is a local song (can't use standard API info requests if so)
+
+        shaaPlaytimeMin = None
+        shaaPlaycountSong = None
+        shaaPlaytime = None
+        # starts up variables as None
 
         if not isLocalSong:
         # these fields are only valid when it's not a local song
@@ -2699,6 +2817,8 @@ def song(pictureQueue, event):
                     # formats the string properly
                     songStuffList.append(shaaPlaycount)
                     # adds the track's playcount to the list
+                    shaaPlaycountSong = shaaPlaycount
+                    # copies the variable
 
                 elif songInfoField1 == "Total":
                 # if the selected type for the first field is Total
@@ -2731,6 +2851,9 @@ def song(pictureQueue, event):
                     # if there's only one instance of the current song
                         playtimeTotal = int(playtime / 1000)
                         # saves the total as the playtime of the song
+
+                    shaaPlaytimeMin = f"{(playtimeTotal / 60):,.1f}"
+                    # stores a second variable for minutes (for details window)
 
                     if songInfoField2 == 0:
                     # track minutes
@@ -3102,7 +3225,12 @@ def song(pictureQueue, event):
             "UNIX Start": csUnixStart,
             "UNIX End": csUnixEnd,
             "Pause": (not csPlayState),
-            "Track ID": trackCounter
+            "Song Raw": csName,
+            "Artist": csArtist,
+            "Track ID": trackCounter,
+            "URI": finalURI,
+            "Playcount": (shaaPlaycountSong if shaaPlaycountSong is not None else "N/A"),
+            "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A")
         }
         # forms a dictionary of the current song's full info 
 
@@ -3217,7 +3345,7 @@ def looper():
                 # if console updates are enabled and this change wasn't triggered by a pause
                 mainWin.labelSwap.emit(f"New song: {songName}, duration: {songDur:,.0f} seconds", 3)
                 # user update on new song
-            elif enableUpdates and pauseUpdated:
+            elif enableUpdates and pauseUpdated and playing:
                 # if console updates are enabled and this change *was* triggered by a pause
                 mainWin.labelSwap.emit(f"Unpaused: {songName}", 3)
                 # user update on unpause

@@ -24,6 +24,11 @@ It's easy to run, even easier to configure and features over a dozen simple, but
 
 - If you prefer to hide certain songs, you can blacklist individual songs and display your favorites instead *(only for versions after v0.5.2.0537).* <br/>
 
+## Download
+### [Download latest](https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest/download/DSI.zip)
+
+<br>
+
 <br/>
 
 *Note that the "Spotify Activity" text is determined by your Discord Application's name, and is not set in stone* <br/>
