@@ -403,19 +403,17 @@ class Ui_FuncWindow(object):
         refreshTime = self.refreshTimeLine.text()
         # grabs the text from the refresh time edit line
 
+        try:
+        # tries to
+            refreshTime = float(refreshTime)
+            # turn the time into a float
+        except:
+        # if it can't (not an int/float)
+            refreshTime = 10.0
+            # sets to safe 10 second float
+
         consoleLength = self.consoleLengthLine.text()
         # grabs the text from the console length edit line
-
-        if not type(refreshTime) in [float, int]:
-        # if the refreshTime isn't a float or int
-            try:
-            # tries to
-                float(refreshTime)
-                # turn the time into a float
-            except:
-            # if it can't (not an int/float)
-                refreshTime = 10.0
-                # sets to safe 10 second float
 
         if not type(consoleLength) == int:
         # if the consoleLength isn't an integer
