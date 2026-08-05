@@ -4,7 +4,7 @@ import random, subprocess
 # Required to choose random pictures and to start the C++ file
 import os, sys, time, threading, queue, datetime
 # Required for system information, background tasking and queueing
-import spotipy, requests, json
+import spotipy, requests, json, logging
 # Required for basic function of Spotify data requests and storing
 from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
@@ -18,6 +18,8 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
 # Required for the main window
+from flask import Flask
+# Required for cross-communication between DSI and SBO
 
 
 
@@ -25,7 +27,7 @@ from PyQt6.QtWidgets import *
 
 
 
-DSIver = "0.7.22.1848"
+DSIver = "0.8.5.1101"
 """The program version (Y.M.DD.HHMM)"""
 
 
@@ -38,6 +40,8 @@ directory = None
 """The base directory of the program, where DSI.exe resides"""
 iconPath = None
 """The path of the app icon png"""
+splashPath = None
+"""The path of the splash screen png"""
 yellowStatusPath = None
 """The yellow status icon png path"""
 redStatusPath = None
@@ -50,6 +54,7 @@ if getattr(sys, "frozen", False):
 # since the program bundled with pyInstaller, it's "frozen"
     directory = os.path.dirname(sys.executable)
     iconPath = os.path.join(sys._MEIPASS, "dsiIcon.png")
+    splashPath = os.path.join(sys._MEIPASS, "dsiSplash.png")
     # reassigns the path variables accordingly
     yellowStatusPath = os.path.join(sys._MEIPASS, "dsiStatusYellow.png")
     redStatusPath = os.path.join(sys._MEIPASS, "dsiStatusRed.png")
@@ -59,6 +64,7 @@ else:
 # if somehow not in a bundled (frozen) state
     directory = os.path.dirname(__file__)
     iconPath = os.path.join(directory, "icons", "dist", "dsiIcon.png")
+    splashPath = os.path.join(directory, "icons", "dist", "dsiSplash.png")
     # reassigns the path variables accordingly
     yellowStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusYellow.png")
     redStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusRed.png")
@@ -78,6 +84,7 @@ if not os.path.exists(dataDir):
     # if it can't
         None
         # does nothing
+
 
 
 
@@ -139,7 +146,12 @@ cppExe = "DSIdiscord.exe"
 cppPath = os.path.join(directory, "Discord", cppExe)
 """The full path to the C++ exe"""
 cppDir = os.path.dirname(cppPath) 
-"""The directory the C++ Exe lives in"""
+"""The directory the C++ exe lives in"""
+
+### GitHub URL ###
+
+gURL = "https://api.github.com/repos/EllEff-Git/Discord-Spotify-Integration/tags"
+"""The GitHub URL to make update check requests to"""
 
 
 
@@ -173,6 +185,8 @@ skipConfigWindow = False
 """Whether to skip the configuration window or not, bool"""
 consoleLength = 25
 """The stored line amount for the pseudo-console, int"""
+hostData = True
+"""Whether to host the parsed Spotify data locally, bool"""
 refreshTime = 10.0
 """Program update cycle interval time, float/int"""
 
@@ -317,8 +331,43 @@ csName = csArtist = ""
 dsiShoutoutStr = "// Data by DSI"
 """A shoutout string to DSI, disabled by default in config"""
 
+disableShaa = False
+"""Boolean to check whether SHA(A) functionality should be disabled or not"""
+
 cppProgram = None
 """The C++ program subprocess (gets defined in its function)"""
+
+cppFails = 0
+"""How many asset failures have been detected from the C++ subprocess"""
+
+
+
+### Flask (Network Host) ###
+
+flaskLog = logging.getLogger("werkzeug")
+# targets the Flask logger
+flaskLog.setLevel(logging.ERROR)
+# sets the logging level to error-only (ignores harmless prints)
+
+localSPData = Flask(__name__)
+# creates a locally-run network app to host Spotify data at
+
+@localSPData.route("/spData")
+def spData():
+# Spotify data page
+    return json.dumps(cppFull)
+    # turns the C++ dictionary into a json format, sends to the /spData page
+
+@localSPData.route("/version")
+def version():
+# Spotify data version page
+    return json.dumps(cppFull.get("Track ID", 0))
+    # turns the single key value into a page (that SBO can check easier)
+
+def runSPData():
+# Spotify data page runner
+    localSPData.run(host="127.0.0.1", port=41809)
+    # runs the Flask app on the local network (127.0.0.1:41809/spData)
 
 
 
@@ -342,10 +391,9 @@ class DSI_MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
 
-    ### Init / Basic ###
 
-        self.show()
-        # shows the program window (Windows hides by default)
+
+    ### Init / Basic ###
 
         self.version = DSIver
         # stores the version in self
@@ -355,12 +403,12 @@ class DSI_MainWindow(QMainWindow):
         self.redStatus = QIcon(redStatusPath)
         self.greenStatus = QIcon(greenStatusPath)
         # the status icons
-        self.programName = f"DSI Starter v{self.version}"
+        self.programName = f"DSI Loader"
         # stores the program name
 
         self.windowSizeX = max(900, int(startApp.primaryScreen().size().width() / 2))
         self.windowSizeY = max(800, int(startApp.primaryScreen().size().height() / 2))
-        # base window sizes (uses the larger of the two, 900/800 or ~33% of the monitor's width/height)
+        # base window sizes (uses the larger of the two, 900/800 or ~50% of the monitor's width/height)
 
     ### Basic Window Setup ###
 
@@ -368,11 +416,8 @@ class DSI_MainWindow(QMainWindow):
         # the window title
         self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
-        self.setMinimumSize(QSize(900, 800))
+        self.setMinimumSize(QSize(self.windowSizeX, self.windowSizeY))
         # the window size minimums
-
-        # self.setBaseSize(QSize(self.windowSizeX, self.windowSizeY))
-        # the base size (how it appears)
 
     ### UI Element Base ###
 
@@ -388,6 +433,7 @@ class DSI_MainWindow(QMainWindow):
         self.mainLayout.setRowMinimumHeight(2, 100)
         self.mainLayout.setRowMinimumHeight(3, 50)
         self.mainLayout.setRowMinimumHeight(4, 50)
+        self.mainLayout.setRowMinimumHeight(5, 50)
         # sets the minimum height for rows
 
         self.mainLayout.setColumnMinimumWidth(0, 150)
@@ -404,8 +450,9 @@ class DSI_MainWindow(QMainWindow):
         self.mainLayout.setColumnStretch(4, 0)
         # allows columns 1, 2 and 3 (center) to stretch
 
+        self.mainLayout.setRowStretch(1, 1)
         self.mainLayout.setRowStretch(2, 1)
-        # allows row 2 (center) to stretch
+        # allows rows 1 (console) and 2 (center) to stretch
 
         self.container.setLayout(self.mainLayout)
         # sets the container to use layout
@@ -418,6 +465,11 @@ class DSI_MainWindow(QMainWindow):
         # allows the widget to be resized
         self.consoleScroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # disables the scroll bar
+        self.consoleScroll.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding
+        )
+        # allows the scroll area to resize on window expand
         self.consoleScroll.setMinimumSize(400, 525)
         # sets a minimum height
         self.consoleScroll.setStyleSheet("""
@@ -430,7 +482,7 @@ class DSI_MainWindow(QMainWindow):
             }
         """)
         # sets a custom style to add some space between the edges and the text
-        self.mainLayout.addWidget(self.consoleScroll, 1, 1, 1, 3, alignment=Qt.AlignmentFlag.AlignBottom)
+        self.mainLayout.addWidget(self.consoleScroll, 1, 1, 3, 3)
         # adds the label to the main layout (top middle)
 
         self.mainLabel = QLabel()
@@ -448,14 +500,35 @@ class DSI_MainWindow(QMainWindow):
 
     ### Exit Button ###
 
+        self.bottomButtonLayout = QGridLayout()
+        # a layout for the bottom middle buttons
+        self.mainLayout.addLayout(self.bottomButtonLayout, 5, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the layout to the bottom middle of the main layout
+
         self.exitButton = QPushButton("Exit")
         # a button to exit the program
         self.exitButton.setToolTip("Close the program and save progress")
         # tooltip
         self.exitButton.setFixedSize(150, 50)
         # sets size
-        self.mainLayout.addWidget(self.exitButton, 4, 2, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the button to the main layout (bottom middle)
+        self.bottomButtonLayout.addWidget(self.exitButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the button to the button layout (bottom middle)
+
+    ### Re-run DiscordRPC Button ###
+
+        self.rerunRPCbutton = QPushButton("Re-run DiscordRPC")
+        # a button to restart the Discord RPC
+        self.rerunRPCbutton.setToolTip("Re-run the Discord RPC subprocess again")
+        # tooltip
+        self.rerunRPCbutton.setFixedSize(150, 50)
+        # sets size
+        self.rerunRPCbutton.hide()
+        # hides the button by default
+        self.rerunRPCbutton.clicked.connect(lambda: self.restarter("C++", True))
+        # pressing the button -> runs the restarter function
+        self.bottomButtonLayout.addWidget(self.rerunRPCbutton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the button to the button layout (top middle)
+        
 
     ### Hideable/Showable Elements ###
 
@@ -483,13 +556,26 @@ class DSI_MainWindow(QMainWindow):
         self.submitButton.hide()
         # hides by default
 
+    ### Version Tag ###
+
+        self.versionTag = QLabel(f"DSI v{self.version}\n ")
+        # label for the semantic version
+        self.versionTag.setToolTip("Current DSI version")
+        # tooltip
+        self.versionTag.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        # aligns the text itself to the left
+        self.versionTag.setOpenExternalLinks(True)
+        # allows opening links (in case of new update)
+        self.mainLayout.addWidget(self.versionTag, 5, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        # adds to the bottom left corner
+
     ### Song Detail Elements ###
 
         self.songDetailLayout = QGridLayout()
         # the layout all the song detail items sit in
 
         self.mainLayout.addLayout(self.songDetailLayout, 4, 0, alignment=Qt.AlignmentFlag.AlignLeft)
-        # adds the layout to the bottom row in the left column
+        # adds the layout to the 2nd to bottom row in the left column
 
         self.songCounter = QLabel()
         # details label
@@ -747,11 +833,118 @@ class DSI_MainWindow(QMainWindow):
 
     ### Run Arguments ###
 
+        self.checkUpdate()
+        # runs the GitHub update check
+
         self.blacklistButtons("init")
         # calls the blacklist button decider with init command (hides all buttons)
 
         self.requiredItemCheck()
         # runs the required items function to check IDs
+
+
+### Update Checker ###
+
+    def checkUpdate(self):
+        """Function that checks if there's a new version of the program"""
+
+        updateAvailable = 0
+        # update check, defaults to 0
+        # 0 = no update, 1 = update, 2 = program newer than github
+
+        try:
+        # tries to get tags
+            gitTags = requests.get(
+                gURL,
+                headers={"User-Agent": "DSI"},
+                timeout=5)
+            # the request to get the github tags
+
+            if gitTags.status_code == 200:
+            # 200 is all good
+                tags = gitTags.json()
+                # grabs the json dictionary
+
+                latestTagRaw = str(tags[0]["name"])
+                # grabs the 0th element's name (latest)
+                latestTag = latestTagRaw.replace("v", "").strip()
+                # strips the v(ersion) identifier, cleans up
+                latestList = latestTag.split(".")
+                # splits the latest tag into a list of date elements (year num, month, day, hour/min)
+                currentList= self.version.split(".")
+                # splits the current tag into a list of date elements
+
+                if latestList[0] == currentList[0]:
+                # if the year elements are the same
+                    if latestList[1] == currentList[1]:
+                    # if the month elements are the same
+                        if latestList[2] == currentList[2]:
+                        # if the day elements are the same
+                            if latestList[3] == currentList[3]:
+                            # if the hour elements are the same
+                                updateAvailable = 0
+                                # sets to 0 (no update)
+                            elif latestList[3] > currentList[3]:
+                            # if the latest is newer than current
+                                updateAvailable = 1
+                                # sets the boolean to True
+                            else:
+                            # current is newer than latest
+                                updateAvailable = 2
+                                # sets the check to 2
+                        elif latestList[0] > currentList[0]:
+                        # if the latest is newer than current
+                            updateAvailable = 1
+                            # sets the boolean to True
+                        else:
+                        # current is newer than latest
+                            updateAvailable = 2
+                            # sets the check to 2
+                    elif latestList[1] > currentList[1]:
+                    # if the latest is newer than current
+                        updateAvailable = 1
+                        # sets the boolean to True
+                    else:
+                    # current is newer than latest
+                        updateAvailable = 2
+                        # sets the check to 2
+                elif latestList[0] > currentList[0]:
+                # if the latest is newer than current
+                    updateAvailable = 1
+                    # sets the boolean to True
+                else:
+                # current is newer than latest
+                    updateAvailable = 2
+                    # sets the check to 2
+
+                if updateAvailable == 1:
+                # if there's a newer version (higher number)
+                    latestURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest"
+                    # the URL to set
+                    self.versionTag.setText(
+                        f'DSI v{self.version}<br>'
+                        f'Update available: '
+                        f'<a href="{latestURL}">'
+                        f'{latestTagRaw}'
+                        f'</a>'
+                    )
+                    # updates text to include a prompt + link to the newest update
+                elif updateAvailable == 2:
+                # if the current is higher than the latest github release (test build)
+                    self.versionTag.setText(f"DSI v{self.version}\nBleeding Edge!")
+                    # you should never see this, this is a testing tag
+                else:
+                # if the version == latest
+                    self.versionTag.setText(f"DSI v{self.version}\nLatest")
+                    # updates text
+            else:
+            # status code is not 200 (error, something else)
+                self.versionTag.setText(f"DSI v{self.version}\nUpdate check failed")
+                # error prompt
+        except:
+        # didn't go through at all
+            self.versionTag.setText(f"DSI v{self.version}\nUpdate check failed")
+            # error prompt
 
 ### Label Changer ###
 
@@ -796,8 +989,8 @@ class DSI_MainWindow(QMainWindow):
             self.mainLabel.setText(f"{text}")
             # sets the passed label's text to the passed text string
 
-        QTimer.singleShot(1000, self.autoScroll)
-        # runs the autoscroller after a second to let the text sit
+        QTimer.singleShot(500, self.autoScroll)
+        # runs the autoscroller after half a second to let the text sit
 
 ### Icon Changer ###
 
@@ -1136,7 +1329,7 @@ class DSI_MainWindow(QMainWindow):
 
 ### Program Component Restarter ###
 
-    def restarter(self, function: str):
+    def restarter(self, function: str, status: bool):
         """A function to restart specific functions in case they fail"""
 
         if function == "C++":
@@ -1147,8 +1340,12 @@ class DSI_MainWindow(QMainWindow):
                 # stops it by setting the flag
                 cppThread.join()
                 # waits for the thread to stop
-            cppThread.start()
-            # starts the thread
+            if status:
+            # if the bool is True, and it's asking to restart (not just turn off)
+                cppThread.start()
+                # starts the thread
+                self.rerunRPCbutton.hide()
+                # ensures the RPC button is hidden, since the program is running
         
         elif function == "Song":
         # if the passed function is the Song thread
@@ -1158,8 +1355,10 @@ class DSI_MainWindow(QMainWindow):
                 # stops it by setting the flag
                 songThread.join()
                 # waits for the thread to stop
-            songThread.start()
-            # starts the thread
+            if status:
+            # if the bool is True, and it's asking to restart (not just turn off)
+                songThread.start()
+                # starts the thread
 
 ### Required Stuff Grab ###
 
@@ -1167,6 +1366,9 @@ class DSI_MainWindow(QMainWindow):
         """A function to check required items (IDs, etc)"""
         global secretConfig
         # global -> local
+
+        self.show()
+        # shows the main program window
 
         if os.path.exists(secretConfigPath):
         # if the "secret" configuration file does exist
@@ -1384,7 +1586,7 @@ class DSI_MainWindow(QMainWindow):
                 # user inform            
             try:
             # tries to read the config
-                skipCfgWin = functionConfig["disableCfgWin"]
+                skipCfgWin = functionConfig.get("disableCfgWin", False)
                 # whether to prompt user with config window or not, boolean
                 if skipCfgWin:
                 # if the boolean is True
@@ -1403,10 +1605,14 @@ class DSI_MainWindow(QMainWindow):
 
         if not skipCfgWin:
         # if the file doesn't exist or config needs to be rechecked
-            mainConfig = subprocess.run([functionConfigWin], check=True)#, creationflags=subprocess.CREATE_NO_WINDOW)
+            self.hide()
+            # hides the mainWindow (otherwise appears frozen)
+            mainConfig = subprocess.run([functionConfigWin], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the functionality configurator (as blocking), continues task once it's done writing config
             if not mainConfig.returncode == 1:
             # checks if the return code isn't 1 (0 is bad, 1 is good)
+                self.show()
+                # re-shows itself
                 self.labelSwap.emit(f"Configuration complete, proceeding...", 0)
                 # sends the return code
 
@@ -1426,10 +1632,14 @@ class DSI_MainWindow(QMainWindow):
                 # user inform
         else:
         # if the dsi configuration doesn't exist
+            self.hide()
+            # hides the mainWindow (otherwise appears frozen)
             dsiConfig = subprocess.run([dsiConfigWindow], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the dsi configurator (as blocking), continues task once it's done writing config
             if not dsiConfig.returncode == 1:
             # checks if the return code isn't 1 (0 is bad, 1 is good)
+                self.show()
+                # re-shows itself
                 self.labelSwap.emit(f"Customisation configuration complete, proceeding...", 0)
                 # sends the return code
 
@@ -1465,24 +1675,33 @@ class DSI_MainWindow(QMainWindow):
     
     def mainConfigLoad(self):
         """Function that loads and stores the config options"""
-        global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors, enableMapping, timestampStyle, startTime, consoleLength
+        global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors
+        global enableMapping, timestampStyle, startTime, consoleLength, hostData
         # global -> local
 
-        refreshTime = functionConfig["refreshTime"]
+        refreshTime = functionConfig.get("refreshTime", 10.0)
         # grabs the refresh time from config
+        try:
+        # tries to
+            refreshTime = float(refreshTime)
+            # turns the time into a float
+            if refreshTime < 3.0:
+            # if the refresh time is set too low
+                refreshTime = 3
+                # overrides to safe minimum of 3s  
+        except:
+        # if it fails
+            refreshTime = 10.0
+            # fallback value of 10.0
 
-        if refreshTime < 2:
-        # if the refresh time is set too low
-            refreshTime = 2
-            # overrides to safe minimum of 2s  
-
-        enablePause = jsonConfig["enablePause"]
-        pauseStateText = jsonConfig["pauseText"]
-        enableUpdates = functionConfig["printUpdates"]
-        enableErrors = functionConfig["printErrors"]
-        enableMapping = functionConfig["enableURI"]
-        timestampStyle = functionConfig["clockStyle"]
-        consoleLength = functionConfig["consoleLength"]
+        enablePause = jsonConfig.get("enablePause", True)
+        pauseStateText = jsonConfig.get("pauseText", "Paused on:")
+        enableUpdates = functionConfig.get("printUpdates", True)
+        enableErrors = functionConfig.get("printErrors", True)
+        enableMapping = functionConfig.get("enableURI", True)
+        timestampStyle = functionConfig.get("clockStyle", "Uptime")
+        consoleLength = functionConfig.get("consoleLength", 25)
+        hostData = functionConfig.get("hostData", True)
         # loads all options from configs
 
         self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
@@ -1495,21 +1714,21 @@ class DSI_MainWindow(QMainWindow):
         global smallURL, spotifyURL, songNameSpacerL, songNameSpacerR, preText, postText, enableSong, enableArtist, enableAlbum, albumFallback, picCycleList
         # global -> local
 
-        smallURL = jsonConfig["smallPicURL"]
-        if not smallURL:
+        smallURL = jsonConfig.get("smallPicURL", None)
+        if smallURL is None:
         # if the smallURL is empty
             smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
             # shameless plug <3 (only applies if there's no defined URL)
-        spotifyURL = jsonConfig["spotifyURLType"]
-        songNameSpacerL = jsonConfig["spacerL"]
-        songNameSpacerR = jsonConfig["spacerR"]
-        preText = jsonConfig["preText"]
-        postText = jsonConfig["postText"]
-        enableSong = jsonConfig["enableSong"]
-        enableArtist = jsonConfig["enableArtist"]
-        enableAlbum = jsonConfig["enableAlbum"]
-        albumFallback = jsonConfig["albumFallback"]
-        picCycleList = jsonConfig["pictureCycleType"]
+        spotifyURL = jsonConfig.get("spotifyURLType", "Track")
+        songNameSpacerL = jsonConfig.get("spacerL", "\u227a")
+        songNameSpacerR = jsonConfig.get("spacerR", "\u227b")
+        preText = jsonConfig.get("preText", "")
+        postText = jsonConfig.get("postText", "")
+        enableSong = jsonConfig.get("enableSong", True)
+        enableArtist = jsonConfig.get("enableArtist", True)
+        enableAlbum = jsonConfig.get("enableAlbum", True)
+        albumFallback = jsonConfig.get("albumFallback", "A playlist")
+        picCycleList = jsonConfig.get("pictureCycleType", "Spotify")
         # grabs each option from config, loads into global var
 
         self.labelSwap.emit("Customisation configurations loaded, proceeding...", 0)
@@ -1545,7 +1764,7 @@ class DSI_MainWindow(QMainWindow):
         # if the list is on Spotify (or empty), doesn't modify it
             None
 
-        picCycleTime = jsonConfig["pictureCycleTime"]
+        picCycleTime = jsonConfig.get("pictureCycleTime", 10)
         try:
         # tries to turn the time into minutes (ensures integer type, multiplies by 60)
             picCycleTime = (int(picCycleTime) * 60)
@@ -1553,9 +1772,9 @@ class DSI_MainWindow(QMainWindow):
         # if it can't, leaves it alone (should be the case when it's set to "Song")
             None
 
-        picCycleType = jsonConfig["pictureCycleBehavior"]
-        smallPic = jsonConfig["smallPic"]
-        hoverText = jsonConfig["smallPicHover"]
+        picCycleType = jsonConfig.get("pictureCycleBehavior", "Random")
+        smallPic = jsonConfig.get("smallPic", "")
+        hoverText = jsonConfig.get("smallPicHover", "Spotify")
         # loads last settings
 
         QTimer.singleShot(500, self.shaaConfigLoad)
@@ -1573,36 +1792,36 @@ class DSI_MainWindow(QMainWindow):
         if not disableShaa:
         # if the SHAA-related stuff isn't disabled
 
-            songInfoField1 = shaaConfig["songInfoField1"]
-            songInfoField2 = shaaConfig["songInfoField2"]
-            shaaFallbackTotal = shaaConfig["songInfoFallbackTotal"]
+            songInfoField1 = shaaConfig.get("songInfoField1", "Track")
+            songInfoField2 = shaaConfig.get("songInfoField2", 0)
+            shaaFallbackTotal = shaaConfig.get("songInfoFallbackTotal", True)
             if shaaFallbackTotal:
             # if the fallback total usage is enabled
                 shaaFallback = "Total"
                 # sets the string to "Total"
             else:
-                shaaFallback = shaaConfig["songInfoFallbackText"]
+                shaaFallback = shaaConfig.get("songInfoFallbackText", "")
                 # gets the custom string from the shaa config
 
-            shaaInfoDetails = shaaConfig["songInfoDetails"]
+            shaaInfoDetails = shaaConfig.get("songInfoDetails", "Cycle")
             if shaaInfoDetails == "Custom":
             # if the details field is set to custom
-                shaaInfoDetails = shaaConfig["songInfoDetailsText"]
+                shaaInfoDetails = shaaConfig.get("songInfoDetailsCustomText", "")
                 # uses the custom string from the config
                 songInfoFallback = ""
                 # uses empty string (custom string defined above)
             else:
             # if the field isn't custom, uses "total" as an additional string
                 songInfoFallback = "total"
-                
-            songInfoFormatPlays = shaaConfig["songInfoFormatPlays"]
-            songInfoSpacer = shaaConfig["songInfoFormatSpacer"]
-            songInfoFormatMins = shaaConfig["songInfoFormatMins"]
-            songInfoFormatTextFirst = shaaConfig["songInfoDetailsTextFirst"]
-            songInfoFormatDetails = shaaConfig["songInfoDetailsText"]
-            songInfoFormatDetailsSpacer = shaaConfig["songInfoDetailsSpacer"]
-            songInfoDetailsDoubleSpace = shaaConfig["songInfoDetailsDoubleSpace"]
-            dsiShoutout = shaaConfig["dsiShoutout"]
+
+            songInfoFormatDetails = shaaConfig.get("songInfoDetailsText", "Total Hours")
+            songInfoFormatPlays = shaaConfig.get("songInfoFormatPlays", "plays")
+            songInfoSpacer = shaaConfig.get("songInfoFormatSpacer", "\u203b")
+            songInfoFormatMins = shaaConfig.get("songInfoFormatMins", "minutes")
+            songInfoFormatTextFirst = shaaConfig.get("songInfoDetailsTextFirst", True)
+            songInfoFormatDetailsSpacer = shaaConfig.get("songInfoDetailsSpacer", ":")
+            songInfoDetailsDoubleSpace = shaaConfig.get("songInfoDetailsDoubleSpace", False)
+            dsiShoutout = shaaConfig.get("dsiShoutout", True)
             # grabs everything from config
 
         else:
@@ -1686,7 +1905,7 @@ class DSI_MainWindow(QMainWindow):
             # writes the string to ids.txt at program launch
 
         if not disableShaa:
-        # if SHAA is installed
+        # if SHAA compat isn't disabled
             QTimer.singleShot(2000, self.timeGrabber)
             # calls the next stage (timeGrabber)
         else:
@@ -1697,7 +1916,7 @@ class DSI_MainWindow(QMainWindow):
 
     def timeGrabber(self):
         """Function that grabs the total time counts from totalTimes.txt file"""
-        global totalHours, totalMinutes, totalSeconds
+        global totalHours, totalMinutes, totalSeconds, disableShaa
         # global -> local
         self.labelSwap.emit("Grabbing total times from file...", 0)
         # user update
@@ -1739,11 +1958,13 @@ class DSI_MainWindow(QMainWindow):
                     # if updates are enabled
                         self.labelSwap.emit(f"Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds", 0)
                         # prints the total times at start
-
                 except:
                 # if the float conversion fails for some reason
                     self.labelSwap.emit(f"Error reading totalTimes.txt file - total times not set...", 2)
                     # user update on error
+                    disableShaa = True
+                    # disables SHAA functionality (can't access files)
+
             times.close()
             # closes the file
         else:
@@ -1752,6 +1973,8 @@ class DSI_MainWindow(QMainWindow):
             # if SHAA isn't disabled
                 self.labelSwap.emit("Could not find totalTimes.txt file, please ensure proper SHAA installation...", 2)
                 # there's already a print informing about non-SHAA installation later
+                disableShaa = True
+                # disables SHAA functionality (can't access files)
 
         QTimer.singleShot(2500, self.readyStateReadier)
         # calls the next stage 
@@ -1765,7 +1988,7 @@ class DSI_MainWindow(QMainWindow):
         self.lines = deque(maxlen = consoleLength)
         # redefines the line variable again with the correct console length from config
 
-        self.setWindowTitle(f"Discord Spotify Integration v{self.version}")
+        self.setWindowTitle(f"Discord Spotify Integration")
         # sets a new title (starter -> real)
 
         self.userInputField.deleteLater()
@@ -2049,7 +2272,7 @@ def shaaCheck():
                     uriLength = len(uriList)
                     # stores the length of the unmapped URI list
                     mainWin.labelSwap.emit(f"{uriLength} URIs stored", 1)
-                    # debug-ish list (if using the URI mapper)
+                    # helper print (if using the URI mapper)
         else:
         # if file doesn't exist
             uriList = []
@@ -2358,7 +2581,7 @@ class pictureClass(threading.Thread):
 
 def runCpp(event):
     """Function to run the C++ / Discord RPC program"""
-    global cppProgram
+    global cppProgram, cppFails
     # global -> local
     
     for process in psutil.process_iter():
@@ -2410,19 +2633,19 @@ def runCpp(event):
 
         try:
         # tries to grab a new line from the cppQueue 
-            lineRaw = cppQueue.get_nowait()
-            # non-blocking wait to grab new output
+            lineRaw = cppQueue.get(timeout=0.5)
+            # grabs the raw printed line from C++ (waits 500ms per check)
         except queue.Empty:
         # if the queue is empty
-            lineRaw = None
-            # sets the line to empty so it doesn't progress
-
-        if enableUpdates and lineRaw:
-        # if user prints are enabled and there's something to print
-            if not lineRaw and cppProgram.poll() is not None:
+            if cppProgram.poll() is not None:
             # if there's no output and the program isn't responding
                 break
                 # stops
+            continue
+            # resets the loop
+
+        if enableUpdates and lineRaw:
+        # if user prints are enabled and there's something to print
             line = lineRaw.decode("utf-8", errors="ignore").strip()
             # decodes bytes -> text, ignores any errors and removes whitespace
             if line:
@@ -2440,19 +2663,33 @@ def runCpp(event):
                 # if the line contains "updated" (means the RPC update went through)
                     mainWin.iconChanger("Discord", "Green")
                     # ensures the icon is green
+                    cppFails = 0
+                    # resets fails
                 elif "failed" in line.lower():
                 # if the line contains "failed"/"Failed" (means the RPC update didn't go through)
                     mainWin.iconChanger("Discord", "Yellow")
                     # ensures the icon is yellow
+                elif "api asset" in line.lower():
+                # if the line contains "API asset" (means RPC failed because of Discord's API refusing to set the assets)
+                    mainWin.iconChanger("Discord", "Yellow")
+                    # ensures the API icon is now yellow
+                    cppFails += 1
+                    # adds 1 to the fail counter
+                    if cppFails >= 3:
+                    # if the fail counter climbs above 3
+                        cppFails = 0
+                        # resets to 0
+                        mainWin.iconChanger("Discord", "Red")
+                        # ensures the API icon is now red
+                        mainWin.labelSwap.emit(f"Shut down Discord RPC due to Discord API errors, please press the 'Re-run DiscordRPC' to restart, or manually exit and restart DSI", 3)
+                        # sends a user log to inform user
+                        mainWin.rerunRPCbutton.show()
+                        # enables the button to allow user to restart RPC
+                        cppThreadEvent.set()
+                        # sets an event, telling the loop to close the subprocess
 
     cppProgram.wait()
     # waits for the program to close
-
-
-
-
-        
-
 
 def cppPackets(packet: dict):
     """Function to send packets to the C++ program"""
@@ -2472,7 +2709,7 @@ def cppPackets(packet: dict):
 
 
 def song(pictureQueue, event):
-    """The function that handles all song data gathering and parsing, as well as pushing to C++ via text"""
+    """The function that handles all song data gathering and parsing"""
     global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo
     global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist, cppFull
     # global -> local
@@ -2754,6 +2991,8 @@ def song(pictureQueue, event):
 
         finalURI = csURI
         # creates a new variable with the current song's URI
+        altURI = None
+        # creates a new variable to store a mapped version of the song's URI
 
     ### SHAA Behavior ###
 
@@ -2774,25 +3013,25 @@ def song(pictureQueue, event):
                 # if the URI is not in the URI list yet
                     if enableUpdates:
                     # if the user updates are enabled
-                        mainWin.labelSwap.emit("URI not found in list, added to URI list", 0)
+                        mainWin.labelSwap.emit("Song URI not found in list, added to URI map list", 0)
                         # user update
                     uriList.append(finalURI)
                     # adds it to the list of URIs
 
-                if finalURI not in csvReader.index and altURI in csvReader.index:
+                if (finalURI not in csvReader.index) and (altURI in csvReader.index):
                 # if the URI is not found in the CSV index, but the alternate URI is
                     finalURI = altURI
                     # sets the URI to use the alternate instead
                     if enableUpdates:
                     # if the user updates are enabled
-                        mainWin.labelSwap.emit("URI not found in CSV, but mapped URI was", 0)
+                        mainWin.labelSwap.emit("Using song stats from mapped URI", 0)
                         # user update
 
             if finalURI in csvReader.index:
             # checks if the URI is in the CSV
                 if enableUpdates:
                 # if the user updates are enabled
-                    mainWin.labelSwap.emit(f"{csName} found in CSV", 0)
+                    mainWin.labelSwap.emit(f"Song stats found", 0)
                     # user update
 
             ### Plays / Field 1 ###
@@ -2840,7 +3079,7 @@ def song(pictureQueue, event):
 
             ### Minutes / Field 2 ###
 
-                if songInfoField2 == 0 or songInfoField2 == 2 or songInfoField2 == 4:
+                if songInfoField2 in [0, 2, 4]:
                 # if the selected type for the second field is 0 (track minutes), 2 (track hours) or 4 (track seconds)
 
                     if isinstance(playtime, pd.Series):
@@ -2870,7 +3109,7 @@ def song(pictureQueue, event):
                     songStuffList.append(shaaPlaytime)
                     # adds the total playcount to the list
 
-                elif songInfoField2 == 1 or songInfoField2 == 3 or songInfoField2 == 5:
+                elif songInfoField2 in [1, 3, 5]:
                 # if the selected type for the first field is 1 (total minutes), 3 (total hours) or 5 (total seconds)
 
                     shaaPlaytime = int(csvReader["Total Time"].agg("sum") / 1000)
@@ -3230,9 +3469,10 @@ def song(pictureQueue, event):
             "Track ID": trackCounter,
             "URI": finalURI,
             "Playcount": (shaaPlaycountSong if shaaPlaycountSong is not None else "N/A"),
-            "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A")
+            "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A"),
+            "SHAA": (not disableShaa)
         }
-        # forms a dictionary of the current song's full info 
+        # forms a dictionary of the current song's full info (sent to C++ and to Flask app, if enabled)
 
         blacklistInfo = {
             "Song Name": csName,
@@ -3355,19 +3595,19 @@ def looper():
             storedStart = songStart
             # changes timestamp variable to match
             songEvent.set()
-            # sets an event to make song() update the text file
+            # sets an event to make song() update the presence info
 
             if pauseUpdated and playing:
                 # if it's playing and the pauseUpdate has been set to true
                 pauseUpdated = False
                 # sets the pauseUpdated to false, so it doesn't run twice
-            else:
+            elif not pauseUpdated and playing:
                 # if it's playing but pauseUpdate is false
                 trackCounter += 1
                 # adds 1 to counter (means track has changed)
 
-            time.sleep(2.5)
-            # waits 2.5 seconds
+            time.sleep(2)
+            # waits 2 seconds
             continue
             # sends back to the start of looper to check for a new song (5 second checks after a song change to check for a song skip)
 
@@ -3376,7 +3616,7 @@ def looper():
             if enablePause:
                 # if the pause hasn't been registered yet and the pause behavior is enabled
                 songEvent.set()
-                # sets an event to make song() update the text file (this way it doesn't spam)
+                # sets an event to make song() update the presence info (this way it doesn't spam)
                 pauseUpdated = True
                 # sets the pause check to True, meaning it has been checked and acted on
                 if enableUpdates:
@@ -3424,6 +3664,8 @@ cppThreadEvent = threading.Event()
 cppThread = threading.Thread(target = runCpp, daemon=True, args=(cppThreadEvent,))
 # creates a thread for the C++ program to run in - this way it won't stop the main process
 
+spDataThread = threading.Thread(target = runSPData, daemon=True)
+# creates a thread for the localhost Spotify data to update with
 
 
 ### Start Functions ###
@@ -3456,11 +3698,18 @@ def mainStart():
     songThread.start()
     # starts the song thread to get updated info
 
+    if hostData:
+    # if the boolean for sharing data is enabled
+        spDataThread.start()
+        # starts the spotify data thread
+        mainWin.labelSwap.emit(f"Hosting parsed Spotify data locally", 1)
+        # user inform
+
     if dc_app_ID and sp_client_ID:
         # if both the Application ID and Spotify Client ID are found
         mainWin.labelSwap.emit(f"Found Discord Application ID and Spotify Client ID, starting Discord RPC process", 1)
         # user inform
-        time.sleep(3)
+        time.sleep(2)
         # waits a couple seconds to make sure all details are set before calling
         cppThread.start()
         # starts the C++ thread
@@ -3481,10 +3730,9 @@ def mainStart():
 ### Window Start ###
 
 
-
 startApp = QApplication(sys.argv)
 # base app instance (passes command line arguments)
 mainWin = DSI_MainWindow()
-# creates a window
-startApp.exec()
+# creates a window instance for the main window
+sys.exit(startApp.exec())
 # exceutes the app task (runs the QApplication)

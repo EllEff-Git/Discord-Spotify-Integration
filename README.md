@@ -8,7 +8,7 @@
 
 <br/>
 
-It's easy to run, even easier to configure and features over a dozen simple, but vast customisation options. <br/>
+It's easy to run, even easier to configure and features a ton of vast customisation options. <br/>
 
 <br/>
 
@@ -22,7 +22,7 @@ It's easy to run, even easier to configure and features over a dozen simple, but
 
 - Using the Activity also means you can disable it on a per-server level in Discord's Activity Privacy. <br/>
 
-- If you prefer to hide certain songs, you can blacklist individual songs and display your favorites instead *(only for versions after v0.5.2.0537).* <br/>
+- If you prefer to hide certain songs, you can blacklist individual songs and display your favorites instead *(>v0.5.2.0537).* <br/>
 
 ## Download
 ### [Download latest](https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest/download/DSI.zip)
@@ -73,7 +73,11 @@ To access more information inside Discord activity (total playtime, total playti
 
 *The program is designed and mainly tested as an "addon", if there are issues using it without Spotify Analyser, they may get fixed slower. Highly recommended to use with SHA, nor do I really even see the utility of DSI without it.* <br/>
 
-*If you'd like to build the program yourself, you'll need the Discord Developer SDK and the C++ JSON library. The program parts are all built with pyinstaller (Python) or the x64 native tools (C++), and all used icons are included in the repo* <br/>
+<br/>
+
+If using DSI with my [Spotify Browser Overlay](https://github.com/EllEff-Git/SBO), you can launch DSI first to disable SBO's own API logic, reducing calls to literally half, and allows SBO to access all of DSI's data *(if using DSI with SHA)*.
+
+*Requires "Enable data hosting" to be enabled in DSI's config (>v0.8.)* <br/>
 
 <br/>
 

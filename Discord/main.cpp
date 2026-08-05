@@ -26,7 +26,7 @@ using json = nlohmann::json;
 
 
 // version number (Y.MM.DD.HHMM)
-std::string DSIDver = "v0.5.6.1330";
+std::string DSIDver = "v0.8.2.0308";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -184,8 +184,6 @@ int main() {
     // sets the path for each file this program accesses
     // ids.txt contains the Discord Application ID and small picture name/link (written once by DSI at start)
     std::string idDir = cppDir + "\\" + "ids.txt";
-    // songData.txt gets automatically updated by DSI with song name, time, custom fields, everything
-    std::string sdDir = cppDir + "\\" + "songData.txt";
     // token.txt is used to (re-)authenticate with Discord
     std::string tokenDir = cppDir + "\\" + "token.txt";
 
@@ -328,8 +326,8 @@ int main() {
                 // updates current time to match, well, current time
                 currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
-                // checks if the last time RPC was updated was more than 15 seconds ago
-                if ((lastUpdate + 15) < currentTime) {
+                // checks if the last time RPC was updated was more than 10 seconds ago
+                if ((lastUpdate + 10) < currentTime) {
                     // changes the requiredUpdate to true to trigger an update
                     bool requiredUpdate = true;
                 }
@@ -344,8 +342,8 @@ int main() {
                 if (!packetValid) {
                     // if it isn't, checks if the update is(n't) required yet
                     if (!requiredUpdate) {
-                        // if that's not true either, waits for 250ms
-                        std::this_thread::sleep_for(std::chrono::milliseconds(250));
+                        // if that's not true either, waits for 500ms
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
                         // then resets to while start
                         continue;
                     }

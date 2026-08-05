@@ -76,7 +76,8 @@ class Ui_FuncWindow(object):
                     "printUpdates": True,
                     "printErrors": True,
                     "consoleLength": 25,
-                    "marketCode": ""
+                    "marketCode": "",
+                    "hostData": True
                 }
                 # forms a new configuration file from preset defaults
 
@@ -94,6 +95,8 @@ class Ui_FuncWindow(object):
         # the main, central widget
         self.centralWidget.setObjectName("centralWidget")
         # sets name
+
+
 
     ### Main Layout ###
 
@@ -126,6 +129,8 @@ class Ui_FuncWindow(object):
         self.mainLayout.addLayout(self.optionLayout, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # sets the option layout into the main
 
+
+
     ### Enable URI ###
 
         self.enableURILabel = QLabel("Enable URI")
@@ -135,7 +140,7 @@ class Ui_FuncWindow(object):
 
         self.enableURICheck = QCheckBox()
         # checkbox for the URI check
-        self.enableURICheck.setChecked(self.loadedConfig["enableURI"])
+        self.enableURICheck.setChecked(self.loadedConfig.get("enableURI", True))
         # sets the check state based on the config
 
         self.optionLayout.addWidget(self.enableURILabel, 1, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -146,14 +151,14 @@ class Ui_FuncWindow(object):
 
         self.refreshTimeLabel = QLabel("Refresh time")
         # label for the refresh timer
-        self.refreshTimeLabel.setToolTip("How often new data is requested from Spotify API\nRecommended: 5 - 10, minimum: 2")
+        self.refreshTimeLabel.setToolTip("How often new data is requested from Spotify API\nRecommended: 5 - 10, minimum: 3")
         # tooltip
         
         self.refreshTimeLine = QLineEdit()
         # the line edit for the refresh time
         self.refreshTimeLine.setMaximumWidth(40)
         # sets max width to avoid it pushing everything insanely far
-        self.refreshTimeLine.setText(f"{self.loadedConfig["refreshTime"]}")
+        self.refreshTimeLine.setText(f"{self.loadedConfig.get("refreshTime", 10.0)}")
         # sets the text to match the config text
 
         self.optionLayout.addWidget(self.refreshTimeLabel, 2, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -168,7 +173,7 @@ class Ui_FuncWindow(object):
         # tooltip
 
         self.printUpdatesCheck = QCheckBox()
-        self.printUpdatesCheck.setChecked(self.loadedConfig["printUpdates"])
+        self.printUpdatesCheck.setChecked(self.loadedConfig.get("printUpdates", True))
         # sets the check state based on the config
 
         self.optionLayout.addWidget(self.printUpdatesLabel, 3, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -183,7 +188,7 @@ class Ui_FuncWindow(object):
         # tooltip
 
         self.printErrorsCheck = QCheckBox()
-        self.printErrorsCheck.setChecked(self.loadedConfig["printErrors"])
+        self.printErrorsCheck.setChecked(self.loadedConfig.get("printErrors", True))
         # sets the check state based on the config
 
         self.optionLayout.addWidget(self.printErrorsLabel, 4, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -198,7 +203,7 @@ class Ui_FuncWindow(object):
         # tooltip
 
         self.disableCfgWinCheck = QCheckBox()
-        self.disableCfgWinCheck.setChecked(self.loadedConfig["disableCfgWin"])
+        self.disableCfgWinCheck.setChecked(self.loadedConfig.get("disableCfgWin", False))
         # sets the check state based on the config
 
         self.optionLayout.addWidget(self.disableCfgWinLabel, 5, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -216,7 +221,7 @@ class Ui_FuncWindow(object):
         # the console length entry line
         self.consoleLengthLine.setMaximumWidth(40)
         # sets max width to avoid it pushing everything insanely far
-        self.consoleLengthLine.setText(f"{self.loadedConfig["consoleLength"]}")
+        self.consoleLengthLine.setText(f"{self.loadedConfig.get("consoleLength", 25)}")
         # sets the text to match the config
 
         self.optionLayout.addWidget(self.consoleLengthLabel, 6, 1, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -237,6 +242,8 @@ class Ui_FuncWindow(object):
         # the market code entry
         self.marketCodeLine.setMaximumWidth(40)
         # sets max width to avoid it pushing everything insanely far
+        self.marketCodeLine.setText(f"{self.loadedConfig.get("marketCode", "")}")
+        # sets the text to match the config
 
         self.optionLayout.addWidget(self.marketCodeLabel, 7, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         self.optionLayout.addWidget(self.marketCodeLine, 7, 0, alignment=Qt.AlignmentFlag.AlignRight)
@@ -246,7 +253,7 @@ class Ui_FuncWindow(object):
 
         self.clockStyleOptions = ["System Time", "Uptime", "Off"]
         # stores all the clock style options in a list
-        self.loadedClockStyle = self.loadedConfig["clockStyle"]
+        self.loadedClockStyle = self.loadedConfig.get("clockStyle", "Uptime")
         # gets the loaded clock style from config
         self.clockStyleOptions.remove(self.loadedClockStyle)
         # removes the loaded clock style from the list
@@ -268,6 +275,23 @@ class Ui_FuncWindow(object):
         self.optionLayout.addWidget(self.clockStyleLabel, 8, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         self.optionLayout.addWidget(self.clockStyleDropdown, 8, 0, alignment=Qt.AlignmentFlag.AlignRight)
         # adds both to layout
+
+    ### Server Hosting ###
+
+        self.enableFlaskHost = QLabel("Enable data hosting")
+        # label for data hosting
+        self.enableFlaskHost.setToolTip("Enable a localhost server that hosts parsed data\n(Useful if running both DSI and SBO)")
+        # tooltip
+
+        self.enableFlaskCheck = QCheckBox()
+        self.enableFlaskCheck.setChecked(self.loadedConfig.get("hostData", True))
+        # sets the check state based on the config
+
+        self.optionLayout.addWidget(self.enableFlaskHost, 9, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.enableFlaskCheck, 9, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds both to the layout
+
+
 
     ### Buttons ###
 
@@ -347,7 +371,7 @@ class Ui_FuncWindow(object):
             "If you need any more information about an option, try hovering over it :)\n\n"
             "To configure the look of your Discord Activity, press the 'Configure DSI Details' button\n\n"
             "If you've installed DSI as an addon to SHA, there is a button inside the DSI Customisation Configuration window to tweak the look of SHA details, too\n\n"
-            "Any questions, concerns, bugs, improvements can be sent via GitHub or straight to me on Discord (which you can find in the guide on my website)\n\n"
+            "Any questions, concerns, bugs, improvements, ideas, etc. can be sent via GitHub or on Discord (LilPiffer)\n\n"
             "I hope you enjoy DSI and thank you for installing it <3"
             )
         # the window text
@@ -382,10 +406,16 @@ class Ui_FuncWindow(object):
         consoleLength = self.consoleLengthLine.text()
         # grabs the text from the console length edit line
 
-        if not type(refreshTime) is float or not type(refreshTime) is int:
+        if not type(refreshTime) in [float, int]:
         # if the refreshTime isn't a float or int
-            refreshTime = 10.0
-            # sets to safe 10 second float
+            try:
+            # tries to
+                float(refreshTime)
+                # turn the time into a float
+            except:
+            # if it can't (not an int/float)
+                refreshTime = 10.0
+                # sets to safe 10 second float
 
         if not type(consoleLength) == int:
         # if the consoleLength isn't an integer
