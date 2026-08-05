@@ -77,7 +77,7 @@ To access more information inside Discord activity (total playtime, total playti
 
 If using DSI with my [Spotify Browser Overlay](https://github.com/EllEff-Git/SBO), you can launch DSI first to disable SBO's own API logic, reducing calls to literally half, and allows SBO to access all of DSI's data *(if using DSI with SHA)*.
 
-*Requires "Enable data hosting" to be enabled in DSI's config (>v0.8.)* <br/>
+*Requires "Enable data hosting" to be enabled in DSI's config (>v0.8.5.1106)* <br/>
 
 <br/>
 
