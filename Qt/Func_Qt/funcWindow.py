@@ -25,22 +25,18 @@ class Ui_FuncWindow(object):
         self.main.setObjectName(u"main")
         # sets the object name
 
-        if getattr(sys, "frozen", False):
-        # since the program bundled with pyInstaller, it's "frozen"
-            self.cwd = os.path.dirname(sys.executable)
-            self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
-            # reassigns the path variables accordingly
-        else:
-        # if somehow not in a bundled (frozen) state
-            self.cwd = os.path.dirname(__file__)
-            self.mainIcon = os.path.join(self.cwd, "icons", "dist", "dsiIcon.png")
-            # reassigns the path variables accordingly
+        self.thisExeDir = os.path.dirname(sys.executable)
+        # the directory this exe is located in
+        self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
+        # the directory containing the program icon png (built-in)
+        self.configFolderPath = os.path.join(os.environ["LOCALAPPDATA"], "DSI")
+        # the folder path that should contain all the configuration files
 
-        self.mainFolder = os.path.join(self.cwd, "..", "..")
-        # stores the "main" folder (DSI, which is 2 folders up)
-        self.configPath = os.path.join(self.mainFolder, "Data", "functionConfig.json")
+        self.mainFolder = os.path.abspath(os.path.join(self.thisExeDir, "..", "..", ".."))
+        # stores the "main" folder (DSI, which is 3 folders up)
+        self.configPath = os.path.join(self.configFolderPath, "functionConfig.json")
         # stores the config file's path
-        self.dsiPath = os.path.join(self.mainFolder, "Qt", "DSI_Qt", "dsiWindow.exe")
+        self.dsiPath = os.path.join(self.mainFolder, "runtime", "Qt", "dsiWindow", "dsiWindow.exe")
         # stores the DSI configuration window path
 
         self.window.setWindowIcon(QIcon(self.mainIcon))
@@ -71,13 +67,14 @@ class Ui_FuncWindow(object):
                 defaultConfig = {
                     "disableCfgWin": False,
                     "refreshTime": 10.0,
-                    "clockStyle": "Uptime",
+                    "clockStyle": "System Time",
                     "enableURI": True,
                     "printUpdates": True,
                     "printErrors": True,
                     "consoleLength": 25,
                     "marketCode": "",
-                    "hostData": True
+                    "hostData": True,
+                    "addressType": "Device"
                 }
                 # forms a new configuration file from preset defaults
 
@@ -253,7 +250,7 @@ class Ui_FuncWindow(object):
 
         self.clockStyleOptions = ["System Time", "Uptime", "Off"]
         # stores all the clock style options in a list
-        self.loadedClockStyle = self.loadedConfig.get("clockStyle", "Uptime")
+        self.loadedClockStyle = self.loadedConfig.get("clockStyle", "System Time")
         # gets the loaded clock style from config
         self.clockStyleOptions.remove(self.loadedClockStyle)
         # removes the loaded clock style from the list
@@ -278,18 +275,42 @@ class Ui_FuncWindow(object):
 
     ### Server Hosting ###
 
-        self.enableFlaskHost = QLabel("Enable data hosting")
+        self.enableFlaskLabel = QLabel("Enable Data Hosting")
         # label for data hosting
-        self.enableFlaskHost.setToolTip("Enable a localhost server that hosts parsed data\n(Useful if running both DSI and SBO)")
+        self.enableFlaskLabel.setToolTip("Enable a localhost server that hosts parsed data\nUseful if running both DSI and SBO on the same network/device")
         # tooltip
 
         self.enableFlaskCheck = QCheckBox()
         self.enableFlaskCheck.setChecked(self.loadedConfig.get("hostData", True))
         # sets the check state based on the config
 
-        self.optionLayout.addWidget(self.enableFlaskHost, 9, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.enableFlaskLabel, 9, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         self.optionLayout.addWidget(self.enableFlaskCheck, 9, 0, alignment=Qt.AlignmentFlag.AlignRight)
         # adds both to the layout
+
+    ### Address Type ###
+
+        self.addressTypeLabel = QLabel("Address Type")
+        # label for the refresh timer
+        self.addressTypeLabel.setToolTip("What network address type to use\nDevice = 127.0.0.1 (only accessible on-device)\nLocal = 0.0.0.0 (accessible to any device across the same network)\nIf you want to display the overlay on the same device as SBO, keep this on 'Device'\nIf you want to display the overlay on a different device on the same network, use 'Local'")
+        # tooltip
+
+        self.addressTypeOptions = ["Device", "Local"]
+        # the options available for address type
+        self.selectedAddressType = self.loadedConfig.get("addressType", "Device")
+        # loads the selected one from config (defaults to Device)
+        self.addressTypeOptions.remove(self.selectedAddressType)
+        # removes the selected one from the list (leaves only one option)
+        
+        self.addressTypeDropdown = QComboBox()
+        # the dropdown menu for address type
+        self.addressTypeDropdown.addItem(self.selectedAddressType)
+        self.addressTypeDropdown.addItem(self.addressTypeOptions[0])
+        # adds the available options (selected first to make it default)
+
+        self.optionLayout.addWidget(self.addressTypeLabel, 10, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.addressTypeDropdown, 10, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds both to layout
 
 
 
@@ -307,15 +328,14 @@ class Ui_FuncWindow(object):
         # a button to run the DSI config
         self.dsiConfigButton.setText("Configure DSI Details")
         # sets text
-        self.dsiConfigButton.setToolTip("Opens a configuration window to change DSI details")
+        self.dsiConfigButton.setToolTip("Opens a configuration window to change DSI visual details")
         # tooltip
         self.dsiConfigButton.setMinimumSize(240, 45)
         # sets a minimum size
 
         self.startDsiButton = QPushButton()
         # a button to close and start DSI
-        self.startDsiButton.setText("Start DSI\n"
-            "Ensure you press this to save the config!")
+        self.startDsiButton.setText("Save and close")
         # sets text
         self.startDsiButton.setToolTip("Closes this configuration window and continues DSI function")
         # tooltip
@@ -352,8 +372,8 @@ class Ui_FuncWindow(object):
 
         if self.firstTime:
             # if the first time flag is enabled
-            self.firstTimePrompt()
-            # runs the first time prompt window
+            QTimer.singleShot(0, self.firstTimePrompt)
+            # runs the first time prompt window (after the UI is done loading)
 
     def firstTimePrompt(self):
         """Function that runs the first time prompt message box"""
@@ -440,6 +460,8 @@ class Ui_FuncWindow(object):
             "consoleLength": consoleLength,
             "clockStyle": self.clockStyleDropdown.currentText(),
             "marketCode": self.marketCodeLine.text(),
+            "hostData": self.enableFlaskCheck.isChecked(),
+            "addressType": self.addressTypeDropdown.currentText()
         }
         # forms a configuration based on the states of each of the fields
 

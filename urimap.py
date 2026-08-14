@@ -3,36 +3,36 @@ import os, sys, json, time, datetime, spotipy, requests
 from spotipy import SpotifyOAuth
 from spotipy import SpotifyException
 # Required for Spotify API access
+from DSIver import Version
 
-URIver = "v0.5.6.1358"
+
+
+URIver = str(Version)
 # the program version (y.m.dd.hhmm)
 
 
 # Directory Grabber
-if getattr(sys, 'frozen', False):
-    # since the program bundled with pyInstaller, it's "frozen"
-    directory = os.path.dirname(sys.executable)
-    # gets the base directory of the program, where the python .exe resides
-    # should be /programFolder/
-else:
-    # if somehow not in a bundled (frozen) state
-    directory = os.path.dirname(__file__)
-    # gets the base directory of the program, where the python .exe resides
 
 
-# Directory Definitions
-uriPath = os.path.join(directory, "Data", "URImap.json")
-"""The path to where URImap.json should/will live (inside DSI/Data/URImap.json)"""
-noURIpath = os.path.join(directory, "Data", "URIlist.json")
-"""The path to where where URIlist.json should/will live (inside DSI/Data/URIlist.json)"""
-spCache = os.path.join(directory, "Data", "spotifycache-URI.json")
+directory = os.path.dirname(sys.executable)
+"""The base directory of the program, where DSI.exe resides"""
+configFolderPath = os.path.join(os.environ["LOCALAPPDATA"], "DSI")
+"""The folder path that should contain all the configuration files"""
+
+
+noURIpath = os.path.join(configFolderPath, "URIlist.json")
+"""The path to where URIlist (unfound URIs) should/will live"""
+uriPath = os.path.join(configFolderPath, "URImap.json")
+"""The path to where URImap.json should/will live"""
+
+spCache = os.path.join(configFolderPath, "spotifycache-URI.json")
 """The path to the spotify cache (token)"""
-functionConfigPath = os.path.join(directory, "Data", "functionConfig.json")
-"""The path to the function config file"""
-configPath = os.path.join(directory, "Data", "config.json")
-"""The path to the config file"""
-secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
-"""The path to the 'secret' config file"""
+
+functionConfigPath = os.path.join(configFolderPath, "functionConfig.json")
+"""The DSI functionality config json file"""
+secretConfigPath = os.path.join(configFolderPath, "secretConfig.json")
+"""The main configuration file, contains client secret info"""
+
 
 
 try:
@@ -44,17 +44,6 @@ try:
 except Exception as err:
 # if there's an error
     print(f"Error reading the function config file: {err}")
-    # user inform
-
-try:
-# tries to open the config json file
-    with open(configPath, "r", encoding="utf-8") as jsCfg:
-    # opens the config file in read mode
-        jsonConfig = json.load(jsCfg)
-        # stores the loaded json file as jsonConfig
-except Exception as err:
-# if there's an error
-    print(f"Error reading the config file: {err}")
     # user inform
 
 try:
@@ -307,7 +296,7 @@ def batchCalc(pause):
 ### PROGRAM START ###
 
 
-batchCalc(0)
+batchCalc(10)
 # calls batch size calculator
 
 

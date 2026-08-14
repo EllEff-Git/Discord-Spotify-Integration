@@ -10,3 +10,10 @@ dist
 build
 Discord/ids.txt
 config.ini
+compiler.py
+installer.py
+compilerFiles
+DSIver.py
+DSI.iss
+Discord Release/
+NOTINCLUDE/

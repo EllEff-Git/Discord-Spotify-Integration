@@ -26,7 +26,7 @@ using json = nlohmann::json;
 
 
 // version number (Y.MM.DD.HHMM)
-std::string DSIDver = "v0.8.2.0308";
+std::string DSIDver = "v0";
 
 // initialises the Discord Application ID
 std::uint64_t APPLICATION_ID = 0;
@@ -63,22 +63,9 @@ std::atomic<bool> running = true;
 // flag to control rich presence update prints
 std::atomic<bool> rpcUpdated = false;
 
-
-
 // signal handler to stop the application
 void signalHandler(int signum) {
     running.store(false);
-}
-
-
-
-// directory manager
-std::string pathFinder() {
-    char buffer[MAX_PATH];
-    GetModuleFileNameA(NULL, buffer, MAX_PATH);
-    std::string path(buffer);
-    size_t pos = path.find_last_of("\\/");
-    return (std::string::npos == pos) ? "" : path.substr(0, pos);
 }
 
 
@@ -178,58 +165,40 @@ std::string utfTrim(const std::string& input, size_t maxUnits = 113) {
 
 int main() {
 
-    // gets the path to the current directory
-    std::string cppDir = pathFinder();
+    // gets the path to LOCALAPPDATA
+    std::filesystem::path localAppData = std::getenv("LOCALAPPDATA");
 
     // sets the path for each file this program accesses
-    // ids.txt contains the Discord Application ID and small picture name/link (written once by DSI at start)
-    std::string idDir = cppDir + "\\" + "ids.txt";
+    // discordIDs.json contains the Discord Application ID and small picture name/link (written once by DSI at start)
+    std::filesystem::path idDir = localAppData / "DSI" / "discordIDs.json";
     // token.txt is used to (re-)authenticate with Discord
-    std::string tokenDir = cppDir + "\\" + "token.txt";
+    std::filesystem::path tokenDir = localAppData / "DSI" / "token.txt";
 
     // makes sure the output console prints in UTF-8 encoding (allows for non-ANSI alphabet, special characters, etc)
     SetConsoleOutputCP(CP_UTF8);
 
-    // opens ids.txt, stops the program if can't (can't run the program without AppID)
+    // creates empty strings to hold info
+    std::string AppID, SIMG;
+
+    // opens the discordIDs.json file
     std::ifstream file(idDir);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open/read ids.txt" << std::endl;
+
+    // if the file isn't open
+    if (!file) {
+        // user inform on error
+        std::cerr << "Unable to open Discord configuration: " << idDir << std::endl;
+        // stops
         return 1;
     }
 
-    // creates "line" (placeholder string) and lineNum (a counter)
-    std::string line;
-    int lineNum = 0;
+    // loads the file as "config"
+    json config = json::parse(file);
 
-    // creates empty strings to hold info later
-    std::string AppID, SIMG;
-
-    while (std::getline(file, line)) {
-        // goes through and finds where the "=" sign is, then takes the part after it
-        line = line.substr(line.find_first_not_of(" \t"), line.find_last_not_of(" \t") - line.find_first_not_of(" \t") + 1);
-        size_t eqPos = line.find("=");
-        if (eqPos != std::string::npos) {
-            std::string value = line.substr(eqPos + 1);
-
-            // checks if there's empty space
-            if (!value.empty() && value[0] == ' ')
-                // removes any empty space
-                value.erase(0, 1);
-
-            // the first line is AppID, replaces the empty string
-            if (lineNum == 0) AppID = value;
-            // second line is Small Image
-            else if (lineNum == 1) SIMG = value;
-            // third (last) line is the album fallback string
-            else if (lineNum == 2) albumFallback = value;
-
-            // adds 1 to lineNum so it moves to next line
-            ++lineNum;
-        }
-    }
-
-    // closes the ids.txt
-    file.close();
+    // grabs all the required variables
+    AppID = config["Discord Application ID"];
+    SIMG = config["Small Image Filename"];
+    albumFallback = config["Album Fallback"];
+    DSIDver = config["Version"];
 
     // replaces placeholder image key with the ones from ids.txt
     SmallImage = SIMG;

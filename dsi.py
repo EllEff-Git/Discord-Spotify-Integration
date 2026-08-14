@@ -20,119 +20,86 @@ from PyQt6.QtWidgets import *
 # Required for the main window
 from flask import Flask
 # Required for cross-communication between DSI and SBO
+from DSIver import Version
+# Version manager
 
 
 
 ### Version ###
 
-
-
-DSIver = "0.8.5.1101"
+DSIver = str(Version)
 """The program version (Y.M.DD.HHMM)"""
 
 
 
 ### Directory Grab ###
 
-
-
-directory = None
+directory = os.path.dirname(sys.executable)
 """The base directory of the program, where DSI.exe resides"""
-iconPath = None
+iconPath = os.path.join(sys._MEIPASS, "dsiIcon.png")
 """The path of the app icon png"""
-splashPath = None
-"""The path of the splash screen png"""
-yellowStatusPath = None
+
+yellowStatusPath = os.path.join(sys._MEIPASS, "dsiStatusYellow.png")
 """The yellow status icon png path"""
-redStatusPath = None
+redStatusPath = os.path.join(sys._MEIPASS, "dsiStatusRed.png")
 """The red status icon png path"""
-greenStatusPath = None
+greenStatusPath = os.path.join(sys._MEIPASS, "dsiStatusGreen.png")
 """The green status icon png path"""
 
+qtFolderPath = os.path.join(directory, "runtime", "Qt")
+"""The folder that contains all the Qt window folders/executables (DSI/runtime/Qt)"""
+configFolderPath = os.path.join(os.environ["LOCALAPPDATA"], "DSI")
+"""The folder path that should contain all the configuration files"""
 
-if getattr(sys, "frozen", False):
-# since the program bundled with pyInstaller, it's "frozen"
-    directory = os.path.dirname(sys.executable)
-    iconPath = os.path.join(sys._MEIPASS, "dsiIcon.png")
-    splashPath = os.path.join(sys._MEIPASS, "dsiSplash.png")
-    # reassigns the path variables accordingly
-    yellowStatusPath = os.path.join(sys._MEIPASS, "dsiStatusYellow.png")
-    redStatusPath = os.path.join(sys._MEIPASS, "dsiStatusRed.png")
-    greenStatusPath = os.path.join(sys._MEIPASS, "dsiStatusGreen.png")
-    # reassigns the status icon paths
-else:
-# if somehow not in a bundled (frozen) state
-    directory = os.path.dirname(__file__)
-    iconPath = os.path.join(directory, "icons", "dist", "dsiIcon.png")
-    splashPath = os.path.join(directory, "icons", "dist", "dsiSplash.png")
-    # reassigns the path variables accordingly
-    yellowStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusYellow.png")
-    redStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusRed.png")
-    greenStatusPath = os.path.join(directory, "icons", "dist", "dsiStatusGreen.png")
-    # reassigns the status icon paths
-
-dataDir = os.path.join(directory, "Data")
-# the Data folder directory
-
-if not os.path.exists(dataDir):
-# if there's no Data folder
-    try:
-    # tries
-        os.mkdir(dataDir)
-        # makes a Data directory
-    except:
-    # if it can't
-        None
-        # does nothing
-
+os.makedirs(configFolderPath, exist_ok=True)
+# makes all the directories leading up to the config folder (it's okay if they already exist)
 
 
 
 ### Config ###
 
-
-
-functionConfigPath = os.path.join(directory, "Data", "functionConfig.json")
+funcConfigPath = os.path.join(configFolderPath, "functionConfig.json")
 """The DSI functionality config json file"""
-functionConfigWin = os.path.join(directory, "Qt", "Func_Qt", "funcWindow.exe")
+funcConfigExePath = os.path.join(qtFolderPath, "funcWindow", "funcWindow.exe")
 """The DSI functionality configurator program/window"""
 
-dsiConfigPath = os.path.join(directory, "Data", "config.json")
+dsiConfigPath = os.path.join(configFolderPath, "config.json")
 """The DSI configuration json file"""
-dsiConfigWindow = os.path.join(directory, "Qt", "DSI_Qt", "dsiWindow.exe")
+dsiConfigExePath = os.path.join(qtFolderPath, "dsiWindow", "dsiWindow.exe")
 """The DSI configurator program/window"""
 
-secretConfigPath = os.path.join(directory, "Data", "secretConfig.json")
+shaaConfigPath = os.path.join(configFolderPath, "shaaConfig.json")
+"""The SHAA x DSI configuration json file"""
+secretConfigPath = os.path.join(configFolderPath, "secretConfig.json")
 """The main configuration file, contains client secret info"""
 
-shaaConfigPath = os.path.join(directory, "Data", "shaaConfig.json")
-"""The SHAA x DSI configuration json file"""
-
-statsPath = os.path.join(directory, "Data", "statistics.json")
+statsPath = os.path.join(configFolderPath, "statistics.json")
 """The DSI statistics file path"""
 
 ### Token/ID ###
 
-spCache = os.path.join(directory, "Data", "spotifycache.json")
+spCache = os.path.join(configFolderPath, "spotifycache.json")
 """The directory where the spotify cache (token) sits in"""
-idDir = os.path.join(directory, "Discord", "ids.txt")
-"""The directory where ids.txt should/will live (inside DSI/Discord/ids.txt)"""
+idDir = os.path.join(configFolderPath, "discordIDs.json")
+"""The directory where discordIDs.json lives (inside DSI/Discord/discordIDs.json)"""
 
 ### Song Details ###
 
-noURIpath = os.path.join(directory, "Data", "URIlist.json")
-"""The path to where URIlist (unfound URIs) should/will live"""
-uriPath = os.path.join(directory, "Data", "URImap.json")
-"""The path to where URImap.json should/will live (inside DSI/Data/URImap.json)"""
-blacklistPath = os.path.join(directory, "Data", "blacklist.json")
-"""The path to where the song blacklist.json should/will live (inside DSI/Data/blacklist.json)"""
+uriMapExePath = os.path.join(directory, "urimap", "urimap.exe")
+"""The path to where the URImap.exe program lives"""
+noURIpath = os.path.join(configFolderPath, "URIlist.json")
+"""The path to where URIlist (unfound URIs) lives"""
+uriPath = os.path.join(configFolderPath, "URImap.json")
+"""The path to where URImap.json lives"""
+blacklistPath = os.path.join(configFolderPath, "blacklist.json")
+"""The path to where the song blacklist.json lives"""
 
 ### Spotify History Analyser (Addon) ###
 
-SHAAdir = os.path.join(directory, "..", "Data", "CSV", "dsi.csv")
-"""The directory where the CSV is (relative to .exe, it's one folder up and then two deep into Spotify Analyser main folder)"""
-timeDir = os.path.join(directory, "..", "Data", "CSV", "totalTimes.txt")
-"""The directory where the totalTimes.txt file is"""
+SHAAdir = os.path.join(configFolderPath, "dsi.csv")
+"""The directory where the CSV is"""
+timeDir = os.path.join(configFolderPath, "totalTimes.json")
+"""The directory where the totalTimes.json file is"""
 
 ### Customisation ###
 
@@ -157,8 +124,6 @@ gURL = "https://api.github.com/repos/EllEff-Git/Discord-Spotify-Integration/tags
 
 ### Global Variables ###
 
-
-
 functionConfig = {}
 """The config file for functionality"""
 secretConfig = {}
@@ -169,16 +134,16 @@ shaaConfig = {}
 """The config file specifically for SHA(A) features"""
 blacklist = {}
 """The blacklist of songs from blacklist.json"""
-uriList = None
+uriList = []
 """The list of URIs from uriList.json"""
 
-sp_client_ID = None
+spotifyClientID = None
 """Spotify Client ID, string"""
-sp_client_secret = None
+spotifyClientSecret = None
 """Spotify Client Secret, string"""
-sp_redirect = None
+spotifyRedirect = None
 """Spotify redirect URL, string"""
-dc_app_ID = None
+discordAppID = None
 """Discord Application ID, string"""
 
 skipConfigWindow = False
@@ -187,6 +152,8 @@ consoleLength = 25
 """The stored line amount for the pseudo-console, int"""
 hostData = True
 """Whether to host the parsed Spotify data locally, bool"""
+addressType = "Device"
+"""Whether to host the data at device-only accessible or local network-accessible address"""
 refreshTime = 10.0
 """Program update cycle interval time, float/int"""
 
@@ -244,8 +211,7 @@ hoverText = ""
 songInfoField1 = "Track"
 """First state field type, string (Track, Total)"""
 songInfoField2 = 0
-"""Second state field type, int"""
-# 0-1 is minutes (track first), 2-3 is hours, 4-5 is seconds
+"""Second state field type, int (0-1 = minutes, 2-3 = hours, 4-5 = seconds (track is even, total is odd))"""
 shaaFallbackTotal = False
 """Whether to fall back to total numbers, boolean"""
 shaaFallback = "Total"
@@ -270,73 +236,55 @@ songInfoDetailsDoubleSpace = False
 """Whether to add space on either side of the spacer, boolean"""
 dsiShoutout = False
 """Whether to add a shoutout to DSI at the end of the details section, boolean"""
-# uses "default" options (most of these shouldn't get accessed if SHAA isn't enabled anyway, but some do)
 
 
-# Detail Field Options #
-detailOptions = ["hours", "minutes", "seconds", "volume", "repeat", "shuffle", "cycle",
-                 "Hours", "Minutes", "Seconds", "Volume", "Repeat", "Shuffle", "Cycle"]
+detailOptions = ["Hours", "Minutes", "Seconds", "Cycle", "Volume", "Repeat", "Shuffle"]
 """All possible choices for detail field (hours) that doesn't include custom string"""
-
-# URL List #
-spotifyURLlist = ["track", "Track", "album", "Album", "artist", "Artist", "playlist", "Playlist"]
+spotifyURLlist = ["Track", "Album", "Artist", "Playlist"]
 """A list of all the possible options for spotify URL types"""
-
-# Picture Cycling Methods #
-pictureBehaviorList = ["random", "sequence", "once", "none"]
+pictureBehaviorList = ["Random", "Sequence", "Once", "None"]
 """A list of all the possible options for picture cycling types"""
 
 pauseStart = None
 """Makes a starter variable that stores a timestamp when a pause occurs"""
-
 currentInfo = None
 """Song info dictionary"""
-
 cppFull = None
 """Currently playing song dict sent to the C++ program"""
-
 blacklistInfo = None
 """Dictionary containing the current song's info"""
-
 currentURI = None
 """The current song's track URI"""
-
 cppLargeImage = ""
 """Makes an empty image string, in case it fails to make first load"""
-
 pauseUpdated = False
 """A check to see if the pause state has been registered properly"""
-
-totalHours = totalMinutes = totalSeconds = 0
-"""Variables for total hours, minutes and seconds"""
+totalHours = totalMinutes = totalSeconds = totalPlays = 0
+"""Variables for total hours, minutes, seconds and plays"""
 
 oldCount = trackCounter = 0
 """Variables to track 'song IDs'"""
-
 noPlayCounter = 0
 """Variable to check how many times in a row playing state has been off (nothing playing)"""
-
 cycleCount = 0
 """Variable to check the cycle count of hours, minutes and seconds (if enabled)"""
-
 timePlayed = 0
 """Variable to store total playtime during DSI uptime"""
-
 lastPlayStamp = 0
 """Variable to store timestamp for playtime calculation"""
+lastDSIsave = time.time()
+"""Variable to store the last time DSI was auto-saved"""
 
-csName = csArtist = ""
-"""The current song/artist name"""
-
+csName = csSongName = csArtistName = csAlbumName = ""
+"""The current song/artist/album name"""
+csArtistURL = csAlbumURL = csPlaylistURL = ""
+"""The current artist/album/playlist URL"""
 dsiShoutoutStr = "// Data by DSI"
 """A shoutout string to DSI, disabled by default in config"""
-
 disableShaa = False
 """Boolean to check whether SHA(A) functionality should be disabled or not"""
-
 cppProgram = None
 """The C++ program subprocess (gets defined in its function)"""
-
 cppFails = 0
 """How many asset failures have been detected from the C++ subprocess"""
 
@@ -355,7 +303,9 @@ localSPData = Flask(__name__)
 @localSPData.route("/spData")
 def spData():
 # Spotify data page
-    return json.dumps(cppFull)
+    return localSPData.response_class(
+        json.dumps(cppFull, indent=2),
+        mimetype="application/json")
     # turns the C++ dictionary into a json format, sends to the /spData page
 
 @localSPData.route("/version")
@@ -366,17 +316,26 @@ def version():
 
 def runSPData():
 # Spotify data page runner
-    localSPData.run(host="127.0.0.1", port=41809)
-    # runs the Flask app on the local network (127.0.0.1:41809/spData)
+    if addressType == "Device":
+    # if the config option is set to Device-only
+        address = "127.0.0.1"
+        # uses device-only address
+    else:
+    # not device-only
+        address = "0.0.0.0"
+        # uses local network address
+    mainWin.labelSwap.emit(f"Hosting parsed Spotify data at {address}:41809/spData", 1)
+    # user inform
+    localSPData.run(host=address, port=41809)
+    # runs the Flask app on the local network (x:41809/spData)
 
 
 
 ### Main Window ###
 
-
-
 class DSI_MainWindow(QMainWindow):
     """The main window class"""
+
     labelSwap = pyqtSignal(str, int)
     # a pyQt signal to swap the label
     readyTag = pyqtSignal()
@@ -387,11 +346,11 @@ class DSI_MainWindow(QMainWindow):
     # a signal to call the song detail manager
     programReady = pyqtSignal()
     # a signal to signal the readiness state of the program
+    saveSignal = pyqtSignal(str)
+    # a signal to call the save function
 
     def __init__(self):
         super().__init__()
-
-
 
     ### Init / Basic ###
 
@@ -406,9 +365,9 @@ class DSI_MainWindow(QMainWindow):
         self.programName = f"DSI Loader"
         # stores the program name
 
-        self.windowSizeX = max(900, int(startApp.primaryScreen().size().width() / 2))
-        self.windowSizeY = max(800, int(startApp.primaryScreen().size().height() / 2))
-        # base window sizes (uses the larger of the two, 900/800 or ~50% of the monitor's width/height)
+        self.windowSizeX = max(850, int(startApp.primaryScreen().size().width() / 3))
+        self.windowSizeY = int(self.windowSizeX * (9 / 16))
+        # base window sizes (uses the larger of the two, 850 or ~33% of the monitor's width, 16:9 aspect ratio for height)
 
     ### Basic Window Setup ###
 
@@ -437,9 +396,9 @@ class DSI_MainWindow(QMainWindow):
         # sets the minimum height for rows
 
         self.mainLayout.setColumnMinimumWidth(0, 150)
-        self.mainLayout.setColumnMinimumWidth(1, 200)
+        self.mainLayout.setColumnMinimumWidth(1, 125)
         self.mainLayout.setColumnMinimumWidth(2, 300)
-        self.mainLayout.setColumnMinimumWidth(3, 200)
+        self.mainLayout.setColumnMinimumWidth(3, 125)
         self.mainLayout.setColumnMinimumWidth(4, 150)
         # sets the minimum width for columns
 
@@ -498,21 +457,50 @@ class DSI_MainWindow(QMainWindow):
         self.consoleScroll.setWidget(self.mainLabel)
         # sets the console to use the mainLabel
 
-    ### Exit Button ###
+    ### Bottom Layout ###
 
         self.bottomButtonLayout = QGridLayout()
         # a layout for the bottom middle buttons
-        self.mainLayout.addLayout(self.bottomButtonLayout, 5, 2, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the layout to the bottom middle of the main layout
+        self.bottomButtonLayout.setColumnStretch(0, 1)
+        self.bottomButtonLayout.setColumnStretch(1, 1)
+        self.bottomButtonLayout.setColumnStretch(2, 1)
+        self.bottomButtonLayout.setColumnStretch(3, 1)
+        self.bottomButtonLayout.setColumnStretch(4, 1)
+        # forces all columns to stretch
+        self.mainLayout.addLayout(self.bottomButtonLayout, 5, 0, 1, 5, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the layout to the bottom middle of the main layout (spans all 5 columns)
 
         self.exitButton = QPushButton("Exit")
         # a button to exit the program
         self.exitButton.setToolTip("Close the program and save progress")
         # tooltip
-        self.exitButton.setFixedSize(150, 50)
+        self.exitButton.setFixedSize(200, 50)
         # sets size
-        self.bottomButtonLayout.addWidget(self.exitButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the button to the button layout (bottom middle)
+        self.exitButton.clicked.connect(lambda: self.stopper("Shut Down"))
+        # connects the exit button to the program stopping function
+
+        self.versionTag = QLabel(f"DSI v{self.version}\n ")
+        # label for the semantic version
+        self.versionTag.setToolTip("Current DSI version")
+        # tooltip
+        self.versionTag.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
+        # aligns the text itself to the left
+        self.versionTag.setOpenExternalLinks(True)
+        # allows opening links (in case of new update)
+
+        self.directoryButton = QPushButton("...")
+        # a button to open the directory
+        self.directoryButton.setFixedSize(50, 50)
+        # sets size
+        self.directoryButton.setToolTip("Open the configuration location\nThis is where you should drop your dsi.csv and totalTimes.json files if you are using DSI with SHAA")
+        # tooltip
+        self.directoryButton.clicked.connect(lambda: os.startfile(configFolderPath))
+        # connects the button to just opening the installation directory
+
+        self.bottomButtonLayout.addWidget(self.versionTag, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.bottomButtonLayout.addWidget(self.directoryButton, 0, 4, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.bottomButtonLayout.addWidget(self.exitButton, 0, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds all the items
 
     ### Re-run DiscordRPC Button ###
 
@@ -556,52 +544,39 @@ class DSI_MainWindow(QMainWindow):
         self.submitButton.hide()
         # hides by default
 
-    ### Version Tag ###
-
-        self.versionTag = QLabel(f"DSI v{self.version}\n ")
-        # label for the semantic version
-        self.versionTag.setToolTip("Current DSI version")
-        # tooltip
-        self.versionTag.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignLeft)
-        # aligns the text itself to the left
-        self.versionTag.setOpenExternalLinks(True)
-        # allows opening links (in case of new update)
-        self.mainLayout.addWidget(self.versionTag, 5, 0, alignment=Qt.AlignmentFlag.AlignLeft)
-        # adds to the bottom left corner
-
     ### Song Detail Elements ###
 
         self.songDetailLayout = QGridLayout()
         # the layout all the song detail items sit in
 
-        self.mainLayout.addLayout(self.songDetailLayout, 4, 0, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.mainLayout.addLayout(self.songDetailLayout, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the layout to the 2nd to bottom row in the left column
 
         self.songCounter = QLabel()
         # details label
-        self.songCounter.setMaximumSize(150, 60)
+        self.songCounter.setMinimumSize(150, 60)
         # sets max size
         self.songCounter.setToolTip("Current DSI session stats")
         # tooltip
         self.songCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        # aligns left
-        self.songDetailLayout.addWidget(self.songCounter, 0, 0)
+        # aligns text to the left
+        self.songDetailLayout.addWidget(self.songCounter, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the counter
 
         self.globalSongCounter = QLabel()
         # global details label
-        self.globalSongCounter.setMaximumSize(150, 60)
+        self.globalSongCounter.setMinimumSize(150, 60)
         # sets max size
         self.globalSongCounter.setToolTip("Global DSI stats")
         # tooltip
         self.globalSongCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        # aligns left
-        self.songDetailLayout.addWidget(self.globalSongCounter, 0, 0)
+        # aligns text to the left
+        self.songDetailLayout.addWidget(self.globalSongCounter, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the global counter
         self.globalSongCounter.hide()
         # hides the stats by default
 
-        self.globalStats = statsWriter("Load")
+        self.globalStats = statsWriter("Init")
         # loads the old statistics from file, stores in variable
 
         globalTimePlayed = self.globalStats["Time Played"]
@@ -633,12 +608,12 @@ class DSI_MainWindow(QMainWindow):
 
         self.functionLayout = QGridLayout()
         # a layout that holds functional buttons
-        self.mainLayout.addLayout(self.functionLayout, 4, 4, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addLayout(self.functionLayout, 3, 4, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the layout to the main in the mirrored spot bottom row, right column
 
         self.swapStatsButton = QPushButton("Swap Statistics")
         # a button to swap between global and session statistics
-        self.swapStatsButton.setFixedSize(125, 40)
+        self.swapStatsButton.setFixedSize(125, 50)
         # sets fixed size
         self.swapStatsButton.setToolTip("Swap statistics view between global and session")
         # tooltip
@@ -650,7 +625,7 @@ class DSI_MainWindow(QMainWindow):
 
         self.debugInfoButton = QPushButton("Song Details")
         # a button to display API-level details about the song
-        self.debugInfoButton.setFixedSize(125, 40)
+        self.debugInfoButton.setFixedSize(125, 50)
         # sets fixed size
         self.debugInfoButton.setToolTip("Display details about the currently playing song")
         # tooltip
@@ -660,6 +635,32 @@ class DSI_MainWindow(QMainWindow):
         self.debugInfoButton.hide()
         # hides the button on start
 
+        self.openFuncConfigButton = QPushButton("Configure")
+        # a button to open the functional config (gateway to other configs)
+        self.openFuncConfigButton.setFixedSize(125, 50)
+        # sets fixed size
+        self.openFuncConfigButton.setToolTip("Enter the config")
+        # tooltip
+
+        self.openFuncConfigButton.clicked.connect(self.openFuncConfigWin)
+        # connects the button click to the detail display
+        self.openFuncConfigButton.hide()
+        # hides the button on start
+
+        self.openUriMapperButton = QPushButton("Run URIMapper")
+        # a button to open the URI mapper
+        self.openUriMapperButton.setFixedSize(125, 50)
+        # sets fixed size
+        self.openUriMapperButton.setToolTip("Open and run the URI mapping program")
+        # tooltip
+
+        self.openUriMapperButton.clicked.connect(self.openURImapper)
+        # connects the button click to the program runner
+        self.openUriMapperButton.hide()
+        # hides the button on start
+
+        self.functionLayout.addWidget(self.openUriMapperButton, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.openFuncConfigButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.swapStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.debugInfoButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the buttons
@@ -808,8 +809,8 @@ class DSI_MainWindow(QMainWindow):
         # connects the ready tag to the program logic starter
         self.programReady.connect(self.programReadyState)
         # connects the program ready tag to the program ready state function
-        self.exitButton.clicked.connect(lambda: self.stopper("Shut Down"))
-        # connects the exit button to the program stopping function
+        self.saveSignal.connect(self.stopper)
+        # connects the save signal to the stopper function
 
     ### Blacklist Intermediary ###
 
@@ -833,14 +834,13 @@ class DSI_MainWindow(QMainWindow):
 
     ### Run Arguments ###
 
-        self.checkUpdate()
+        QTimer.singleShot(0, self.checkUpdate)
         # runs the GitHub update check
-
-        self.blacklistButtons("init")
+        QTimer.singleShot(0, lambda: self.blacklistButtons("init"))
         # calls the blacklist button decider with init command (hides all buttons)
-
-        self.requiredItemCheck()
+        QTimer.singleShot(0, self.requiredItemCheck)
         # runs the required items function to check IDs
+
 
 
 ### Update Checker ###
@@ -1086,8 +1086,6 @@ class DSI_MainWindow(QMainWindow):
                 self.songCounter.show()
                 # swaps them around (opposite)
 
-
-
 ### Song Details Window ###
 
     def songDetailsWindow(self):
@@ -1095,15 +1093,15 @@ class DSI_MainWindow(QMainWindow):
 
         info = QDialog(self)
         # makes a dialog window
-        info.setWindowTitle(f"Details for {cppFull["Song Raw"]}")
+        info.setWindowTitle(f"Details for {cppFull.get("Song Name", "N/A")}")
         # sets the window title based on currently variable-stored song
         info.resize(400, 120)
         # window size
 
-        infoText = (f"Song: {cppFull["Song Raw"]} by {cppFull["Artist"]}\n"
-        f"Album: {cppFull["Album"]}\n"
-        f"Spotify URI: {cppFull["URI"]}\n"
-        f"Statistics: {cppFull["Playcount"]} plays, {cppFull["Playtime"]} minutes")
+        infoText = (f"Song: {cppFull.get("Song Name", "N/A")} by {cppFull.get("Artist Name", "N/A")}\n"
+        f"Album: {cppFull.get("Album Name", "N/A")}\n"
+        f"Spotify URI: {cppFull.get("URI", "N/A")}\n"
+        f"Statistics: {cppFull.get("Playcount", "N/A")} plays, {cppFull.get("Playtime", "N/A")} minutes")
         # makes a text field with details about the current song
 
         details = QPlainTextEdit(info)
@@ -1121,7 +1119,23 @@ class DSI_MainWindow(QMainWindow):
         info.exec()
         # executes (shows)
 
+### Functional Configuration Window ###
 
+    def openFuncConfigWin(self):
+        """Function to open the functional config"""
+        
+        self.funcConfigProc = QProcess(self)
+        # stores a reference to the functional config process in self
+        self.funcConfigProc.start(funcConfigExePath)
+        # runs the functionality configurator
+
+### URI Mapper Window ###
+
+    def openURImapper(self):
+        """Function to run the URImap.exe file"""
+
+        subprocess.Popen([uriMapExePath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+        # opens as a subprocess, forces new console creation (since URImapper is a console-only program)
 
 ### Auto-Scroll ###
 
@@ -1151,7 +1165,7 @@ class DSI_MainWindow(QMainWindow):
 
             try:
             # tries to grab the artist
-                artist = csArtist
+                artist = csArtistName
                 # grabs the artist name from the global variable
             except:
             # if it fails (sometimes Spotify gives some empty data)
@@ -1265,9 +1279,6 @@ class DSI_MainWindow(QMainWindow):
         """A function to close the program gracefully, saving progress"""
         global blacklist, uriList
         # global -> local
-
-        self.blacklistButtons("init")
-        # calls the button manager with init (hides all)
 
         self.labelSwap.emit("Saving session details...", 3)
         # user update
@@ -1391,15 +1402,15 @@ class DSI_MainWindow(QMainWindow):
 
     def requiredItemGrab(self):
         """A function to grab and push the required items, when they're found"""
-        global sp_client_ID, sp_client_secret, sp_redirect, dc_app_ID
+        global spotifyClientID, spotifyClientSecret, spotifyRedirect, discordAppID
         # global -> local
 
         try:
         # tries to grab the IDs and such
-            sp_client_ID = secretConfig["Spotify_Client_ID"]
-            sp_client_secret = secretConfig["Spotify_Client_Secret"]
-            sp_redirect = secretConfig["Spotify_Redirect_URI"]
-            dc_app_ID = secretConfig["Discord_Application_ID"]
+            spotifyClientID = secretConfig["Spotify_Client_ID"]
+            spotifyClientSecret = secretConfig["Spotify_Client_Secret"]
+            spotifyRedirect = secretConfig["Spotify_Redirect_URI"]
+            discordAppID = secretConfig["Discord_Application_ID"]
             # updates all the global variables
             self.labelSwap.emit("All required items loaded successfully, proceeding...", 0)
             # user update
@@ -1412,7 +1423,7 @@ class DSI_MainWindow(QMainWindow):
 
     def requiredItemsFail(self, state):
         """A function to handle missing required items (re-input)"""
-        global secretConfig, sp_client_ID, sp_client_secret, sp_redirect, dc_app_ID
+        global secretConfig, spotifyClientID, spotifyClientSecret, spotifyRedirect, discordAppID
         # global -> local
 
         if state == 1:
@@ -1420,20 +1431,20 @@ class DSI_MainWindow(QMainWindow):
             self.labelSwap.emit("No required config found, please enter required information:", 0)
             # user inform
 
-            sp_client_ID = self.requiredItemInput("sp_Client_ID")
-            secretConfig["Spotify_Client_ID"] = sp_client_ID
+            spotifyClientID = self.requiredItemInput("Spotify_Client_ID")
+            secretConfig["Spotify_Client_ID"] = spotifyClientID
             # stores the client ID 
 
-            sp_client_secret = self.requiredItemInput("sp_client_secret")
-            secretConfig["Spotify_Client_Secret"] = sp_client_secret
+            spotifyClientSecret = self.requiredItemInput("Spotify_Client_Secret")
+            secretConfig["Spotify_Client_Secret"] = spotifyClientSecret
             # stores the client secret
 
-            sp_redirect = self.requiredItemInput("sp_redirect")
-            secretConfig["Spotify_Redirect_URI"] = sp_redirect
+            spotifyRedirect = self.requiredItemInput("Spotify_Redirect_URI")
+            secretConfig["Spotify_Redirect_URI"] = spotifyRedirect
             # stores the redirect URL
 
-            dc_app_ID = self.requiredItemInput("dc_app_ID")
-            secretConfig["Discord_Application_ID"] = dc_app_ID
+            discordAppID = self.requiredItemInput("Discord_Application_ID")
+            secretConfig["Discord_Application_ID"] = discordAppID
             # stores the discord application ID
 
             # calls the required item input to construct a UI with input, stores return
@@ -1453,37 +1464,37 @@ class DSI_MainWindow(QMainWindow):
 
             try:
             # tries to grab the item from stored config
-                sp_client_ID = secretConfig["Spotify_Client_ID"]
+                spotifyClientID = secretConfig["Spotify_Client_ID"]
             except:
             # if it can't
-                sp_client_ID = self.requiredItemInput("sp_Client_ID")
+                spotifyClientID = self.requiredItemInput("Spotify_Client_ID")
                 # calls the input field to grab a new one instead
-                secretConfig["Spotify_Client_ID"] = sp_client_ID
+                secretConfig["Spotify_Client_ID"] = spotifyClientID
                 # stores the client ID 
             try:
             # tries to grab the item from stored config
-                sp_client_secret = secretConfig["Spotify_Client_Secret"]
+                spotifyClientSecret = secretConfig["Spotify_Client_Secret"]
             except:
-                sp_client_secret = self.requiredItemInput("sp_client_secret")
+                spotifyClientSecret = self.requiredItemInput("Spotify_Client_Secret")
                 # calls the input field to grab a new one instead
-                secretConfig["Spotify_Client_Secret"] = sp_client_secret
+                secretConfig["Spotify_Client_Secret"] = spotifyClientSecret
                 # stores the client secret
             try:
             # tries to grab the item from stored config
-                sp_redirect = secretConfig["Spotify_Redirect_URI"]
+                spotifyRedirect = secretConfig["Spotify_Redirect_URI"]
             except:
-                sp_redirect = self.requiredItemInput("sp_redirect")
+                spotifyRedirect = self.requiredItemInput("Spotify_Redirect_URI")
                 # calls the input field to grab a new one instead
-                secretConfig["Spotify_Redirect_URI"] = sp_redirect
+                secretConfig["Spotify_Redirect_URI"] = spotifyRedirect
                 # stores the redirect URL
 
             try:
             # tries to grab the item from stored config
-                dc_app_ID = secretConfig["Discord_Application_ID"]
+                discordAppID = secretConfig["Discord_Application_ID"]
             except:
-                dc_app_ID = self.requiredItemInput("dc_app_ID")
+                discordAppID = self.requiredItemInput("Discord_Application_ID")
                 # calls the input field to grab a new one instead
-                secretConfig["Discord_Application_ID"] = dc_app_ID
+                secretConfig["Discord_Application_ID"] = discordAppID
                 # stores the discord application ID
 
         self.userInputField.hide()
@@ -1507,27 +1518,27 @@ class DSI_MainWindow(QMainWindow):
         self.userInputField.setText("")
         # clears the text
 
-        if field == "sp_Client_ID":
+        if field == "Spotify_Client_ID":
         # if the requested field is spotify client id
             fieldString = "Spotify Client ID"
             # forms a user-readable string
 
-        elif field == "sp_client_secret":
+        elif field == "Spotify_Client_Secret":
         # if the requested field is
             fieldString = "Spotify Client Secret"
             # forms a user-readable string
 
-        elif field == "sp_redirect":
+        elif field == "Spotify_Redirect_URI":
         # if the requested field is
             fieldString = "Spotify Redirect URI"
             # forms a user-readable string
 
-        elif field == "dc_app_ID":
+        elif field == "Discord_Application_ID":
         # if the requested field is discord app id
             fieldString = "Discord Application ID"
             # forms a user-readable string
 
-        self.labelSwap.emit(f"Please enter your {fieldString}", 1)
+        self.labelSwap.emit(f"Please enter your {fieldString}", 0)
         # sets the label to request for the passed info
 
         self.userInputField.show()
@@ -1567,16 +1578,16 @@ class DSI_MainWindow(QMainWindow):
 
     def configRun(self): 
         """Function to run the configuration window(s)"""
-        global functionConfig, jsonConfig, shaaConfig, disableShaa, skipConfigWindow
+        global functionConfig, jsonConfig, shaaConfig, disableShaa, skipConfigWindow, skipCfgWin
         # global -> local
 
-        if os.path.exists(functionConfigPath):
+        if os.path.exists(funcConfigPath):
         # if the functionality-related config exists
             self.labelSwap.emit("Found functionality configuration, reading...", 0)
             # user update
             try:
             # tries to open the json file
-                with open(functionConfigPath, "r", encoding="utf-8") as fncCfg:
+                with open(funcConfigPath, "r", encoding="utf-8") as fncCfg:
                 # opens the config file in read mode
                     functionConfig = json.load(fncCfg)
                     # stores the loaded json file as functionConfig
@@ -1607,7 +1618,7 @@ class DSI_MainWindow(QMainWindow):
         # if the file doesn't exist or config needs to be rechecked
             self.hide()
             # hides the mainWindow (otherwise appears frozen)
-            mainConfig = subprocess.run([functionConfigWin], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            mainConfig = subprocess.run([funcConfigExePath], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the functionality configurator (as blocking), continues task once it's done writing config
             if not mainConfig.returncode == 1:
             # checks if the return code isn't 1 (0 is bad, 1 is good)
@@ -1634,7 +1645,7 @@ class DSI_MainWindow(QMainWindow):
         # if the dsi configuration doesn't exist
             self.hide()
             # hides the mainWindow (otherwise appears frozen)
-            dsiConfig = subprocess.run([dsiConfigWindow], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            dsiConfig = subprocess.run([dsiConfigExePath], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the dsi configurator (as blocking), continues task once it's done writing config
             if not dsiConfig.returncode == 1:
             # checks if the return code isn't 1 (0 is bad, 1 is good)
@@ -1653,19 +1664,19 @@ class DSI_MainWindow(QMainWindow):
                     # stores the loaded 
                     disableShaa = False
                     # keeps shaa enabled
-                    self.labelSwap.emit("SHAA successfully detected, enabling SHAA...", 0)
+                    self.labelSwap.emit("SHAA configuration detected...", 0)
                     # user update
             except:
             # if the file can't be opened
                 disableShaa = True
                 # disables SHAA-related functions
-                self.labelSwap.emit("SHAA not installed (successfully), skipping...", 0)
+                self.labelSwap.emit("SHAA not configured, skipping...", 0)
                 # user update
         else:
         # if the file doesn't exist
             disableShaa = True
             # disables SHAA-related functions
-            self.labelSwap.emit("SHAA not installed, skipping...", 0)
+            self.labelSwap.emit("SHAA not configured, skipping...", 0)
             # user update
 
         QTimer.singleShot(1500, self.mainConfigLoad)
@@ -1676,7 +1687,7 @@ class DSI_MainWindow(QMainWindow):
     def mainConfigLoad(self):
         """Function that loads and stores the config options"""
         global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors
-        global enableMapping, timestampStyle, startTime, consoleLength, hostData
+        global enableMapping, timestampStyle, startTime, consoleLength, hostData, addressType
         # global -> local
 
         refreshTime = functionConfig.get("refreshTime", 10.0)
@@ -1702,6 +1713,7 @@ class DSI_MainWindow(QMainWindow):
         timestampStyle = functionConfig.get("clockStyle", "Uptime")
         consoleLength = functionConfig.get("consoleLength", 25)
         hostData = functionConfig.get("hostData", True)
+        addressType = functionConfig.get("addressType", "Device")
         # loads all options from configs
 
         self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
@@ -1765,12 +1777,14 @@ class DSI_MainWindow(QMainWindow):
             None
 
         picCycleTime = jsonConfig.get("pictureCycleTime", 10)
+        # grabs the cycle time
         try:
         # tries to turn the time into minutes (ensures integer type, multiplies by 60)
             picCycleTime = (int(picCycleTime) * 60)
         except:
-        # if it can't, leaves it alone (should be the case when it's set to "Song")
-            None
+        # if it can't
+            picCycleTime = 600
+            # sets to default of 10 minutes
 
         picCycleType = jsonConfig.get("pictureCycleBehavior", "Random")
         smallPic = jsonConfig.get("smallPic", "")
@@ -1829,7 +1843,7 @@ class DSI_MainWindow(QMainWindow):
             None
             # does nothing, because those settings are already set above
 
-        QTimer.singleShot(1500, self.updateWarning)
+        QTimer.singleShot(1000, self.updateWarning)
         # calls the next stage (warnings regarding missing debug)
 
 ### Update Prints ###
@@ -1837,7 +1851,7 @@ class DSI_MainWindow(QMainWindow):
     def updateWarning(self):
         if not enableUpdates:
         # if console printing is disabled in config
-            self.labelSwap.emit("Update logging disabled in config", 0)
+            self.labelSwap.emit("Info logging disabled in config", 0)
             # user update
             QTimer.singleShot(1000, self.errorWarning)
             # calls the error warning function
@@ -1852,7 +1866,7 @@ class DSI_MainWindow(QMainWindow):
         # if error printing is disabled in config
             self.labelSwap.emit("Error logging disabled in config", 0)
             # user update
-            QTimer.singleShot(1500, self.idWriter)
+            QTimer.singleShot(1000, self.idWriter)
             # calls the next stage (id writer)
         else:
             self.idWriter()
@@ -1889,84 +1903,62 @@ class DSI_MainWindow(QMainWindow):
 ### ID Writer ###
 
     def idWriter(self):
-        """Function for writing the ids.txt file"""
+        """Function for writing the discordIDs.json file"""
         # these are things the C++ program uses "statically" (they can't change during operation)
-        with open(idDir, "w", encoding="utf-8") as txt:
+
+        content = {
+            "Discord Application ID": discordAppID,
+            "Small Image Filename": smallPic,
+            "Album Fallback": albumFallback,
+            "Version": f"v{DSIver}"
+        }
+        # makes a dictionary from the relevant config options
+
+        with open(idDir, "w", encoding="utf-8") as idJsn:
         # opens the ids text file
-            content = ("Discord Application ID = " + dc_app_ID + "\n" 
-                    + "Small Image Filename = " + smallPic + "\n" 
-                    + "Album Fallback = " + albumFallback)
-            # makes a string from the relevant config options
-            txt.write(content)
+            json.dump(content, idJsn, indent=2)
             # writes the config to file
+
             if enableUpdates:
             # if updates are enabled
                 self.labelSwap.emit("Updated ID file for Discord...", 0)
-            # writes the string to ids.txt at program launch
+            # writes the string to discordIDs.json at program launch
 
         if not disableShaa:
         # if SHAA compat isn't disabled
             QTimer.singleShot(2000, self.timeGrabber)
             # calls the next stage (timeGrabber)
         else:
+        # if SHAA compat is disabled
             QTimer.singleShot(1000, self.readyStateReadier)
             # skips timeGrabber
 
 ### Total Time Grabber ###
 
     def timeGrabber(self):
-        """Function that grabs the total time counts from totalTimes.txt file"""
-        global totalHours, totalMinutes, totalSeconds, disableShaa
+        """Function that grabs the total time counts from totalTimes file"""
+        global totalHours, totalMinutes, totalSeconds, totalPlays, disableShaa
         # global -> local
         self.labelSwap.emit("Grabbing total times from file...", 0)
         # user update
 
         if os.path.isfile(timeDir):
-        # checks if the totalTimes.txt file exists
-            with open(timeDir, "r") as times:
+        # checks if the totalTimes.json file exists
+            with open(timeDir, "r", encoding="utf-8") as times:
             # if yes, opens the file
-                totalTimes = times.readlines()
-                # stores the total times from the file
-                counter = 0
-                # keeps a counter to check line number
-                for line in totalTimes:
-                # checks all lines in the file
-                    if "=" in line:
-                    # if "=" is present in the line
-                        x, number = line.split("= ", 1)
-                        # strips and splits the line, stores both sides
-                        if counter == 0:
-                            totalHours = number.strip()
-                        elif counter == 1:
-                            totalMinutes = number.strip()
-                        elif counter == 2:
-                            totalSeconds = number.strip()
-                        # checks line number and saves the appropriate variable 
-                        counter += 1
-                        # adds 1 to move to next variable next cycle
-                try:
-                # tries to convert the strings to floats
-                    totalHours = float(totalHours)
-                    totalMinutes = float(totalMinutes)
-                    totalSeconds = float(totalSeconds)
-                    # turns the strings into floats
-                    totalHours = (f"{totalHours:,.2f}")
-                    totalMinutes = (f"{totalMinutes:,.0f}")
-                    totalSeconds = (f"{totalSeconds:,.0f}")
-                    # turns the floats into formatted strings (2 decimal points for hours, 0 for the other two)
-                    if enableUpdates:
-                    # if updates are enabled
-                        self.labelSwap.emit(f"Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds", 0)
-                        # prints the total times at start
-                except:
-                # if the float conversion fails for some reason
-                    self.labelSwap.emit(f"Error reading totalTimes.txt file - total times not set...", 2)
-                    # user update on error
-                    disableShaa = True
-                    # disables SHAA functionality (can't access files)
+                totalDict = json.load(times)
+                # loads the file as a dictionary
 
-            times.close()
-            # closes the file
+                totalHours = f"{float(totalDict.get("totalHours", 0)):,.2f}"
+                totalMinutes = f"{float(totalDict.get("totalMinutes", 0)):,.0f}"
+                totalSeconds = f"{float(totalDict.get("totalSeconds", 0)):,.0f}"
+                totalPlays = f"{int(totalDict.get("totalPlays", 0)):,.0f}"
+                # grabs the numbers, formats as beautified number strings (eg. 25,593.24 hours / 2,520,149 minutes...)
+
+                if enableUpdates:
+                # if updates are enabled
+                    self.labelSwap.emit(f"Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds = {totalPlays} plays", 0)
+                    # prints the total times at start
         else:
         # if the file for SHA doesn't exist
             if not disableShaa:
@@ -2020,6 +2012,8 @@ class DSI_MainWindow(QMainWindow):
 
         self.swapStatsButton.show()
         self.debugInfoButton.show()
+        self.openFuncConfigButton.show()
+        self.openUriMapperButton.show()
         # enables the function buttons button
 
         self.spotifyStatusIcon.show()
@@ -2032,26 +2026,17 @@ class DSI_MainWindow(QMainWindow):
 
 ### Global Objects ###
 
-
-
 pictureQueue = queue.Queue()
 """An empty queue for pictures from picCycler to get sent to"""
-
 songEvent = threading.Event()
 """An empty threading event list for song"""
-
 picEvent = threading.Event()
 """An empty threading event list for picturecycler """
-
 spotifyLock = threading.Lock()
 """A locking method to prevent redundant API calls (or 2 calls at once)"""
 
-sessionID = requests.Session()
-"""Tells the auth to keep one stable connection, rather than re-connecting every request"""
-
 authorisation = None
 """The argument for auth_manager, containing the variables from config + scope of data request"""
-
 main = None
 """Handles the authentication and user identification"""
 
@@ -2064,21 +2049,19 @@ def eventer():
 
     authorisation = SpotifyOAuth(
         scope = "user-read-playback-state", 
-        client_id = sp_client_ID, 
-        client_secret = sp_client_secret, 
-        redirect_uri = sp_redirect,
+        client_id = spotifyClientID, 
+        client_secret = spotifyClientSecret, 
+        redirect_uri = spotifyRedirect,
         cache_path = spCache
         )
     # this assignment can only be made *after* the client UI window runs (because that handles the config -> global var)
 
-    main = spotipy.Spotify(auth_manager = authorisation)#, requests_session = sessionID)
+    main = spotipy.Spotify(auth_manager = authorisation)
     # same deal with this
 
 
 
 ### Spotify Data Grabber Function ###
-
-
 
 def authPlayback():
     """Function to more "safely" handle Spotify API requests and errors"""
@@ -2130,7 +2113,7 @@ def authPlayback():
                 # if the error is a connection error (more than likely due to token expiry)
                     if enableErrors:
                     # if error-printing is enabled
-                        mainWin.labelSwap.emit(f"Refreshing Spotify token...", 1)
+                        mainWin.labelSwap.emit(f"Refreshing Spotify token...", 2)
                         # doesn't sleep because this is a token error and should get "fixed" nearly instantly
                         # expected to print just about every 3600 seconds (1h)
                     tokenRefresh = True
@@ -2214,7 +2197,7 @@ def authPlayback():
                     # calls the icon changer with red icon
                     time.sleep(600)
                     # waits 10 minutes
-                    mainWin.stopper()
+                    mainWin.stopper("Shut Down")
                     # prompts user, then exits
 
                 time.sleep(3)
@@ -2245,14 +2228,12 @@ def spotifyLogin():
 
 ### SHA(A) Check ### 
 
-
-
 def shaaCheck():
     """Function that loads CSV stuff related to the SHA(A)"""
     global uriList, csvReader, uriMap
     # loads globals to manipulate
 
-    if os.path.isfile(SHAAdir) and not disableShaa:
+    if os.path.exists(SHAAdir) and not disableShaa:
     # if the grouped.csv file exists and SHAA-functionality isn't disabled
         mainWin.labelSwap.emit("Spotify Analyser (Addon) functionality enabled", 0)
         # informs user SHAA is enabled
@@ -2308,22 +2289,29 @@ def uriWriter(URIs: list):
 
 def statsWriter(action: str):
     """Function that adds the current stats to file"""
-    if os.path.exists(statsPath):
-    # if the statistics file exists
-        with open(statsPath) as stats:
-        # opens the statistics file in read mode
-            globalStats = json.load(stats)
-            # loads the global (across sessions) statistics
-    else:
-    # if the file doesn't exist
-        globalStats = {
-            "Songs Played": 0,
-            "Time Played": 0,
-            "Avg Duration": 0,
-            }
-        # sets default 0 values for all statistics
+    global globalStats
+    # global -> local
+
+    if action == "Init":
+        if os.path.exists(statsPath):
+        # if the statistics file exists
+            with open(statsPath) as stats:
+            # opens the statistics file in read mode
+                globalStats = json.load(stats)
+                # loads the global (across sessions) statistics
+        else:
+        # if the file doesn't exist
+            globalStats = {
+                "Songs Played": 0,
+                "Time Played": 0,
+                "Avg Duration": 0,
+                }
+            # sets default 0 values for all statistics
+
+        return globalStats
+        # returns the stats
     
-    if action == "Load":
+    elif action == "Load":
     # if the action is to load
         return globalStats
         # returns the dictionary
@@ -2424,8 +2412,6 @@ def whitelistManager(action: str) -> list | None:
 
 ### Background Picture Tasker ###
 
-
-
 class pictureClass(threading.Thread):
     """Background thread for picture selection"""
     # a class to use background tasking, this way the pictures can cycle outside the main song loop
@@ -2452,7 +2438,7 @@ class pictureClass(threading.Thread):
         while True:     
         # this function only runs if true, some of the methods below will end it after one cycle
 
-            if self.picCycleList == "Spotify" or self.picCycleList == "spotify":
+            if self.picCycleList == "Spotify":
             # if the cycle type is "Spotify" (in which case the song handles the pictures)
                 self.running = False
                 False
@@ -2472,7 +2458,7 @@ class pictureClass(threading.Thread):
             if self.picCycleType in pictureBehaviorList and picLength >= 1:
                 # checks if the list has more than one picture (can't cycle if not true)
 
-                if self.picCycleType == "random":
+                if self.picCycleType == "Random":
                 # if the selected method is "Random"
                     i = random.randint(0, picLength)
                     # picks a random number based on list length (lists start at 0, so -1 to length for position)
@@ -2486,23 +2472,17 @@ class pictureClass(threading.Thread):
                             mainWin.labelSwap.emit("Random picture set", 1)
                             # informs user a new picture is set
 
-                        if picCycleTime == "song" or picCycleTime == "Song":
-                        # if the cycle "time" is instead set to "song"
-                            picEvent.clear()
-                            # empties the queue
-                        else:
-                        # if the cycle time is a time
-                            time.sleep(self.picCycleTime)
-                            # sleeps until it's time to change pictures
-                            picEvent.clear()
-                            # empties the picture event queue
-                            self.run()
-                            # runs the starter
+                        time.sleep(self.picCycleTime)
+                        # sleeps until it's time to change pictures
+                        picEvent.clear()
+                        # empties the picture event queue
+                        self.run()
+                        # runs the starter
                     else:
                         time.sleep(10)
                         # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
 
-                if self.picCycleType == "sequence":
+                if self.picCycleType == "Sequence":
                 # if the selected method is "Sequence"
                     for i in range(0, picLength):
                     # repeats this loop for every element in the list (lists start at 0, so -1 to length for position)
@@ -2516,24 +2496,19 @@ class pictureClass(threading.Thread):
                             if enableUpdates:
                                 mainWin.labelSwap.emit("Sequential picture set", 1)
                                 # informs user a new picture is set
-                            if picCycleTime == "song" or picCycleTime == "Song":
-                                # if the cycle "time" is instead set to "song"
-                                picEvent.clear()
-                                # empties the queue
-                            else:
-                                # if the cycle time is a time
-                                time.sleep(self.picCycleTime)
-                                # sleeps until it's time to change pictures
-                                picEvent.clear()
-                                # empties the picture event queue
-                                self.run()
-                                # runs the starter
+                            # if the cycle time is a time
+                            time.sleep(self.picCycleTime)
+                            # sleeps until it's time to change pictures
+                            picEvent.clear()
+                            # empties the picture event queue
+                            self.run()
+                            # runs the starter
                         else:
                         # if the queue isn't empty
                             time.sleep(10)
                             # if the queue isn't empty, waits 10 seconds then re-runs the picture selection
 
-                if self.picCycleType == "once":
+                if self.picCycleType == "Once":
                 # if the selected method is just to set one random picture
                     i = random.randint(0, picLength)
                     # picks a random number based on list length
@@ -2547,7 +2522,7 @@ class pictureClass(threading.Thread):
                     False
                     # only sets it once, so it stops the background thread
 
-                if self.picCycleType == "none":
+                if self.picCycleType == "None":
                 # if the selected method is None ()
                     cppLargeImage = self.picCycleList[0]
                     # chooses the first picture
@@ -2576,8 +2551,6 @@ class pictureClass(threading.Thread):
 
 
 ### C++ ###
-
-
 
 def runCpp(event):
     """Function to run the C++ / Discord RPC program"""
@@ -2693,7 +2666,7 @@ def runCpp(event):
 
 def cppPackets(packet: dict):
     """Function to send packets to the C++ program"""
-    dataPacket = json.dumps(packet).encode("utf-8")
+    dataPacket = json.dumps(packet, indent=2).encode("utf-8")
     # converts the passed argument into json
     cppProgram.stdin.write(struct.pack("!I", len(dataPacket)))
     # sends the byte length of the packet
@@ -2706,12 +2679,11 @@ def cppPackets(packet: dict):
 
 ### Song Data File Field Selection/Creation ###
 
-
-
 def song(pictureQueue, event):
     """The function that handles all song data gathering and parsing"""
-    global uriList, cppLargeImage, uriMap, totalHours, totalMinutes, totalSeconds, detailOptions, pauseStart, currentInfo
-    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtist, cppFull
+    global uriList, cppLargeImage, uriMap, pauseStart
+    global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtistName, cppFull
+    global csSongName, csArtistURL, csAlbumName, csAlbumURL, csPlaylistURL
     # global -> local
 
     while not songThreadEvent.is_set():
@@ -2719,13 +2691,10 @@ def song(pictureQueue, event):
 
         songEvent.wait()
         # waits for looper() to set an event
-
         songNameList = []
         # creates an empty list for strings to get added into as the loop progresses 
-
         songStuffList = []
         # creates an empty list for strings to get added into as the loop progresses
-
         cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
@@ -2734,749 +2703,766 @@ def song(pictureQueue, event):
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
         if not csFull or not csFull.get("item"):
-        # checks if the dictionary is valid and can be called
-            time.sleep(5)
-            # waits for a few seconds
-            continue
-            # sends back to the start of song() to restart the song query
-
-        csItem = csFull.get("item")
-        # takes the first part of the song's info (leaving out device info and various user states)
-        csAlbum = csItem.get("album")
-        # takes a smaller part of the song's info (still contains a ton of extra)
-
-        csDevice = csFull.get("device")
-        # gets a list of device information
-
-        csName = csItem.get("name")
-        # stores the name of the song
-
-        isLocalSong = csItem.get("is_local")
-        # checks if the song is a local song (can't use standard API info requests if so)
-
-        shaaPlaytimeMin = None
-        shaaPlaycountSong = None
-        shaaPlaytime = None
-        # starts up variables as None
-
-        if not isLocalSong:
-        # these fields are only valid when it's not a local song
-
-            csURI = csItem.get("uri")
-            # grabs the URI of the song - which is what determines the song matching
-
-            csImages = csAlbum.get("images")
-            # gets the information about the album's images
-            csCover = csImages[0].get("url")
-            # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
-
-            csArtists = csAlbum.get("artists")
-            # stores all the artists listed on the song
-            csArtist = csArtists[0].get("name")
-            # stores the first artist's name (in case there's multiple artists, only grabs first)
-
-            csAlbumName = csAlbum.get("name")
-            # stores the album name
-
-        csLength = int(csItem.get("duration_ms")/1000)
-        # stores the length of the song in seconds
-        csProgress = int(csFull.get("progress_ms")/1000)
-        # saves the current song progress in seconds
-
-        csUnixStart = int(time.time() - csProgress + 2)
-        # stores the start time of the song by taking current time and subtracting progress
-        # adds 2 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
-        # this way, there shouldn't be a situation where Discord claims the song has ended when it's still playing on Spotify
-        csUnixEnd = (csUnixStart + csLength)
-        # stores the end time of the song (by adding up the start + duration)
-
-        csPlayState = bool(csFull.get("is_playing"))
-        # grabs the playback state (true/false)
-
-        if not csPlayState:
-        # if the song is paused
-
-            if pauseStart is None:
-            # if there's no set pause time
-                pauseStart = int(time.time() + 4)
-                # sets the pause time to current time
-            csUnixStart = 0
-            csUnixEnd = 0
-            # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
+        # if the dictionary doesn't exist or can't be called
+            cppFull = {
+                "Playback State": False
+            }
+            # sets the playback state field to False
 
         else:
-        # song is playing
-            if pauseStart is not None and (trackCounter == oldCount):
-            # if there's a set pause time from before (and the song hasn't changed)
-                pauseDuration = int(time.time() - pauseStart)
-                # calculates the time spent on pause
-                csUnixStart += pauseDuration
-                csUnixEnd += pauseDuration
-                # sets the start and end times to match the time spent paused (by adding the time spent paused)
-                pauseStart = None
-                # resets the pauseStart to None, so it can get checked again
-                timePlayed -= pauseDuration
-                # removes the paused duration from the total time played
+        # dictionary is valid and can be called
+            csItem = csFull.get("item")
+            # takes the first part of the song's info (leaving out device info and various user states)
+            csAlbum = csItem.get("album")
+            # takes a smaller part of the song's info (still contains a ton of extra)
 
-        if enablePause and not csPlayState:
-        # if the pause behavior is enabled and song paused
-            songNameList.append(pauseStateText)
-            # adds the pause text as the first string in the list (since it goes first)
+            csDevice = csFull.get("device")
+            # gets a list of device information
 
-        if not isLocalSong:
-        # can't access these if the playing song is local
-            cstrackURL = csItem.get("external_urls")
-            # stores the list that contains track's url
-            csAlbumLinks = csAlbum.get("external_urls") 
-            # stores the list that contains album url
-            csArtistLinks = csArtists[0].get("external_urls")
-            # stores the list that contains artist's url
-            csPlaylist = csFull.get("context")
-            # stores the list that contains the playlist url
+            csName = csItem.get("name")
+            # stores the name of the song
+            csSongName = csName
+            # stores a duplicate for the final packet
 
-        if csPlaylist == None:
-        # checks if user is playing a playlist
-            onPlaylist = False
-            # if not, sets onPlaylist to false
+            isLocalSong = csItem.get("is_local")
+            # checks if the song is a local song (can't use standard API info requests if so)
 
-        else:
-        # if there is a playlist playing
-            csPlaylistURL = csPlaylist.get("external_urls")
-            # gets the list of external urls attached to that playlist
-            onPlaylist = True
-            # sets onPlaylist to true
+            shaaPlaytimeMin = None
+            shaaPlaycountSong = None
+            shaaPlaytime = None
+            # starts up variables as None
 
-        if spotifyURL in spotifyURLlist:
-        # if the selected type of URL is in the valid set
+            if not isLocalSong:
+            # these fields are only valid when it's not a local song
 
-            if spotifyURL == "track" or spotifyURL == "Track":
-            # if the config option for url type is set to track
-                csURL = cstrackURL.get("spotify")
-                # takes the track's URL
+                csURI = csItem.get("uri")
+                # grabs the URI of the song - which is what determines the song matching
 
-            elif spotifyURL == "album" or spotifyURL == "Album":
-            # if the config option for url type is set to album
-                csURL = csAlbumLinks.get("spotify")
-                # takes the album's URL
+                csImages = csAlbum.get("images")
+                # gets the information about the album's images
+                csCover = csImages[0].get("url")
+                # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
 
-            elif spotifyURL == "artist" or spotifyURL == "Artist":
-            # if the config option for url type is set to artist
-                csURL = csArtistLinks.get("spotify")
-                # takes the artist's URL
+                csArtists = csItem.get("artists")
+                # stores all the artists listed on the song
+                csArtistName = csArtists[0].get("name")
+                # stores the first artist's name (in case there's multiple artists, only grabs first)
 
-            elif spotifyURL == "playlist" or spotifyURL == "Playlist":
-            # if the config option for url type is set to playlist
-                if onPlaylist:
-                # takes the playlist's URL
-                    csURL = csPlaylistURL.get("spotify")
-                else:
-                # the user isn't playing a playlist, but has selected the playlist url config option
-                    csURL = smallURL
-                    # sets it to smallURL as a fallback                    
-                    
-        else:
-        # if the config option for url type is invalid, defaults to my website :)
-            csURL = "https://elleffnotelf.com"
-            # sets url
+                csAlbumName = csAlbum.get("name")
+                # stores the album name
+                csAlbumURLs = csAlbum.get("external_urls")
+                # stores all the album urls 
+                csAlbumURL = csAlbumURLs.get("spotify")
+                # gets the spotify url 
 
+            csLength = int(csItem.get("duration_ms", 180000) / 1000)
+            # stores the length of the song in seconds (fallback of 180 seconds)
+            csProgress = int(csFull.get("progress_ms", 1000) / 1000)
+            # saves the current song progress in seconds (fallback of 1 second)
 
-        ### SHAAless Behavior ###
+            csUnixStart = int(time.time() - csProgress + 2)
+            # stores the start time of the song by taking current time and subtracting progress
+            # adds 2 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
+            # this way, there shouldn't be a situation where Discord claims the song has ended when it's still playing on Spotify
+            csUnixEnd = (csUnixStart + csLength)
+            # stores the end time of the song (by adding up the start + duration)
 
+            csPlayState = bool(csFull.get("is_playing"))
+            # grabs the playback state (true/false)
 
-        if not os.path.isfile(SHAAdir) or disableShaa:
-        # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
+            if not csPlayState:
+            # if the song is paused
+                if pauseStart is None:
+                # if there's no set pause time
+                    pauseStart = int(time.time() + 4)
+                    # sets the pause time to current time
+                csUnixStart = 0
+                csUnixEnd = 0
+                # sets the UNIX timecodes to 0, leading to Discord counting up from paused state
 
-        ### Field 1 / Field 2 ###
+            if enablePause and not csPlayState:
+            # if the pause behavior is enabled and song paused
+                songNameList.append(pauseStateText)
+                # adds the pause text as the first string in the list (since it goes first)
 
-            songStuffList.append(songInfoFallback)
-            # adds the user-defined first field to list
-            songStuffList.append(songInfoSpacer)
-            # adds the spacer to list
-            songStuffList.append(songInfoFallback)
-            # adds the user-defined second field to list
-                
-        ### Details / Field 3 ###
+            if not isLocalSong:
+            # can't access these if the playing song is local
+                cstrackURL = csItem.get("external_urls")
+                # stores the list that contains track's url
+                csAlbumLinks = csAlbum.get("external_urls") 
+                # stores the list that contains album url
+                csArtistLinks = csArtists[0].get("external_urls")
+                # stores the list that contains artist's url
+                csArtistURL = csArtistLinks.get("spotify")
+                # stores the artist URL
+                csPlaylist = csFull.get("context")
+                # stores the list that contains the playlist url
 
-            if songInfoFormatDetails:
-            # if the format option isn't empty
-                cppLargeHoverList.append(songInfoFormatDetails)
-                # adds to string list
-
-            if songInfoDetailsDoubleSpace:
-            # if the double space is enabled
-                cppLargeHoverList.append(" ")
-                # adds an empty space
-
-            if songInfoFormatDetailsSpacer:
-            # if the format spacer option isn't empty
-                cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
-                # adds to string list
-            
-            if shaaInfoDetails in detailOptions:
-            # if the config option matches one of the set defaults
-
-                if shaaInfoDetails.lower() == "volume":
-                # if the config calls for volume
-                    try:
-                    # tries to get the volume (not supported by all devices)
-                        shaaDetailField = f"{csDevice.get("volume_percent")}%"
-                        # takes the volume and makes it a percentage
-                    except:
-                    # if it can't
-                        shaaDetailField = "some volume"
-                        # puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-                
-                elif shaaInfoDetails.lower() == "repeat":
-                # if the config calls for repeat state
-                    try:
-                    # tries to get the repeat state boolean (some devices don't support)
-                        repeatState = csFull.get("repeat_state")
-                        # grabs the boolean
-
-                        if repeatState:
-                            # if repeat state returns True
-                            shaaDetailField = "on Repeat"
-                            # adds string form
-                        else:
-                            # if repeat state doesn't return True
-                            shaaDetailField = "not on Repeat"
-                            # adds string form
-                    except:
-                        shaaDetailField = "may be on Repeat"
-                        # if it fails, puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-
-                elif shaaInfoDetails.lower() == "shuffle":
-                # if the config calls for shuffle state
-                    try:
-                    # tries to get the shuffle state boolean (some devices don't support)
-                        shuffleState = csFull.get("shuffle_state")
-                        # grabs the boolean
-
-                        if shuffleState:
-                            # if shuffle state returns True
-                            shaaDetailField = "on Shuffle"
-                            # adds string form
-                        else:
-                            # if shuffle state doesn't return True
-                            shaaDetailField = "not on Shuffle"
-                            # adds string form
-                    except:
-                        shaaDetailField = "may be on Shuffle"
-                        # if it fails, puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-
+            if csPlaylist == None:
+            # checks if user is playing a playlist
+                onPlaylist = False
+                # if not, sets onPlaylist to false
             else:
-                # if the config option doesn't match any of the set defaults
-                shaaDetailField = shaaInfoDetails
-                # sets the total time to match custom string instead
+            # if there is a playlist playing
+                csPlaylistURLs = csPlaylist.get("external_urls")
+                # gets the list of external urls attached to that playlist
+                csPlaylistURL = csPlaylistURLs.get("spotify")
+                # grabs the Spotify playlist URL
+                onPlaylist = True
+                # sets onPlaylist to true
 
-            cppLargeHoverList.append(shaaDetailField + " ")
-            # joins together the list 
+            if spotifyURL in spotifyURLlist:
+            # if the selected type of URL is in the valid set
 
-            if dsiShoutout:
-            # if the DSI shoutout tag is enabled
-                cppLargeHoverList.append(dsiShoutoutStr)
-                # adds the string (// data by DSI)
+                if spotifyURL == "Track":
+                # if the config option for url type is set to track
+                    csURL = cstrackURL.get("spotify")
+                    # takes the track's URL
 
-            cppLargeHover = "".join(cppLargeHoverList)
-            # joins together the details list to one string
+                elif spotifyURL == "Album":
+                # if the config option for url type is set to album
+                    csURL = csAlbumLinks.get("spotify")
+                    # takes the album's URL
 
+                elif spotifyURL == "Artist":
+                # if the config option for url type is set to artist
+                    csURL = csArtistLinks.get("spotify")
+                    # takes the artist's URL
 
-    ### URI Reassignment ###
-
-        finalURI = csURI
-        # creates a new variable with the current song's URI
-        altURI = None
-        # creates a new variable to store a mapped version of the song's URI
-
-    ### SHAA Behavior ###
-
-        if os.path.isfile(SHAAdir) and not disableShaa:
-        # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
-        # this data is only entered to rich presence if used with SHA (and installed correctly)
-        # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
-            
-        ### URI Checkpoint ###
-
-            if enableMapping:
-            # if URI mapping is enabled
-                
-                altURI = uriMap.get(csURI)
-                # creates an alteranate variable from the JSON map by checking with the current URI
-
-                if finalURI not in uriList:
-                # if the URI is not in the URI list yet
-                    if enableUpdates:
-                    # if the user updates are enabled
-                        mainWin.labelSwap.emit("Song URI not found in list, added to URI map list", 0)
-                        # user update
-                    uriList.append(finalURI)
-                    # adds it to the list of URIs
-
-                if (finalURI not in csvReader.index) and (altURI in csvReader.index):
-                # if the URI is not found in the CSV index, but the alternate URI is
-                    finalURI = altURI
-                    # sets the URI to use the alternate instead
-                    if enableUpdates:
-                    # if the user updates are enabled
-                        mainWin.labelSwap.emit("Using song stats from mapped URI", 0)
-                        # user update
-
-            if finalURI in csvReader.index:
-            # checks if the URI is in the CSV
-                if enableUpdates:
-                # if the user updates are enabled
-                    mainWin.labelSwap.emit(f"Song stats found", 0)
-                    # user update
-
-            ### Plays / Field 1 ###
-
-                playcount = csvReader.loc[finalURI, "Playcount"]
-                playtime = csvReader.loc[finalURI, "Total Time"]
-                # sets temp variables that lookup the cells based on the track and columns
-
-                if songInfoField1 == "Track":
-                # if the selected type for first field is Track
-
-                    if isinstance(playcount, pd.Series):
-                    # if there's more than one instance of the current song
-                        playcountTotal = playcount.sum()
-                        # saves the playcount total based on calculated playcounts
+                elif spotifyURL == "Playlist":
+                # if the config option for url type is set to playlist
+                    if onPlaylist:
+                    # takes the playlist's URL
+                        csURL = csPlaylistURLs.get("spotify")
                     else:
-                    # if there's only one instance of the current song
-                        playcountTotal = playcount
-                        # saves the total as the playcount of the song
+                    # the user isn't playing a playlist, but has selected the playlist url config option
+                        csURL = smallURL
+                        # sets it to smallURL as a fallback                    
+            else:
+            # if the config option for url type is invalid, defaults to my website :)
+                csURL = "https://elleffnotelf.com"
+                # sets url
 
-                    shaaPlaycount = f"{playcountTotal:,.0f}"
-                    # formats the string properly
-                    songStuffList.append(shaaPlaycount)
-                    # adds the track's playcount to the list
-                    shaaPlaycountSong = shaaPlaycount
-                    # copies the variable
 
-                elif songInfoField1 == "Total":
-                # if the selected type for the first field is Total
+            ### SHAAless Behavior ###
 
-                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
-                    # adds up *all* the playcounts for all tracks
-                    songStuffList.append(shaaPlaycount)
-                    # adds the total playcount to the list
 
-            ### Field 1 Format ###
+            if not os.path.exists(SHAAdir) or disableShaa:
+            # if not installed as an addon to Spotify Analyser, will not send numbers forward - rather just configured, set fields
 
-                songStuffList.append(songInfoFormatPlays)
-                # adds the first field's custom end styling
+            ### Field 1 / Field 2 ###
 
-            ### Spacer ###
-
+                songStuffList.append(songInfoFallback)
+                # adds the user-defined first field to list
                 songStuffList.append(songInfoSpacer)
-                # adds the spacer to the list
-
-            ### Minutes / Field 2 ###
-
-                if songInfoField2 in [0, 2, 4]:
-                # if the selected type for the second field is 0 (track minutes), 2 (track hours) or 4 (track seconds)
-
-                    if isinstance(playtime, pd.Series):
-                    # if there's more than one instance of the current song
-                        playtimeTotal = int((playtime.sum()) / 1000)
-                        # calculates the total playtime (seconds)
-                    else:
-                    # if there's only one instance of the current song
-                        playtimeTotal = int(playtime / 1000)
-                        # saves the total as the playtime of the song
-
-                    shaaPlaytimeMin = f"{(playtimeTotal / 60):,.1f}"
-                    # stores a second variable for minutes (for details window)
-
-                    if songInfoField2 == 0:
-                    # track minutes
-                        playtimeTotal = (playtimeTotal / 60)
-                        # divides the seconds into minutes
+                # adds the spacer to list
+                songStuffList.append(songInfoFallback)
+                # adds the user-defined second field to list
                     
-                    elif songInfoField2 == 2:
-                    # track hours
-                        playtimeTotal = (playtimeTotal / 3600)
-                        # divides the seconds into hours
+            ### Details / Field 3 ###
 
-                    shaaPlaytime = f"{playtimeTotal:,.1f}"
-                    # formats the string properly
-                    songStuffList.append(shaaPlaytime)
-                    # adds the total playcount to the list
-
-                elif songInfoField2 in [1, 3, 5]:
-                # if the selected type for the first field is 1 (total minutes), 3 (total hours) or 5 (total seconds)
-
-                    shaaPlaytime = int(csvReader["Total Time"].agg("sum") / 1000)
-                    # adds up *all* the time played (milliseconds/1000 = seconds)
-
-                    if songInfoField2 == 1:
-                    # total minutes
-                        shaaPlaytime = (shaaPlaytime / 60)
-                        # divides the seconds into minutes
-
-                    elif songInfoField2 == 3:
-                    # total hours
-                        shaaPlaytime = (shaaPlaytime / 3600)
-                        # divides the seconds into hours
-
-                    shaaPlaytime = f"{shaaPlaytime:,.1f}"
-                    # formats the string properly
-
-                    songStuffList.append(shaaPlaytime)
+                if songInfoFormatDetails:
+                # if the format option isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetails)
                     # adds to string list
 
-                ### Field 2 Format ###
+                if songInfoDetailsDoubleSpace:
+                # if the double space is enabled
+                    cppLargeHoverList.append(" ")
+                    # adds an empty space
 
-                songStuffList.append(songInfoFormatMins)
-                # adds the second field's custom end styling
+                if songInfoFormatDetailsSpacer:
+                # if the format spacer option isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                    # adds to string list
+                
+                if shaaInfoDetails in detailOptions:
+                # if the config option matches one of the set defaults
+
+                    if shaaInfoDetails == "Volume":
+                    # if the config calls for volume
+                        try:
+                        # tries to get the volume (not supported by all devices)
+                            shaaDetailField = f"{csDevice.get("volume_percent")}%"
+                            # takes the volume and makes it a percentage
+                        except:
+                        # if it can't
+                            shaaDetailField = "some volume"
+                            # puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
                     
-        ### Details / Field 3 / Total Hours ###
+                    elif shaaInfoDetails == "Repeat":
+                    # if the config calls for repeat state
+                        try:
+                        # tries to get the repeat state boolean (some devices don't support)
+                            repeatState = csFull.get("repeat_state")
+                            # grabs the boolean
 
-            if shaaInfoDetails in detailOptions:
-            # if the config option matches one of the set defaults
+                            if repeatState:
+                                # if repeat state returns True
+                                shaaDetailField = "on Repeat"
+                                # adds string form
+                            else:
+                                # if repeat state doesn't return True
+                                shaaDetailField = "not on Repeat"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Repeat"
+                            # if it fails, puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
 
-                if shaaInfoDetails.lower() == "hours":
-                # if the config calls for total hours
-                    shaaDetailField = totalHours
-                    # gets total hours
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted one
+                    elif shaaInfoDetails == "Shuffle":
+                    # if the config calls for shuffle state
+                        try:
+                        # tries to get the shuffle state boolean (some devices don't support)
+                            shuffleState = csFull.get("shuffle_state")
+                            # grabs the boolean
 
-                elif shaaInfoDetails.lower() == "minutes":
-                # if the config calls for total minutes
-                    shaaDetailField = totalMinutes
-                    # gets total minutes
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted one
-
-                elif shaaInfoDetails.lower() == "seconds":
-                # if the config calls for total seconds
-                    shaaDetailField = totalSeconds
-                    # gets total seconds
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted one
-
-                elif shaaInfoDetails.lower() == "cycle":
-                # if the config calls for cycle
-                    if cycleCount == 0:
-                    # on the first cycle, uses hours
-                        shaaDetailField = totalHours
-                        # sets the field to be total hours
-                        cycleCount += 1
-                        # adds 1 to counter
-                        cppLargeHoverList.append("Total Hours")
-                        # adds the string
-                    elif cycleCount == 1:
-                    # on the second cycle, uses minutes
-                        shaaDetailField = totalMinutes
-                        # sets the field to be total minutes
-                        cycleCount += 1
-                        # adds 1 to counter
-                        cppLargeHoverList.append("Total Minutes")
-                        # adds the string
-                    elif cycleCount == 2: 
-                    # on the third (last) cycle, uses seconds
-                        shaaDetailField = totalSeconds
-                        # sets the field to be total seconds
-                        cycleCount = 0
-                        # resets to 0 for next cycle 
-                        cppLargeHoverList.append("Total Seconds")
-                        # adds the string
-
-                elif shaaInfoDetails.lower() == "volume":
-                # if the config calls for volume
-                    try:
-                    # tries to get the volume (not supported by all devices)
-                        shaaDetailField = f"{csDevice.get("volume_percent")}%"
-                        # takes the volume and makes it a percentage
-                    except:
-                    # if it can't
-                        shaaDetailField = "some volume"
-                        # puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-                
-                elif shaaInfoDetails.lower() == "repeat":
-                # if the config calls for repeat state
-                    try:
-                    # tries to get the repeat state boolean (some devices don't support)
-                        repeatState = csFull.get("repeat_state")
-                        # grabs the boolean
-
-                        if repeatState:
-                            # if repeat state returns True
-                            shaaDetailField = "on Repeat"
-                            # adds string form
-                        else:
-                            # if repeat state doesn't return True
-                            shaaDetailField = "not on Repeat"
-                            # adds string form
-                    except:
-                        shaaDetailField = "may be on Repeat"
-                        # if it fails, puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-
-                elif shaaInfoDetails.lower() == "shuffle":
-                # if the config calls for shuffle state
-                    try:
-                    # tries to get the shuffle state boolean (some devices don't support)
-                        shuffleState = csFull.get("shuffle_state")
-                        # grabs the boolean
-
-                        if shuffleState:
-                            # if shuffle state returns True
-                            shaaDetailField = "on Shuffle"
-                            # adds string form
-                        else:
-                            # if shuffle state doesn't return True
-                            shaaDetailField = "not on Shuffle"
-                            # adds string form
-                    except:
-                        shaaDetailField = "may be on Shuffle"
-                        # if it fails, puts a fallback string
-                    cppLargeHoverList.append(songInfoFormatDetails)
-                    # uses the user-formatted detail text
-
-            else:
-            # if the config option doesn't match any of the set defaults
-                shaaDetailField = shaaInfoDetails
-                # sets the total time to match custom string instead
-                cppLargeHoverList.append(songInfoFormatDetails)
-                # adds the field 3 format (start string, default is Total Hours)
-
-            if songInfoDetailsDoubleSpace:
-            # if the double space is enabled
-                cppLargeHoverList.append(" ")
-                # adds a space to the left side of the spacer
-            if songInfoFormatDetailsSpacer:
-            # if the spacer isn't empty
-                cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
-                # adds the spacer and a space on the right side
-
-            cppLargeHoverList.append(shaaDetailField + " ")
-            # adds the detail field text and a space
-
-            if dsiShoutout:
-            # if the dsi shoutout option is enabled
-                cppLargeHoverList.append(dsiShoutoutStr)
-                # adds the shoutout string (// data by DSI)
-
-            cppLargeHover = "".join(cppLargeHoverList)
-            # joins together the list
-
-        ### No Track Match ###
-
-            if finalURI not in csvReader.index:
-            # if the track wasn't found in CSV
-                if enableUpdates:
-                # if the updates are enabled
-                    mainWin.labelSwap.emit(f"{csName} not found in CSV, using fallback values", 1)
-                    # lets user know the song wasn't found in CSV
-                
-                ### Field 1 / Field 2 ###
-
-                if shaaFallback == "Total":
-                # if the selected fallback is Total/total
-                    shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
-                    # uses the total playcount for all songs
-                    shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
-                    # uses the total amount of playtime for all songs
+                            if shuffleState:
+                                # if shuffle state returns True
+                                shaaDetailField = "on Shuffle"
+                                # adds string form
+                            else:
+                                # if shuffle state doesn't return True
+                                shaaDetailField = "not on Shuffle"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Shuffle"
+                            # if it fails, puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
+                    else:
+                    # config calls for some options that doesn't exist without SHAA
+                        shaaDetailField = "may be jamming out"
+                        # uses fallback string instead
                 else:
-                # if the selected fallback isn't total
-                    shaaPlaycount = shaaFallback
-                    shaaPlaytime = shaaFallback
-                    # takes the custom string and replaces playcount/time variables with that
+                    # if the config option doesn't match any of the set defaults
+                    shaaDetailField = shaaInfoDetails
+                    # sets the total time to match custom string instead
 
-                songStuffList.append(shaaPlaycount)
-                # adds to list
-                if songInfoFallback:
-                # if the fallback isn't empty
-                    songStuffList.append(songInfoFallback)
-                    # adds the custom field to string
-                songStuffList.append(songInfoFormatPlays)
-                # adds the first field end text to list
-                songStuffList.append(songInfoSpacer)
-                # adds the spacer
-                songStuffList.append(shaaPlaytime)
-                # adds to list
-                if songInfoFallback:
-                # if the fallback isn't empty
-                    songStuffList.append(songInfoFallback)
-                    # adds the custom field to string
-                songStuffList.append(songInfoFormatMins)
-                # adds the second field end text to list
-            
+                cppLargeHoverList.append(shaaDetailField + " ")
+                # joins together the list 
+
+                if dsiShoutout:
+                # if the DSI shoutout tag is enabled
+                    cppLargeHoverList.append(dsiShoutoutStr)
+                    # adds the string (// data by DSI)
+
+                cppLargeHover = "".join(cppLargeHoverList)
+                # joins together the details list to one string
+
+
+        ### URI Reassignment ###
+
+            finalURI = csURI
+            # creates a new variable with the current song's URI
+            altURI = None
+            # creates a new variable to store a mapped version of the song's URI
+
+        ### SHAA Behavior ###
+
+            if os.path.exists(SHAAdir) and not disableShaa:
+            # this is the addon part to Spotify (History) Analyser (SHA + addon = SHAA)
+            # this data is only entered to rich presence if used with SHA (and installed correctly)
+            # checks if the CSV file exists to pull data from (requires one full run of SHA prior)
+                
+            ### URI Checkpoint ###
+
+                if enableMapping:
+                # if URI mapping is enabled
+                    
+                    altURI = uriMap.get(csURI)
+                    # creates an alteranate variable from the JSON map by checking with the current URI
+
+                    if finalURI not in uriList:
+                    # if the URI is not in the URI list yet
+                        if enableUpdates:
+                        # if the user updates are enabled
+                            mainWin.labelSwap.emit("Song URI not found in list, added to URI map list", 0)
+                            # user update
+                        uriList.append(finalURI)
+                        # adds it to the list of URIs
+
+                    if (finalURI not in csvReader.index) and (altURI in csvReader.index):
+                    # if the URI is not found in the CSV index, but the alternate URI is
+                        finalURI = altURI
+                        # sets the URI to use the alternate instead
+                        if enableUpdates:
+                        # if the user updates are enabled
+                            mainWin.labelSwap.emit("Using song stats from mapped URI", 0)
+                            # user update
+
+                if finalURI in csvReader.index:
+                # checks if the URI is in the CSV
+                    if enableUpdates:
+                    # if the user updates are enabled
+                        mainWin.labelSwap.emit(f"Song stats found", 0)
+                        # user update
+
+                ### Plays / Field 1 ###
+
+                    playcount = csvReader.loc[finalURI, "Playcount"]
+                    playtime = csvReader.loc[finalURI, "Total Time"]
+                    # sets temp variables that lookup the cells based on the track and columns
+
+                    if songInfoField1 == "Track":
+                    # if the selected type for first field is Track
+
+                        if isinstance(playcount, pd.Series):
+                        # if there's more than one instance of the current song
+                            playcountTotal = playcount.sum()
+                            # saves the playcount total based on calculated playcounts
+                        else:
+                        # if there's only one instance of the current song
+                            playcountTotal = playcount
+                            # saves the total as the playcount of the song
+
+                        shaaPlaycount = f"{playcountTotal:,.0f}"
+                        # formats the string properly
+                        songStuffList.append(shaaPlaycount)
+                        # adds the track's playcount to the list
+                        shaaPlaycountSong = shaaPlaycount
+                        # copies the variable
+
+                    elif songInfoField1 == "Total":
+                    # if the selected type for the first field is Total
+
+                        shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                        # adds up *all* the playcounts for all tracks
+                        songStuffList.append(shaaPlaycount)
+                        # adds the total playcount to the list
+
+                ### Field 1 Format ###
+
+                    songStuffList.append(songInfoFormatPlays)
+                    # adds the first field's custom end styling
+
+                ### Spacer ###
+
+                    songStuffList.append(songInfoSpacer)
+                    # adds the spacer to the list
+
+                ### Minutes / Field 2 ###
+
+                    if songInfoField2 in [0, 2, 4]:
+                    # if the selected type for the second field is 0 (track minutes), 2 (track hours) or 4 (track seconds)
+
+                        if isinstance(playtime, pd.Series):
+                        # if there's more than one instance of the current song
+                            playtimeTotal = int((playtime.sum()) / 1000)
+                            # calculates the total playtime (seconds)
+                        else:
+                        # if there's only one instance of the current song
+                            playtimeTotal = int(playtime / 1000)
+                            # saves the total as the playtime of the song
+
+                        shaaPlaytimeMin = f"{(playtimeTotal / 60):,.1f}"
+                        # stores a second variable for minutes (for details window)
+
+                        if songInfoField2 == 0:
+                        # track minutes
+                            playtimeTotal = (playtimeTotal / 60)
+                            # divides the seconds into minutes
+                        
+                        elif songInfoField2 == 2:
+                        # track hours
+                            playtimeTotal = (playtimeTotal / 3600)
+                            # divides the seconds into hours
+
+                        shaaPlaytime = f"{playtimeTotal:,.1f}"
+                        # formats the string properly
+                        songStuffList.append(shaaPlaytime)
+                        # adds the total playcount to the list
+
+                    elif songInfoField2 in [1, 3, 5]:
+                    # if the selected type for the first field is 1 (total minutes), 3 (total hours) or 5 (total seconds)
+
+                        shaaPlaytime = int(csvReader["Total Time"].agg("sum") / 1000)
+                        # adds up *all* the time played (milliseconds/1000 = seconds)
+
+                        if songInfoField2 == 1:
+                        # total minutes
+                            shaaPlaytime = (shaaPlaytime / 60)
+                            # divides the seconds into minutes
+
+                        elif songInfoField2 == 3:
+                        # total hours
+                            shaaPlaytime = (shaaPlaytime / 3600)
+                            # divides the seconds into hours
+
+                        shaaPlaytime = f"{shaaPlaytime:,.1f}"
+                        # formats the string properly
+
+                        songStuffList.append(shaaPlaytime)
+                        # adds to string list
+
+                    ### Field 2 Format ###
+
+                    songStuffList.append(songInfoFormatMins)
+                    # adds the second field's custom end styling
+                        
+            ### Details / Field 3 / Total Hours ###
+
+                if shaaInfoDetails in detailOptions:
+                # if the config option matches one of the set defaults
+
+                    if shaaInfoDetails == "Hours":
+                    # if the config calls for total hours
+                        shaaDetailField = totalHours
+                        # gets total hours
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted one
+
+                    elif shaaInfoDetails == "Minutes":
+                    # if the config calls for total minutes
+                        shaaDetailField = totalMinutes
+                        # gets total minutes
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted one
+
+                    elif shaaInfoDetails == "Seconds":
+                    # if the config calls for total seconds
+                        shaaDetailField = totalSeconds
+                        # gets total seconds
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted one
+
+                    elif shaaInfoDetails == "Plays":
+                    # if the config calls for total plays
+                        shaaDetailField = totalPlays
+                        # gets total plays
+                        cppLargeHoverList.append(songInfoFormatDetails)
+
+                    elif shaaInfoDetails == "Cycle":
+                    # if the config calls for cycle
+                        if cycleCount == 0:
+                        # on the first cycle, uses hours
+                            shaaDetailField = totalHours
+                            # sets the field to be total hours
+                            cycleCount += 1
+                            # adds 1 to counter
+                            cppLargeHoverList.append("Total Hours")
+                            # adds the string
+                        elif cycleCount == 1:
+                        # on the second cycle, uses minutes
+                            shaaDetailField = totalMinutes
+                            # sets the field to be total minutes
+                            cycleCount += 1
+                            # adds 1 to counter
+                            cppLargeHoverList.append("Total Minutes")
+                            # adds the string
+                        elif cycleCount == 2: 
+                        # on the third cycle, uses seconds
+                            shaaDetailField = totalSeconds
+                            # sets the field to be total seconds
+                            cycleCount += 1
+                            # adds 1 to the counter
+                            cppLargeHoverList.append("Total Seconds")
+                            # adds the string
+                        elif cycleCount == 3:
+                        # on the fourth (last) cycle, uses plays
+                            shaaDetailField = totalPlays
+                            # sets the field to be total plays
+                            cycleCount = 0
+                            # resets the counter
+                            cppLargeHoverList.append("Total Plays")
+                            # adds the string
+
+                    elif shaaInfoDetails == "Volume":
+                    # if the config calls for volume
+                        try:
+                        # tries to get the volume (not supported by all devices)
+                            shaaDetailField = f"{csDevice.get("volume_percent")}%"
+                            # takes the volume and makes it a percentage
+                        except:
+                        # if it can't
+                            shaaDetailField = "some volume"
+                            # puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
+                    
+                    elif shaaInfoDetails == "Repeat":
+                    # if the config calls for repeat state
+                        try:
+                        # tries to get the repeat state boolean (some devices don't support)
+                            repeatState = csFull.get("repeat_state")
+                            # grabs the boolean
+
+                            if repeatState:
+                                # if repeat state returns True
+                                shaaDetailField = "on Repeat"
+                                # adds string form
+                            else:
+                                # if repeat state doesn't return True
+                                shaaDetailField = "not on Repeat"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Repeat"
+                            # if it fails, puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
+
+                    elif shaaInfoDetails == "Shuffle":
+                    # if the config calls for shuffle state
+                        try:
+                        # tries to get the shuffle state boolean (some devices don't support)
+                            shuffleState = csFull.get("shuffle_state")
+                            # grabs the boolean
+
+                            if shuffleState:
+                                # if shuffle state returns True
+                                shaaDetailField = "on Shuffle"
+                                # adds string form
+                            else:
+                                # if shuffle state doesn't return True
+                                shaaDetailField = "not on Shuffle"
+                                # adds string form
+                        except:
+                            shaaDetailField = "may be on Shuffle"
+                            # if it fails, puts a fallback string
+                        cppLargeHoverList.append(songInfoFormatDetails)
+                        # uses the user-formatted detail text
+
+                else:
+                # if the config option doesn't match any of the set defaults
+                    shaaDetailField = shaaInfoDetails
+                    # sets the total time to match custom string instead
+                    cppLargeHoverList.append(songInfoFormatDetails)
+                    # adds the field 3 format (start string, default is Total Hours)
+
+                if songInfoDetailsDoubleSpace:
+                # if the double space is enabled
+                    cppLargeHoverList.append(" ")
+                    # adds a space to the left side of the spacer
+                if songInfoFormatDetailsSpacer:
+                # if the spacer isn't empty
+                    cppLargeHoverList.append(songInfoFormatDetailsSpacer + " ")
+                    # adds the spacer and a space on the right side
+
+                cppLargeHoverList.append(shaaDetailField + " ")
+                # adds the detail field text and a space
+
+                if dsiShoutout:
+                # if the dsi shoutout option is enabled
+                    cppLargeHoverList.append(dsiShoutoutStr)
+                    # adds the shoutout string (// data by DSI)
+
+                cppLargeHover = "".join(cppLargeHoverList)
+                # joins together the list
+
+            ### No Track Match ###
+
+                if finalURI not in csvReader.index:
+                # if the track wasn't found in CSV
+                    if enableUpdates:
+                    # if the updates are enabled
+                        mainWin.labelSwap.emit(f"{csName} not found in CSV, using fallback values", 0)
+                        # lets user know the song wasn't found in CSV
+                    
+                    ### Field 1 / Field 2 ###
+
+                    if shaaFallback == "Total":
+                    # if the selected fallback is Total/total
+                        shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                        # uses the total playcount for all songs
+                        shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+                        # uses the total amount of playtime for all songs
+                    else:
+                    # if the selected fallback isn't total
+                        shaaPlaycount = shaaFallback
+                        shaaPlaytime = shaaFallback
+                        # takes the custom string and replaces playcount/time variables with that
+
+                    songStuffList.append(shaaPlaycount)
+                    # adds to list
+                    if songInfoFallback:
+                    # if the fallback isn't empty
+                        songStuffList.append(songInfoFallback)
+                        # adds the custom field to string
+                    songStuffList.append(songInfoFormatPlays)
+                    # adds the first field end text to list
+                    songStuffList.append(songInfoSpacer)
+                    # adds the spacer
+                    songStuffList.append(shaaPlaytime)
+                    # adds to list
+                    if songInfoFallback:
+                    # if the fallback isn't empty
+                        songStuffList.append(songInfoFallback)
+                        # adds the custom field to string
+                    songStuffList.append(songInfoFormatMins)
+                    # adds the second field end text to list
+                
         ### Song State String Joiner (SHAA and non) ###
 
-        if songStuffList:
-        # if there's anything in songStuffList (not empty)
-            cppState = " ".join(songStuffList)
+            if songStuffList:
+            # if there's anything in songStuffList (not empty)
+                cppState = " ".join(songStuffList)
 
-        else:
-        # if the list *is* empty
-            cppState = "An amount of time spent listening"
-            # puts a fallback string instead
+            else:
+            # if the list *is* empty
+                cppState = "An amount of time spent listening"
+                # puts a fallback string instead
 
-    ### Song Style ###
+        ### Song Style ###
 
-        SNSL = True
-        # sets a temp flag for the left spacer, just so it can't get double printed
+            SNSL = True
+            # sets a temp flag for the left spacer, just so it can't get double printed
 
-        if preText:
-        # if preText has something
-            songNameList.append(preText)
-            # adds to string
-
-        if enableSong:
-        # if song is enabled
-            songNameList.append(csName)
-            # adds to string
-            if songNameSpacerL:
-            # if songNameSpacerL(eft) isn't empty
-                SNSL = False
-                # sets the requirement to add Left Spacer to false, so that it doesn't get added
-                if (enableArtist or enableAlbum) or (enableArtist and enableAlbum):
-                # if artist OR album is enabled, OR if both are enabled (aka there's *something* after)
-                    songNameList.append(songNameSpacerL)
-                    # adds the left spacer, since there's something to the right of it
-                else:
-                # if there's nothing after, doesn't add the spacer
-                    None
-
-        if enableArtist:
-        # if artist is enabled
-            songNameList.append(csArtist)
-            # adds to string
-            if songNameSpacerL and SNSL:
-            # if songNameSpacerL(eft) has something and isn't already in
-                songNameList.append(songNameSpacerL)
+            if preText:
+            # if preText has something
+                songNameList.append(preText)
                 # adds to string
 
-        if enableAlbum or postText:
-        # if there's at least one element after (album is enabled *or* there's a post-text)
-            if not enableSong and not enableArtist:
-            # if there's no other elements (pre/post texts not counting)
-                None
-                # does nothing
-            else:
-                songNameList.append(songNameSpacerR)
-                # if there's more than just album, adds the right spacer to string
+            if enableSong:
+            # if song is enabled
+                songNameList.append(csName)
+                # adds to string
+                if songNameSpacerL:
+                # if songNameSpacerL(eft) isn't empty
+                    SNSL = False
+                    # sets the requirement to add Left Spacer to false, so that it doesn't get added
+                    if (enableArtist or enableAlbum) or (enableArtist and enableAlbum):
+                    # if artist OR album is enabled, OR if both are enabled (aka there's *something* after)
+                        songNameList.append(songNameSpacerL)
+                        # adds the left spacer, since there's something to the right of it
+                    else:
+                    # if there's nothing after, doesn't add the spacer
+                        None
 
-        if enableAlbum:
-        # if album is enabled
-            cppAlbumName = csAlbumName
-            # sets the final name (not necessary but keeps symmetry)
+            if enableArtist:
+            # if artist is enabled
+                songNameList.append(csArtistName)
+                # adds to string
+                if songNameSpacerL and SNSL:
+                # if songNameSpacerL(eft) has something and isn't already in
+                    songNameList.append(songNameSpacerL)
+                    # adds to string
 
-        if postText:
-        # if postText has something
-            songNameList.append(postText)
-            # adds to string
-
-
-    ### Song Details Joiner ###
-
-        if songNameList:
-        # if there's anything in songNameList (not empty)
-            cppSongName = " ".join(songNameList)
-        else:
-        # if the list *is* empty
-            cppSongName = "A song, by an artist, on an album"
-            # puts a fallback string instead
-
-    ### Picture Selection ###
-
-        if trackCounter != oldCount and csPlayState:
-        # checks if the song has changed (this way it doesn't change the picture when the song gets paused)
-
-            oldCount = trackCounter
-            # updates the song counter
-
-            if not pictureQueue.empty():
-            # checks pictureQueue to see if it has something
-                cppLargeImage = pictureQueue.get()
-                # stores the picture from pictureQueue as the picture to send to C++
-
-                if picCycleTime == "song" or picCycleTime == "Song":
-                # if the cycle "time" is instead set to "song"
-
-                    picEvent.set()
-                    # tells the picture selector to select a new one 
-                    # this is because the picture selection happens automatically, except with "song", where it happens on a per-song basis
-
-
-    ### C++ Text File Writer ###
-
-
-        if picCycleList == "Spotify" or picCycleList == "spotify":
-        # checks if the picture list is set to send pictures from Spotify covers
-            cppLargeImage = csCover
-            # replaces the image link with the spotify album cover if so
-
-        if not disableShaa:
-        # if shaa is enabled (not disabled)
-            mainWin.blacklistTag.emit("New Song", csName, finalURI)
-            # sends a signal to the blacklist manager to change the name and information
-
-        if finalURI in blacklist:
-        # if the song('s URI) is in the blacklist
-            if blacklist[finalURI]["status"] == "blacklisted":
-            # if the song's URI in the blacklist returns a blacklisted value
-                favoriteList = whitelistManager("List")
-                # calls the whitelistmanager to list current favorite songs, stores it
-
-                if len(favoriteList) > 0:
-                # if there's more than 0 items in the list
-                    pickedSong = random.choice(favoriteList)
-                    # gets a random song from the list of favorite songs
-                    mainWin.labelSwap.emit("This song is blacklisted, using a favorited song instead...", 0)
-                    # user inform
-                    cppReplace = pickedSong["info"]
-                    # gets the song's full dictionary
-                    cppSongName = cppReplace["Song"]
-                    cppAlbumName = cppReplace["Album"]
-                    cppState = cppReplace["State"]
-                    cppLargeImage = cppReplace["Large Image"]
-                    cppLargeHover = cppReplace["Large Text"]
-                    hoverText = cppReplace["Small Text"]
-                    csURL = cppReplace["Spotify URL"]
-                    smallURL = cppReplace["Small URL"]
-                    # grabs all the relevant details that will replace the current song's information
+            if enableAlbum or postText:
+            # if there's at least one element after (album is enabled *or* there's a post-text)
+                if not enableSong and not enableArtist:
+                # if there's no other elements (pre/post texts not counting)
+                    None
+                    # does nothing
                 else:
-                    mainWin.labelSwap.emit("This song is blacklisted, but no favorited songs found!\nPlease favorite at least one song to utilize blacklisting!", 2)
-                    # user update
+                    songNameList.append(songNameSpacerR)
+                    # if there's more than just album, adds the right spacer to string
 
-        cppFull = {
-            "Song": cppSongName,
-            "Album": cppAlbumName,
-            "State": cppState,
-            "Large Image": cppLargeImage,
-            "Large Text": cppLargeHover,
-            "Small Text": hoverText,
-            "Spotify URL": csURL,
-            "Small URL": smallURL,
-            "UNIX Start": csUnixStart,
-            "UNIX End": csUnixEnd,
-            "Pause": (not csPlayState),
-            "Song Raw": csName,
-            "Artist": csArtist,
-            "Track ID": trackCounter,
-            "URI": finalURI,
-            "Playcount": (shaaPlaycountSong if shaaPlaycountSong is not None else "N/A"),
-            "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A"),
-            "SHAA": (not disableShaa)
-        }
-        # forms a dictionary of the current song's full info (sent to C++ and to Flask app, if enabled)
+            if enableAlbum:
+            # if album is enabled
+                cppAlbumName = csAlbumName
+                # sets the final name (not necessary but keeps symmetry)
+
+            if postText:
+            # if postText has something
+                songNameList.append(postText)
+                # adds to string
+
+        ### Song Details Joiner ###
+
+            if songNameList:
+            # if there's anything in songNameList (not empty)
+                cppSongName = " ".join(songNameList)
+            else:
+            # if the list *is* empty
+                cppSongName = "A song, by an artist, on an album"
+                # puts a fallback string instead
+
+        ### Picture Selection ###
+
+            if trackCounter != oldCount and csPlayState:
+            # checks if the song has changed (this way it doesn't change the picture when the song gets paused)
+
+                oldCount = trackCounter
+                # updates the song counter
+
+                if not pictureQueue.empty():
+                # checks pictureQueue to see if it has something
+                    cppLargeImage = pictureQueue.get()
+                    # stores the picture from pictureQueue as the picture to send to C++
+
+                    if picCycleTime == "song" or picCycleTime == "Song":
+                    # if the cycle "time" is instead set to "song"
+
+                        picEvent.set()
+                        # tells the picture selector to select a new one 
+                        # this is because the picture selection happens automatically, except with "song", where it happens on a per-song basis
+
+        ### C++ Packet Former ###
+
+            if picCycleList == "Spotify":
+            # checks if the picture list is set to send pictures from Spotify covers
+                cppLargeImage = csCover
+                # replaces the image link with the spotify album cover if so
+
+            if not disableShaa:
+            # if shaa is enabled (not disabled)
+                mainWin.blacklistTag.emit("New Song", csName, finalURI)
+                # sends a signal to the blacklist manager to change the name and information
+
+            if finalURI in blacklist:
+            # if the song('s URI) is in the blacklist
+                if blacklist[finalURI]["status"] == "blacklisted":
+                # if the song's URI in the blacklist returns a blacklisted value
+                    favoriteList = whitelistManager("List")
+                    # calls the whitelistmanager to list current favorite songs, stores it
+
+                    if len(favoriteList) > 0:
+                    # if there's more than 0 items in the list
+                        pickedSong = random.choice(favoriteList)
+                        # gets a random song from the list of favorite songs
+                        mainWin.labelSwap.emit("This song is blacklisted, using a favorited song instead...", 0)
+                        # user inform
+                        cppReplace = pickedSong["info"]
+                        # gets the song's full dictionary
+                        cppSongName = cppReplace["Song"]
+                        cppAlbumName = cppReplace["Album"]
+                        cppState = cppReplace["State"]
+                        cppLargeImage = cppReplace["Large Image"]
+                        cppLargeHover = cppReplace["Large Text"]
+                        hoverText = cppReplace["Small Text"]
+                        csURL = cppReplace["Spotify URL"]
+                        smallURL = cppReplace["Small URL"]
+                        # grabs all the relevant details that will replace the current song's information
+                    else:
+                        mainWin.labelSwap.emit("This song is blacklisted, but no favorited songs found!\nPlease favorite at least one song to utilize blacklisting!", 2)
+                        # user update
+
+            cppFull = {
+                "Playback State": True,
+                "Song": cppSongName,
+                "Song Name": csSongName,
+                "Artist Name": (csArtistName if not isLocalSong else "A local artist"),
+                "Artist URL": (csArtistURL if not isLocalSong else "A local artist"),
+                "Album": cppAlbumName,
+                "Album Name": (csAlbumName if not isLocalSong else "A local album"),
+                "Album URL": (csAlbumURL if not isLocalSong else "A local album"),
+                "Playlist URL": (csPlaylistURL if onPlaylist else "No playlist"),
+                "Spotify Image": (csCover if not isLocalSong else "https://i.imgur.com/FeUsGIz.png"),
+                "State": cppState,
+                "Large Image": cppLargeImage,
+                "Large Text": cppLargeHover,
+                "Small Text": hoverText,
+                "Spotify URL": (csURL if not isLocalSong else "A local song"),
+                "Small URL": smallURL,
+                "UNIX Start": csUnixStart,
+                "UNIX End": csUnixEnd,
+                "Song Progress": csProgress,
+                "Pause": (not csPlayState),
+                "Song Raw": csName,
+                "Track ID": trackCounter,
+                "URI": finalURI,
+                "Playcount": (shaaPlaycountSong if shaaPlaycountSong is not None else "N/A"),
+                "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A"),
+                "SHAA": (not disableShaa)
+            }
+            # forms a dictionary of the current song's full info (sent to C++ and Flask app, if enabled)
 
         blacklistInfo = {
             "Song Name": csName,
-            "Artist Name": csArtist,
+            "Artist Name": csArtistName,
             "Song": cppSongName,
             "Album": cppAlbumName,
             "State": cppState,
@@ -3490,10 +3476,8 @@ def song(pictureQueue, event):
 
         cppPackets(cppFull)
         # sends the formed dictionary to the C++ program
-
         mainWin.songDetails()
         # calls the song details function to update the visuals
-
         songEvent.clear()
         # clears the event queue, ready to get new requests
 
@@ -3501,33 +3485,51 @@ def song(pictureQueue, event):
 
 ### Information Checking Loop ###
 
-
-
 def looper():
     """Function that checks song info on a loop"""
-    global currentURI, currentInfo, pauseUpdated, trackCounter, noPlayCounter, lastPlayStamp
+    global currentURI, currentInfo, pauseUpdated, trackCounter, noPlayCounter, lastPlayStamp, lastDSIsave
     # global -> local
 
     while True:
     # this loop checks if the song playing is the same as the previous update, waits if yes, updates the song to match if not
+
+        now = time.time()
+        # gets the current time, saves as local variable (used by a few checks)
+
+        if (lastDSIsave + 7200) < now:
+        # if it's been over 7200 seconds (2 hours) since the last auto-save
+            mainWin.saveSignal.emit("literally anything but shut down")
+            # sends a save signal to the stopping function of main window (but with not "Shut Down", so it saves, doesn't quit)
+            lastDSIsave = now
+            # sets the time to match current time
 
         info = authPlayback()
         # picks up all the info Spotify sends in an update
 
         if not info or not info.get("item"):
             # checks if the info "package" has something and if it contains valid information
+
             if noPlayCounter >= 3:
             # if the counter has reached 3, meaning it's been 3 attempts in a row
-                mainWin.labelSwap.emit("No songs detected for 15 seconds, lowering API rate and disabling logging until playback continues", 2)
-                # user inform on change of process
-                time.sleep(15)
-                # waits for 15 seconds (3x slower API rate)
+                if noPlayCounter == 3:
+                # only on the 4th check
+                    mainWin.labelSwap.emit(f"No playback detected for 15 seconds, lowering API rate to 1x/{int(refreshTime+10)}s and disabling logging until playback continues", 2)
+                    # user inform on change of process
+                noPlayCounter += 1
+                # adds 1 to the counter
+                songEvent.set()
+                # since this only runs when the program first starts, sets an event immediately to song, to refresh data
+                time.sleep(refreshTime + 10)
+                # waits for rf+10 seconds (slower API rate)
                 continue
                 # resets back to looper start
-            else:
+        
+            elif noPlayCounter < 3:
             # if the counter is less than 3
-                mainWin.labelSwap.emit("No playing state detected, re-checking in 5 seconds", 2)
+                mainWin.labelSwap.emit("No playback detected, re-checking in 5 seconds", 2)
                 # user inform
+                songEvent.set()
+                # since this only runs when the program first starts, sets an event immediately to song, to refresh data
                 time.sleep(5)
                 # waits for a few seconds
                 noPlayCounter += 1
@@ -3537,7 +3539,6 @@ def looper():
         
         currentInfo = info
         # sets the global variable to match
-
         noPlayCounter = 0
         # resets the "no playing state" counter to 0, since the loop has progressed here
 
@@ -3547,10 +3548,17 @@ def looper():
         # stores name for display purposes
         songProg = ((info.get("progress_ms")) / 1000)
         # grabs the progress of the song at the pull time (ms/1000 = seconds)
-        songStart = int(time.time() - songProg)
-        # stores the start time of the song by taking current time and subtracting progress
-        playing = info.get("is_playing")
+        playing = bool(info.get("is_playing"))
         # checks the pause state (True if playing, False if not)
+
+        if playing:
+        # if the song is playing
+            songStart = int(now - songProg)
+            # stores the start time of the song by taking current time and subtracting progress
+        else:
+        # if the song is paused
+            songStart = storedStart
+            # uses the last stored value (shouldn't be very far off)
 
         if currentURI is None:
             # when the program first starts, the currentURI will be "None", this updates it
@@ -3573,20 +3581,20 @@ def looper():
                 mainWin.labelSwap.emit(f"First song: {songName}, has been successfully processed", 3)
                 # if user wants feedback, sends this
 
-        songDur = ((info.get("item")).get("duration_ms")/1000)
+        songDur = ((info.get("item")).get("duration_ms") / 1000)
         # grabs both the current time and length of the song (in seconds)
-        songLeft = (songDur-songProg)
+        songLeft = (songDur - songProg)
         # calculates the time left on the song
 
         if (currentURI != songURI) or ((songStart-15) > storedStart) or (pauseUpdated and playing):
         # if there's a song change (if the URI has changed or the start timestamp is higher than the stored timestamp) or if the pause has been triggered
 
             if enableUpdates and not pauseUpdated:
-                # if console updates are enabled and this change wasn't triggered by a pause
+            # if console updates are enabled and this change wasn't triggered by a pause
                 mainWin.labelSwap.emit(f"New song: {songName}, duration: {songDur:,.0f} seconds", 3)
                 # user update on new song
             elif enableUpdates and pauseUpdated and playing:
-                # if console updates are enabled and this change *was* triggered by a pause
+            # if console updates are enabled and this change *was* triggered by a pause
                 mainWin.labelSwap.emit(f"Unpaused: {songName}", 3)
                 # user update on unpause
 
@@ -3598,45 +3606,43 @@ def looper():
             # sets an event to make song() update the presence info
 
             if pauseUpdated and playing:
-                # if it's playing and the pauseUpdate has been set to true
+            # if it's playing and the pauseUpdate has been set to true
                 pauseUpdated = False
                 # sets the pauseUpdated to false, so it doesn't run twice
             elif not pauseUpdated and playing:
-                # if it's playing but pauseUpdate is false
+            # if it's playing but pauseUpdate is false
                 trackCounter += 1
                 # adds 1 to counter (means track has changed)
 
             time.sleep(2)
             # waits 2 seconds
             continue
-            # sends back to the start of looper to check for a new song (5 second checks after a song change to check for a song skip)
+            # sends back to the start of looper to check for a new song
 
         if not playing and not pauseUpdated:
         # if the song is paused and hasn't yet updated the pause state
             if enablePause:
-                # if the pause hasn't been registered yet and the pause behavior is enabled
+            # if the pause hasn't been registered yet and the pause behavior is enabled
                 songEvent.set()
                 # sets an event to make song() update the presence info (this way it doesn't spam)
                 pauseUpdated = True
                 # sets the pause check to True, meaning it has been checked and acted on
                 if enableUpdates:
-                    # if user updates are on
+                # if user updates are on
                     mainWin.labelSwap.emit(f"Paused on: {songName}", 3)
                     # user inform (new line to split from main updates, only prints once anyway)
             sleepfor = refreshTime
             # sets the sleep timer to the config-set refresh time
-
         else:
         # if the current song is the same, and is not paused
             if songLeft > refreshTime:
-                # checks if there's more song left than the refresh time is set to
+            # checks if there's more song left than the refresh time is set to
                 sleepfor = refreshTime
                 # sets the sleep timer to the config-set refresh time
             else:
-                # if there's less song time left than refresh time (eg. if refreshTime = 15, song will have to be <15)
-                sleepfor = (songLeft + 1)
-                # sleeps for the rest of the song (+1s to ensure the song has ended)
-                # balance between accuracy and avoiding crazy rates
+            # if there's less song time left than refresh time (eg. if refreshTime = 15, song will have to be <15)
+                sleepfor = (songLeft + 0.5)
+                # sleeps for the rest of the song (+.5s to ensure the song has ended)
 
         time.sleep(sleepfor)
         # sleeps for the determined time
@@ -3644,8 +3650,6 @@ def looper():
 
 
 ### Load Commands ###
-
-
 
 bg = pictureClass(picCycleList, picCycleType, picCycleTime, pictureQueue)
 # defines the background thread as the class containing all the picture function
@@ -3668,9 +3672,8 @@ spDataThread = threading.Thread(target = runSPData, daemon=True)
 # creates a thread for the localhost Spotify data to update with
 
 
+
 ### Start Functions ###
-
-
 
 def startStart():
     """The function that starts the starter"""
@@ -3682,19 +3685,15 @@ def mainStart():
 
     shaaCheck()
     # runs the SHA(A) checker function first, to load global variables
-
     blacklistReader()
     # runs the blacklist reader to get the blacklist
-
     eventer()
     # runs the event reassigner (the spotify authorisation stuff)
 
     bg.start()
     # runs the "background" class, which handles the picture updates
-
     picThread.start()
     # starts the picture thread
-
     songThread.start()
     # starts the song thread to get updated info
 
@@ -3702,10 +3701,8 @@ def mainStart():
     # if the boolean for sharing data is enabled
         spDataThread.start()
         # starts the spotify data thread
-        mainWin.labelSwap.emit(f"Hosting parsed Spotify data locally", 1)
-        # user inform
 
-    if dc_app_ID and sp_client_ID:
+    if discordAppID and spotifyClientID:
         # if both the Application ID and Spotify Client ID are found
         mainWin.labelSwap.emit(f"Found Discord Application ID and Spotify Client ID, starting Discord RPC process", 1)
         # user inform
@@ -3728,7 +3725,6 @@ def mainStart():
 
 
 ### Window Start ###
-
 
 startApp = QApplication(sys.argv)
 # base app instance (passes command line arguments)

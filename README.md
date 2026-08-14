@@ -25,7 +25,7 @@ It's easy to run, even easier to configure and features a ton of vast customisat
 - If you prefer to hide certain songs, you can blacklist individual songs and display your favorites instead *(>v0.5.2.0537).* <br/>
 
 ## Download
-### [Download latest](https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest/download/DSI.zip)
+### [Download latest](https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest/download/DSI-Setup.exe)
 
 <br>
 

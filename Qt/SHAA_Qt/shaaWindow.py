@@ -20,20 +20,16 @@ class Ui_SHAAWindow(object):
         self.window = SHAAWindow
         # stores a reference in self to the actual window (so that it can be closed later)
 
-        if getattr(sys, "frozen", False):
-        # since the program bundled with pyInstaller, it's "frozen"
-            self.cwd = os.path.dirname(sys.executable)
-            self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
-            # reassigns the path variables accordingly
-        else:
-        # if somehow not in a bundled (frozen) state
-            self.cwd = os.path.dirname(__file__)
-            self.mainIcon = os.path.join(self.cwd, "icons", "dist", "dsiIcon.png")
-            # reassigns the path variables accordingly
+        self.thisExeDir = os.path.dirname(sys.executable)
+        # the directory this exe is located in
+        self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
+        # the directory containing the program icon png (built-in)
+        self.configFolderPath = os.path.join(os.environ["LOCALAPPDATA"], "DSI")
+        # the folder path that should contain all the configuration files
 
-        self.mainFolder = os.path.join(self.cwd, "..", "..")
-        # stores the "main" folder (DSI, which is 2 folders up)
-        self.configPath = os.path.join(self.mainFolder, "Data", "shaaConfig.json")
+        self.mainFolder = os.path.abspath(os.path.join(self.thisExeDir, "..", "..", ".."))
+        # stores the "main" folder (DSI, which is 3 folders up)
+        self.configPath = os.path.join(self.configFolderPath, "shaaConfig.json")
         # stores the config file's path
 
         self.window.setWindowIcon(QIcon(self.mainIcon))
@@ -92,12 +88,12 @@ class Ui_SHAAWindow(object):
         self.poppedField2 = self.songInfoField2Options.pop(self.loadedField2Option)
         # pops the index (0-5) and stores it
 
-        self.songInfoDetailOptions = ["Hours", "Minutes", "Seconds", "Cycle", "Volume", "Repeat", "Shuffle", "Custom"]
+        self.songInfoDetailOptions = ["Hours", "Minutes", "Seconds", "Plays", "Cycle", "Volume", "Repeat", "Shuffle", "Custom"]
         # stores all the options possible for details field
         self.loadedDetailOption = self.loadedConfig.get("songInfoDetails", "Cycle")
         # gets the loaded option from file
         self.songInfoDetailOptions.remove(self.loadedDetailOption)
-        # removes the current options
+        # removes the current option
 
         self.centralwidget = QWidget(SHAAWindow)
         self.centralwidget.setObjectName(u"centralwidget")
@@ -321,7 +317,7 @@ class Ui_SHAAWindow(object):
         self.topLeftGrid.addItem(self.verticalSpacer_4, 18, 0, 1, 1)
 
 
-        self.mainLayout.addLayout(self.topLeftGrid, 0, 0, 1, 1)
+        self.mainLayout.addLayout(self.topLeftGrid, 0, 0, 2, 1)
 
         self.topRightGrid = QGridLayout()
         self.topRightGrid.setObjectName(u"topRightGrid")
@@ -485,6 +481,7 @@ class Ui_SHAAWindow(object):
         self.shaaInfoDetailsDropdown.setItemText(5, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[4]}", None))
         self.shaaInfoDetailsDropdown.setItemText(6, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[5]}", None))
         self.shaaInfoDetailsDropdown.setItemText(7, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[6]}", None))
+        self.shaaInfoDetailsDropdown.setItemText(8, QCoreApplication.translate("SHAAWindow", f"{self.songInfoDetailOptions[7]}", None))
         # uses the list remainders
 
         self.shaaFallbackTotalCheck.setText(QCoreApplication.translate("SHAAWindow", u"Total", None))
@@ -498,7 +495,8 @@ class Ui_SHAAWindow(object):
         self.shaaInfoDetailsTooltip.setText(QCoreApplication.translate("SHAAWindow", u"Hours takes the total account hours\n"
             "Minutes takes the total account minutes\n"
             "Seconds takes the total account seconds\n"
-            "Cycle goes between the hours, minutes and seconds every song\n"
+            "Plays takes the total account playcount\n"
+            "Cycle goes between the hours, minutes, seconds and plays every song\n"
             "Volume tries to take the current playing Spotify volume\n"
             "Repeat takes the current repeat state\n"
             "Shuffle takes the current shuffle state\n"

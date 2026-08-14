@@ -25,22 +25,18 @@ class Ui_DSIWindow(object):
         self.centralWidget.setObjectName(u"main")
         # sets the object name
 
-        if getattr(sys, "frozen", False):
-        # since the program bundled with pyInstaller, it's "frozen"
-            self.cwd = os.path.dirname(sys.executable)
-            self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
-            # reassigns the path variables accordingly
-        else:
-        # if somehow not in a bundled (frozen) state
-            self.cwd = os.path.dirname(__file__)
-            self.mainIcon = os.path.join(self.cwd, "icons", "dist", "dsiIcon.png")
-            # reassigns the path variables accordingly
+        self.thisExeDir = os.path.dirname(sys.executable)
+        # the directory this exe is located in
+        self.mainIcon = os.path.join(sys._MEIPASS, "dsiIcon.png")
+        # the directory containing the program icon png (built-in)
+        self.configFolderPath = os.path.join(os.environ["LOCALAPPDATA"], "DSI")
+        # the folder path that should contain all the configuration files
 
-        self.mainFolder = os.path.join(self.cwd, "..", "..")
-        # stores the "main" folder (DSI, which is 2 folders up)
-        self.configPath = os.path.join(self.mainFolder, "Data", "config.json")
+        self.mainFolder = os.path.abspath(os.path.join(self.thisExeDir, "..", "..", ".."))
+        # stores the "main" folder (DSI, which is 3 folders up)
+        self.configPath = os.path.join(self.configFolderPath, "config.json")
         # stores the config file path
-        self.shaaPath = os.path.join(self.mainFolder, "Qt", "SHAA_Qt", "shaaWindow.exe")
+        self.shaaPath = os.path.join(self.mainFolder, "runtime", "Qt", "shaaWindow", "shaaWindow.exe")
         # stores the SHAA configuration window path
 
         self.window.setWindowIcon(QIcon(self.mainIcon))
@@ -466,8 +462,7 @@ class Ui_DSIWindow(object):
 
         self.dsiStarterButton = QPushButton()
         # the button that closes this window and continues previous function (DSI or func config)
-        self.dsiStarterButton.setText("Start DSI\n"
-            "Ensure you press this to save the config!")
+        self.dsiStarterButton.setText("Save and close")
         # sets the text
         self.dsiStarterButton.setToolTip("Closes this window and continues DSI process")
         # tooltip
