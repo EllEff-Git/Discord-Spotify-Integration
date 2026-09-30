@@ -298,14 +298,14 @@ int main() {
                 // checks if the last time RPC was updated was more than 10 seconds ago
                 if ((lastUpdate + 10) < currentTime) {
                     // changes the requiredUpdate to true to trigger an update
-                    bool requiredUpdate = true;
+                    requiredUpdate = true;
                 }
 
                 // the stdin byte size variable
                 uint32_t stdinSize;
 
                 // a boolean to check if the packet size is valid
-                bool packetValid = ReadFile(hStdin, &stdinSize, sizeof(stdinSize), &byteCount, nullptr) || byteCount != sizeof(stdinSize);
+                bool packetValid = ReadFile(hStdin, &stdinSize, sizeof(stdinSize), &byteCount, nullptr) && byteCount == sizeof(stdinSize);
 
                 // checks if packet size is (in)valid
                 if (!packetValid) {
@@ -397,7 +397,7 @@ int main() {
                     // if the update isn't a timer-based one (meaning something has actually changed)
                     if (!requiredUpdate) {
                         // updates the rpc update boolean to ensure it prints rpc status
-                        bool rpcUpdated = false;
+                        rpcUpdated = false;
                     }
 
                     // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)

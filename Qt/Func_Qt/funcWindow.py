@@ -123,14 +123,21 @@ class Ui_FuncWindow(object):
         self.optionLayout.setColumnStretch(1, 0)
         # disables columns stretching automatically
 
-        self.mainLayout.addLayout(self.optionLayout, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addLayout(self.optionLayout, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # sets the option layout into the main
 
+    ### Title ###
 
+        self.configTitle = QLabel("DSI Configuration\nHover any text for details")
+        # title
+        self.configTitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # centers the text
+        self.mainLayout.addWidget(self.configTitle, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the title to the main layout
 
     ### Enable URI ###
 
-        self.enableURILabel = QLabel("Enable URI")
+        self.enableURILabel = QLabel("Enable URI Mapping")
         # label for the URI enable option
         self.enableURILabel.setToolTip("Whether the URI mapping/storing should be enabled")
         # tooltip
@@ -328,7 +335,7 @@ class Ui_FuncWindow(object):
         # a button to run the DSI config
         self.dsiConfigButton.setText("Configure DSI Details")
         # sets text
-        self.dsiConfigButton.setToolTip("Opens a configuration window to change DSI visual details")
+        self.dsiConfigButton.setToolTip("Opens a configuration window to change DSI visual details\nSHAA configuration can also be found here")
         # tooltip
         self.dsiConfigButton.setMinimumSize(240, 45)
         # sets a minimum size
@@ -344,7 +351,7 @@ class Ui_FuncWindow(object):
 
         self.firstTimeButton = QPushButton()
         # a button to open the first time prompt window
-        self.firstTimeButton.setText("Help Window")
+        self.firstTimeButton.setText("Help")
         # sets text
         self.firstTimeButton.setToolTip("Opens the help window")
         # tooltip

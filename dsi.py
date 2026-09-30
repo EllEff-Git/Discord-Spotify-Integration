@@ -2,7 +2,7 @@ import pandas as pd
 # Required for all the CSV parsing and data grabbing
 import random, subprocess
 # Required to choose random pictures and to start the C++ file
-import os, sys, time, threading, queue, datetime
+import os, sys, time, threading, queue
 # Required for system information, background tasking and queueing
 import spotipy, requests, json, logging
 # Required for basic function of Spotify data requests and storing
@@ -14,6 +14,8 @@ from collections import deque
 # Required for "console-like" UI logging
 import struct, psutil
 # Required for C++ communication and management
+from datetime import datetime
+# Required for timestamping
 from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
@@ -170,7 +172,7 @@ enableMapping = True
 timestampStyle = "Uptime"
 """The timestamp format for system prints, string (System Time, Uptime, Off)"""
 
-startTime = int(datetime.datetime.now().timestamp())
+startTime = int(datetime.now().timestamp())
 """The program start time in UNIX"""
 
 smallURL = ""
@@ -234,6 +236,16 @@ songInfoFormatDetailsSpacer = ":"
 """Spacer to place between details field data and string, string"""
 songInfoDetailsDoubleSpace = False
 """Whether to add space on either side of the spacer, boolean"""
+enableFirstTime = True
+"""Whether to enable first time listening custom string"""
+firstTimeFormat = "Listening for the first time!"
+"""Custom string to use when listening for the first time, string"""
+enableTopHour = False
+"""Whether to enable top hour listening custom string, boolean"""
+topHourFormat = "Listening at peak hours"
+"""Custom string to use when listening at top hour, string"""
+enableTopTracks = True
+"""Whether to enable top track prefixes, boolean"""
 dsiShoutout = False
 """Whether to add a shoutout to DSI at the end of the details section, boolean"""
 
@@ -261,6 +273,12 @@ pauseUpdated = False
 """A check to see if the pause state has been registered properly"""
 totalHours = totalMinutes = totalSeconds = totalPlays = 0
 """Variables for total hours, minutes, seconds and plays"""
+totalAverage = "0:00"
+"""Variable to store the total historical average playtime to playcount"""
+topHour = {}
+"""Variable to store the top hour and its playcount ({hour: count})"""
+topTracks = topArtists = topAlbums = []
+"""List variables to store the top tracks, artists and albums, sorted by playtime ([uri, uri2, uri3])"""
 
 oldCount = trackCounter = 0
 """Variables to track 'song IDs'"""
@@ -342,6 +360,8 @@ class DSI_MainWindow(QMainWindow):
     # a signal to signal the readiness state of the window
     blacklistTag = pyqtSignal(str, str, str)
     # a signal to call the song blacklist manager
+    blacklistTagFull = pyqtSignal(str, str, str, dict)
+    # a signal to call the song blacklist manager with the full details
     detailTag = pyqtSignal(str, int)
     # a signal to call the song detail manager
     programReady = pyqtSignal()
@@ -365,9 +385,11 @@ class DSI_MainWindow(QMainWindow):
         self.programName = f"DSI Loader"
         # stores the program name
 
-        self.windowSizeX = max(850, int(startApp.primaryScreen().size().width() / 3))
+        self.windowSizeX = max(900, int(startApp.primaryScreen().size().width() / 3))
         self.windowSizeY = int(self.windowSizeX * (9 / 16))
-        # base window sizes (uses the larger of the two, 850 or ~33% of the monitor's width, 16:9 aspect ratio for height)
+        # base window sizes (uses the larger of the two, 900 or ~33% of the monitor's width, 16:9 aspect ratio for height)
+        # for a 1080p/1440p monitor, it should work out to ~ 900 x 510
+        # 4K = 1280 x 720 (literally 1/3rd in both dimensions)
 
     ### Basic Window Setup ###
 
@@ -387,31 +409,16 @@ class DSI_MainWindow(QMainWindow):
         self.mainLayout.setSpacing(25)
         # sets spacing of 25px between elements
 
-        self.mainLayout.setRowMinimumHeight(0, 50)
-        self.mainLayout.setRowMinimumHeight(1, 150)
-        self.mainLayout.setRowMinimumHeight(2, 100)
-        self.mainLayout.setRowMinimumHeight(3, 50)
-        self.mainLayout.setRowMinimumHeight(4, 50)
-        self.mainLayout.setRowMinimumHeight(5, 50)
-        # sets the minimum height for rows
-
         self.mainLayout.setColumnMinimumWidth(0, 150)
-        self.mainLayout.setColumnMinimumWidth(1, 125)
-        self.mainLayout.setColumnMinimumWidth(2, 300)
-        self.mainLayout.setColumnMinimumWidth(3, 125)
-        self.mainLayout.setColumnMinimumWidth(4, 150)
+        self.mainLayout.setColumnMinimumWidth(1, 400)
+        self.mainLayout.setColumnMinimumWidth(2, 150)
         # sets the minimum width for columns
-
-        self.mainLayout.setColumnStretch(0, 0)
-        self.mainLayout.setColumnStretch(1, 1)
-        self.mainLayout.setColumnStretch(2, 1)
-        self.mainLayout.setColumnStretch(3, 1)
-        self.mainLayout.setColumnStretch(4, 0)
-        # allows columns 1, 2 and 3 (center) to stretch
 
         self.mainLayout.setRowStretch(1, 1)
         self.mainLayout.setRowStretch(2, 1)
-        # allows rows 1 (console) and 2 (center) to stretch
+        self.mainLayout.setRowStretch(3, 1)
+        self.mainLayout.setRowStretch(4, 1)
+        # allows rows 1-4 to stretch (all the rows with the console)
 
         self.container.setLayout(self.mainLayout)
         # sets the container to use layout
@@ -424,12 +431,9 @@ class DSI_MainWindow(QMainWindow):
         # allows the widget to be resized
         self.consoleScroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         # disables the scroll bar
-        self.consoleScroll.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Expanding
-        )
-        # allows the scroll area to resize on window expand
-        self.consoleScroll.setMinimumSize(400, 525)
+        self.consoleScroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # allows the scroll area to resize to fit
+        self.consoleScroll.setMinimumWidth(400)
         # sets a minimum height
         self.consoleScroll.setStyleSheet("""
             QScrollArea {
@@ -441,8 +445,8 @@ class DSI_MainWindow(QMainWindow):
             }
         """)
         # sets a custom style to add some space between the edges and the text
-        self.mainLayout.addWidget(self.consoleScroll, 1, 1, 3, 3)
-        # adds the label to the main layout (top middle)
+        self.mainLayout.addWidget(self.consoleScroll, 1, 1, 4, 1)
+        # adds the scroll area to the main layout (top middle, spans rows 1-4, 0 is buttons/track, 4 is functions (side), 5 is buttons)
 
         self.mainLabel = QLabel()
         # a label to hold the main information about current process
@@ -450,25 +454,14 @@ class DSI_MainWindow(QMainWindow):
         # initial text
         self.mainLabel.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignBottom)
         # centers the label to the bottom
-        self.mainLabel.setWordWrap(True)
-        # makes the text wrap if it's too wide
+        self.mainLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        # allows the label to expand
         self.mainLabel.setMinimumWidth(400)
         # sets a minimum size for the label
         self.consoleScroll.setWidget(self.mainLabel)
         # sets the console to use the mainLabel
 
-    ### Bottom Layout ###
-
-        self.bottomButtonLayout = QGridLayout()
-        # a layout for the bottom middle buttons
-        self.bottomButtonLayout.setColumnStretch(0, 1)
-        self.bottomButtonLayout.setColumnStretch(1, 1)
-        self.bottomButtonLayout.setColumnStretch(2, 1)
-        self.bottomButtonLayout.setColumnStretch(3, 1)
-        self.bottomButtonLayout.setColumnStretch(4, 1)
-        # forces all columns to stretch
-        self.mainLayout.addLayout(self.bottomButtonLayout, 5, 0, 1, 5, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the layout to the bottom middle of the main layout (spans all 5 columns)
+    ### Bottom Elements ###
 
         self.exitButton = QPushButton("Exit")
         # a button to exit the program
@@ -497,9 +490,9 @@ class DSI_MainWindow(QMainWindow):
         self.directoryButton.clicked.connect(lambda: os.startfile(configFolderPath))
         # connects the button to just opening the installation directory
 
-        self.bottomButtonLayout.addWidget(self.versionTag, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.bottomButtonLayout.addWidget(self.directoryButton, 0, 4, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.bottomButtonLayout.addWidget(self.exitButton, 0, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.versionTag, 5, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.exitButton, 5, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.directoryButton, 5, 2, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds all the items
 
     ### Re-run DiscordRPC Button ###
@@ -514,10 +507,9 @@ class DSI_MainWindow(QMainWindow):
         # hides the button by default
         self.rerunRPCbutton.clicked.connect(lambda: self.restarter("C++", True))
         # pressing the button -> runs the restarter function
-        self.bottomButtonLayout.addWidget(self.rerunRPCbutton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.rerunRPCbutton, 4, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the button to the button layout (top middle)
         
-
     ### Hideable/Showable Elements ###
 
         self.userInputField = QLineEdit()
@@ -528,7 +520,7 @@ class DSI_MainWindow(QMainWindow):
         # alings to center
         self.userInputField.setFixedSize(300, 30)
         # sets size
-        self.mainLayout.addWidget(self.userInputField, 2, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.userInputField, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the qline to layout (middle middle)
         self.userInputField.hide()
         # hides by default
@@ -539,7 +531,7 @@ class DSI_MainWindow(QMainWindow):
         # tooltip
         self.submitButton.setFixedSize(60, 35)
         # sets size
-        self.mainLayout.addWidget(self.submitButton, 2, 3, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.mainLayout.addWidget(self.submitButton, 3, 1, alignment=Qt.AlignmentFlag.AlignLeft)
         # adds the button to layout (middle right)
         self.submitButton.hide()
         # hides by default
@@ -554,27 +546,42 @@ class DSI_MainWindow(QMainWindow):
 
         self.songCounter = QLabel()
         # details label
-        self.songCounter.setMinimumSize(150, 60)
-        # sets max size
+        self.songCounter.setMinimumSize(180, 60)
+        # sets min size
         self.songCounter.setToolTip("Current DSI session stats")
         # tooltip
-        self.songCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.songCounter.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # aligns text to the left
         self.songDetailLayout.addWidget(self.songCounter, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the counter
 
         self.globalSongCounter = QLabel()
         # global details label
-        self.globalSongCounter.setMinimumSize(150, 60)
-        # sets max size
+        self.globalSongCounter.setMinimumSize(180, 60)
+        # sets min size
         self.globalSongCounter.setToolTip("Global DSI stats")
         # tooltip
-        self.globalSongCounter.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.globalSongCounter.setAlignment(Qt.AlignmentFlag.AlignCenter)
         # aligns text to the left
         self.songDetailLayout.addWidget(self.globalSongCounter, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the global counter
         self.globalSongCounter.hide()
         # hides the stats by default
+
+        self.historySongCounter = QLabel("")
+        # spotify history details label
+        self.historySongCounter.setMinimumSize(180, 60)
+        # sets min size
+        self.historySongCounter.setToolTip("Spotify account stats")
+        # tooltip
+        self.historySongCounter.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # aligns text to the left
+        self.songDetailLayout.addWidget(self.historySongCounter, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the historical counter
+        self.historySongCounter.hide()
+        # hides the stats by default
+
+    ### Stat Load/Place ###
 
         self.globalStats = statsWriter("Init")
         # loads the old statistics from file, stores in variable
@@ -601,26 +608,29 @@ class DSI_MainWindow(QMainWindow):
         globalSongsPlayed = self.globalStats["Songs Played"]
         # grabs the songs played count from global stats variable
         
-        self.globalSongCounter.setText(f"Songs played: {globalSongsPlayed:,.0f}\nTime played: {globalTimeString} hours\nAverage duration: {globalAvgString}")
+        self.globalSongCounter.setText(f"DSI Global Stats:\nSongs played: {globalSongsPlayed:,.0f}\nTime played: {globalTimeString} hours\nAverage duration: {globalAvgString}")
         # sets the counter text to match
+
+        self.historicalStats = ""
+        # empty string (loads at startup)
 
     ### Function Elements ###
 
         self.functionLayout = QGridLayout()
         # a layout that holds functional buttons
-        self.mainLayout.addLayout(self.functionLayout, 3, 4, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addLayout(self.functionLayout, 3, 2, 2, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the layout to the main in the mirrored spot bottom row, right column
 
-        self.swapStatsButton = QPushButton("Swap Statistics")
-        # a button to swap between global and session statistics
-        self.swapStatsButton.setFixedSize(125, 50)
+        self.cycleStatsButton = QPushButton("Cycle Statistics")
+        # a button to cycle between global and session statistics
+        self.cycleStatsButton.setFixedSize(125, 50)
         # sets fixed size
-        self.swapStatsButton.setToolTip("Swap statistics view between global and session")
+        self.cycleStatsButton.setToolTip("Cycle between current/global DSI and Spotify account stats")
         # tooltip
 
-        self.swapStatsButton.clicked.connect(lambda: self.songDetails("Swap"))
-        # connects the button click to the details swapping
-        self.swapStatsButton.hide()
+        self.cycleStatsButton.clicked.connect(lambda: self.songDetails("Cycle"))
+        # connects the button click to the details cycling
+        self.cycleStatsButton.hide()
         # hides the button on start
 
         self.debugInfoButton = QPushButton("Song Details")
@@ -661,7 +671,7 @@ class DSI_MainWindow(QMainWindow):
 
         self.functionLayout.addWidget(self.openUriMapperButton, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.openFuncConfigButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.functionLayout.addWidget(self.swapStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.cycleStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.debugInfoButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the buttons
 
@@ -739,7 +749,7 @@ class DSI_MainWindow(QMainWindow):
         self.blacklistButtonLayout = QGridLayout()
         # the layout the buttons sit in
 
-        self.mainLayout.addLayout(self.blacklistLayout, 0, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addLayout(self.blacklistLayout, 0, 1, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the layout to the center of the top row
 
         self.blacklistLayout.addLayout(self.blacklistButtonLayout, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
@@ -765,21 +775,30 @@ class DSI_MainWindow(QMainWindow):
 
         self.blacklistAddButton = QPushButton("Blacklist")
         # the button that adds a song to the blacklist
-        self.blacklistButtonLayout.addWidget(self.blacklistAddButton, 0, 1)
+        self.blacklistButtonLayout.addWidget(self.blacklistAddButton, 0, 2)
         # adds the add button to the right side
         self.blacklistAddButton.setToolTip("Blacklist current song")
         # tooltip
-        self.blacklistAddButton.setMinimumSize(60, 30)
+        self.blacklistAddButton.setMinimumSize(60, 40)
         # sets minimum size
 
         self.blacklistRemoveButton = QPushButton("Unblacklist")
         # the button that removes a song from the blacklist
-        self.blacklistButtonLayout.addWidget(self.blacklistRemoveButton, 0, 1)
+        self.blacklistButtonLayout.addWidget(self.blacklistRemoveButton, 0, 2)
         # adds the remove button to the right side
         self.blacklistRemoveButton.setToolTip("Remove the current song from blacklist")
         # tooltip
-        self.blacklistRemoveButton.setMinimumSize(60, 30)
+        self.blacklistRemoveButton.setMinimumSize(60, 40)
         # sets minimum size
+
+        self.blacklistManageButton = QPushButton("Manage")
+        # the button to open the blacklist manager
+        self.blacklistButtonLayout.addWidget(self.blacklistManageButton, 0, 1)
+        # adds the manage button to the middle
+        self.blacklistManageButton.setToolTip("Open the blacklist/favorite list manager")
+        # tooltip
+        self.blacklistManageButton.setMinimumSize(60, 40)
+        # sets the minimum size
 
         self.blacklistStarButton = QPushButton("Favorite")
         # the button that favorites a song
@@ -787,7 +806,7 @@ class DSI_MainWindow(QMainWindow):
         # adds the star button to the left side
         self.blacklistStarButton.setToolTip("Favorite the current song")
         # tooltip
-        self.blacklistStarButton.setMinimumSize(60, 30)
+        self.blacklistStarButton.setMinimumSize(60, 40)
         # sets minimum size
 
         self.blacklistUnstarButton = QPushButton("Unfavorite")
@@ -796,7 +815,7 @@ class DSI_MainWindow(QMainWindow):
         # adds the unstar button to the left side
         self.blacklistUnstarButton.setToolTip("Unfavorite the current song")
         # tooltip
-        self.blacklistUnstarButton.setMinimumSize(60, 30)
+        self.blacklistUnstarButton.setMinimumSize(60, 40)
         # sets minimum size
 
     ### Intermediary ###
@@ -816,10 +835,14 @@ class DSI_MainWindow(QMainWindow):
 
         self.blacklistTag.connect(self.blacklistManager)
         # connects the blacklist tag to the blacklist manager
+        self.blacklistTagFull.connect(self.blacklistManager)
+        # connects the second blacklist tag to the blacklist manager
         self.blacklistAddButton.clicked.connect(lambda: self.blacklistIntermediary("Add"))
         # connects the add button to the intermediary function with command add
         self.blacklistRemoveButton.clicked.connect(lambda: self.blacklistIntermediary("Remove"))
         # connects the remove button to the intermediary function with command remove
+        self.blacklistManageButton.clicked.connect(lambda: self.blacklistManager("Manage", "", ""))
+        # connects the manage button to the intermediary function with command manage
         self.blacklistStarButton.clicked.connect(lambda: self.blacklistIntermediary("Star"))
         # connects the star button to the intermediary function with command star
         self.blacklistUnstarButton.clicked.connect(lambda: self.blacklistIntermediary("Unstar"))
@@ -836,8 +859,6 @@ class DSI_MainWindow(QMainWindow):
 
         QTimer.singleShot(0, self.checkUpdate)
         # runs the GitHub update check
-        QTimer.singleShot(0, lambda: self.blacklistButtons("init"))
-        # calls the blacklist button decider with init command (hides all buttons)
         QTimer.singleShot(0, self.requiredItemCheck)
         # runs the required items function to check IDs
 
@@ -945,6 +966,9 @@ class DSI_MainWindow(QMainWindow):
         # didn't go through at all
             self.versionTag.setText(f"DSI v{self.version}\nUpdate check failed")
             # error prompt
+
+        self.blacklistButtons("init")
+        # calls the blacklist button decider with init command (hides all buttons)
 
 ### Label Changer ###
 
@@ -1070,21 +1094,30 @@ class DSI_MainWindow(QMainWindow):
             formatTimePlayed = f"{int(timePlayed / 60)} minutes"
             # formats the time played from seconds to minutes
 
-        self.songCounter.setText(f"Songs played: {trackCounter:,.0f}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
+        self.songCounter.setText(f"DSI Session Stats:\nSongs played: {trackCounter:,.0f}\nTime played: {formatTimePlayed}\nAverage duration: {avgString}")
         # sets the counter text to match
 
-        if action == "Swap":
-        # if the action is to swap the counters from session to global
+        if action == "Cycle":
+        # if the action is to cycle between the counters
+        # current DSI = 1, global DSI = 2, historical = 3
             if self.songCounter.isVisible():
             # if the song counter (session) is visible
                 self.songCounter.hide()
                 self.globalSongCounter.show()
-                # swaps them around
-            else:
-            # if it's not visible
+                self.historySongCounter.hide()
+                # hides the current DSI stats + historicals, displays global stats
+            elif self.globalSongCounter.isVisible() and not disableShaa:
+            # if the global song counter is visible and SHAA is configured (if not, there's no data to display in overall)
+                self.songCounter.hide()
                 self.globalSongCounter.hide()
+                self.historySongCounter.show()
+                # hides the global + current DSI stats, displays historical stats
+            else:
+            # neither = historical visible (or SHAA disabled -> skip historicals)
                 self.songCounter.show()
-                # swaps them around (opposite)
+                self.globalSongCounter.hide()
+                self.historySongCounter.hide()
+                # hides the historical stats + global DSI stats, displays current DSI stats
 
 ### Song Details Window ###
 
@@ -1149,20 +1182,13 @@ class DSI_MainWindow(QMainWindow):
 
 ### Blacklist Manager ###
 
-    def blacklistManager(self, action:str, track:str, uri:str):
+    def blacklistManager(self, action:str, track:str, uri:str, favoriteDict:dict=None):
         """A function to manage the blacklist of songs"""
+        global blacklist
+        # global -> local
 
         if action == "New Song":
         # if the action is to check a new song (song changed)
-            if uri in blacklist:
-            # if the passed URI exists in the blacklist
-                status = blacklist[uri]["status"]
-                # grabs the stored "status" of the uri (starred, blacklisted)
-            else:
-            # if the URI doesn't exist in the blacklist
-                status = "none"
-                # sets the status to none
-
             try:
             # tries to grab the artist
                 artist = csArtistName
@@ -1172,13 +1198,37 @@ class DSI_MainWindow(QMainWindow):
                 artist = "An Artist"
                 # preset string
 
-            self.blacklistSongName.setText(f"Currently playing:\n{track} by {artist}")
-            # sets the current song name to the track
+            if uri in blacklist:
+            # if the passed URI exists in the blacklist
+                status = blacklist[uri]["status"]
+                # grabs the stored "status" of the uri (starred, blacklisted)
+                if status == "blacklisted":
+                # song blacklisted
+                    newSong = favoriteDict.get("Song")
+                    # gets the new display song's name
+                    newArtist = favoriteDict.get("Artist Name")
+                    # gets the new display artist's name
+                    self.blacklistSongName.setText(f"\nPlaying blacklisted:\n{track} by {artist}\nDisplaying:\n{newSong} by {newArtist}")
+                    # displays blacklisted view
+                elif status == "starred":
+                # song favorited
+                    self.blacklistSongName.setText(f"\nPlaying favorited:\n{track} by {artist}\n\n")
+                    # displays favorited view
+                else:
+                # song status none
+                    self.blacklistSongName.setText(f"\Currently playing:\n{track} by {artist}\n\n")
+                    # displays default view
+            else:
+            # if the URI doesn't exist in the blacklist
+                status = "none"
+                # sets the status to none
+                self.blacklistSongName.setText(f"\nCurrently playing:\n{track} by {artist}\n\n")
+                # displays default view
 
         elif action == "Remove" or action == "Unstar":
         # if the action is to remove the song from the blacklist or unfavorite it
-            blacklist[uri] = {"status":"none"}
-            # sets the blacklist entry for the URI to none
+            blacklist.pop(uri)
+            # removes the URI from the blacklist
             status = "none"
             # sets the status to none, too
             if action == "Remove":
@@ -1192,12 +1242,19 @@ class DSI_MainWindow(QMainWindow):
 
         elif action == "Add":
         # if the action is to add the song to the blacklist
-            blacklist[uri] = {"status":"blacklisted"}
-            # sets the blacklist entry for the URI to blacklisted
-            status = "blacklisted"
-            # sets the status to blacklisted, too
-            self.labelSwap.emit(f"Blacklisted {track}", 3)
-            # user update
+            if len(blacklist) >= 60:
+            # if there's already over 60 items in the blacklist 
+            # generally speaking, intended to be 50 blacklist + 10 whitelist, but if filling blacklist first, then whitelist, allows for 70
+                self.labelSwap.emit(f"Can't blacklist {track}, list is too long!", 3)
+                # user inform
+            else:
+            # not more than 60 items yet
+                blacklist[uri] = {"status": "blacklisted", "info": blacklistInfo}
+                # sets the blacklist entry for the URI to blacklisted (status + info dictionary)
+                status = "blacklisted"
+                # sets the status to blacklisted, too
+                self.labelSwap.emit(f"Blacklisted {track}", 3)
+                # user update
 
         elif action == "Star":
         # if the action is to favorite the song
@@ -1206,8 +1263,146 @@ class DSI_MainWindow(QMainWindow):
             status = "starred"
             # sets the status to blacklisted, too
 
+        elif action == "Manage":
+        # if the action is to manage the blacklist/favorite list
+            self.blacklistManagerWindow()
+            # runs the window
+            return
+            # doesn't run the button function
+
+        elif action == "Init":
+        # if the action is to start (first call)
+            self.blacklistManageButton.show()
+            self.blacklistSongName.show()
+            # enables the song name field + manage button
+            return
+            # doesn't run the button function yet (it'll get ran a couple seconds later)
+
         self.blacklistButtons(status)
         # calls the blacklist button manager to hide/show the relevant buttons for the song
+
+### Blacklist Manager Window ###
+
+    def blacklistManagerWindow(self):
+        """Function that displays a blacklist manager window"""
+        manager = QDialog(self)
+        # makes a dialog window
+        manager.setWindowTitle(f"DSI Blacklist Manager")
+        # sets the window title
+        manager.setMinimumSize(600, 500)
+        # sets a minimum size
+        manager.resize(600, 500)
+        # window size
+
+        managerLayout = QVBoxLayout(manager)
+        # layout for the blacklist manager
+
+        favoriteLabel = QLabel("Favorite Tracks")
+        favoriteLabel.setStyleSheet("font-weight: bold; font-size: 14px;")
+        favoriteLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # title for the favorite tracks
+
+        favoriteScrollWidget = QWidget()
+        # a widget for the scroll area to sit in
+        favoriteLayout = QVBoxLayout(favoriteScrollWidget)
+        # layout for the favorite tracks
+
+        favoriteScroll = QScrollArea()
+        # adds a scroll area
+        favoriteScroll.setWidget(favoriteScrollWidget)
+        favoriteScroll.setWidgetResizable(True)
+        # sets the scroll area to use the scroll widget
+
+        managerLayout.addWidget(favoriteLabel)
+        managerLayout.addWidget(favoriteScroll, 1)
+        # adds the label and layout to main
+
+        blacklistLabel = QLabel("Blacklisted Tracks")
+        blacklistLabel.setStyleSheet("font-weight: bold; font-size: 14px;")
+        blacklistLabel.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # title for the blacklist tracks
+
+        blacklistScrollWidget = QWidget()
+        # a widget for the scroll area to sit in
+        blacklistLayout = QVBoxLayout(blacklistScrollWidget)
+        # layout for the blacklisted tracks
+
+        blacklistScroll = QScrollArea()
+        # adds a scroll area
+        blacklistScroll.setWidget(blacklistScrollWidget)
+        blacklistScroll.setWidgetResizable(True)
+        # sets the scroll area to use the scroll widget
+
+        managerLayout.addWidget(blacklistLabel)
+        managerLayout.addWidget(blacklistScroll, 1)
+        # adds the label and layout to main
+
+        for uri, trackDict in blacklist.items():
+        # goes through the blacklist, gets the URIs
+            status = trackDict["status"]
+            # gets the status (starred, blacklisted, none)
+            name = trackDict["info"]["Song Name"]
+            # gets the name of the song
+            artist = trackDict["info"]["Artist Name"]
+            # gets the artist of the song
+            track = f"{name} by {artist}"
+            # forms a string of the name and artist
+
+            if status == "starred":
+            # if the status is starred (favorited)
+
+                rowWidget = QWidget()
+                # a widget that can be deleted
+                row = QHBoxLayout(rowWidget)
+                # makes a new row layout for the track
+                trackLabel = QLabel(track)
+                trackLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+                # adds a label, enforces the sizing rules
+
+                trackButton = QPushButton("Unstar")
+                # adds a button to unstar the item
+                trackButton.clicked.connect(lambda _, n=name, u=uri, widget=rowWidget: (self.blacklistManager("Unstar", n, u), widget.deleteLater()))
+                # connects the button to removing the URI from the blacklist + deleting the row from the window
+                # captures the button state pass (doesn't store, not needed), name of the track, URI and the widget holding the row, so that they can be deleted
+
+                row.addWidget(trackLabel)
+                row.addWidget(trackButton)
+                # adds the label and button to the layout
+                favoriteLayout.addWidget(rowWidget)
+                # adds the layout to the favorite layout
+
+            elif status == "blacklisted":
+            # if the status is blacklisted
+
+                rowWidget = QWidget()
+                # a widget that can be deleted
+                row = QHBoxLayout(rowWidget)
+                # makes a new row layout for the track
+                trackLabel = QLabel(track)
+                trackLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+                # adds a label, enforces the sizing rules
+
+                trackButton = QPushButton("Unblacklist")
+                # adds a button to unblacklist the item
+                trackButton.clicked.connect(lambda _, n=name, u=uri, widget=rowWidget: (self.blacklistManager("Remove", n, u), widget.deleteLater()))
+                # connects the button to removing the URI from the blacklist + deleting the row from the window
+
+                row.addWidget(trackLabel)
+                row.addWidget(trackButton)
+                # adds the label and button to the layout
+                blacklistLayout.addWidget(rowWidget)
+                # adds the layout to the favorite layout
+
+        closeButton = QPushButton("Close")
+        # button to close the window
+        closeButton.clicked.connect(manager.accept)
+        # connects the button to closing the manager window
+
+        managerLayout.addWidget(closeButton)
+        # adds the close button
+
+        manager.exec()
+        # executes (shows)
 
 ### Blacklist Intermediary ###
 
@@ -1255,8 +1450,9 @@ class DSI_MainWindow(QMainWindow):
 
         elif status == "init":
         # if the status is init, just means it's running on startup
+            self.blacklistManageButton.hide()
             self.blacklistSongName.hide()
-            # hides the song name field, too
+            # hides the song name field and the manage button, too
 
 ### Blacklist Writer ###
 
@@ -1705,15 +1901,15 @@ class DSI_MainWindow(QMainWindow):
             refreshTime = 10.0
             # fallback value of 10.0
 
-        enablePause = jsonConfig.get("enablePause", True)
-        pauseStateText = jsonConfig.get("pauseText", "Paused on:")
-        enableUpdates = functionConfig.get("printUpdates", True)
-        enableErrors = functionConfig.get("printErrors", True)
-        enableMapping = functionConfig.get("enableURI", True)
-        timestampStyle = functionConfig.get("clockStyle", "Uptime")
-        consoleLength = functionConfig.get("consoleLength", 25)
-        hostData = functionConfig.get("hostData", True)
-        addressType = functionConfig.get("addressType", "Device")
+        enablePause = bool(jsonConfig.get("enablePause", True))
+        pauseStateText = str(jsonConfig.get("pauseText", "Paused on:"))
+        enableUpdates = bool(functionConfig.get("printUpdates", True))
+        enableErrors = bool(functionConfig.get("printErrors", True))
+        enableMapping = bool(functionConfig.get("enableURI", True))
+        timestampStyle = str(functionConfig.get("clockStyle", "Uptime"))
+        consoleLength = int(functionConfig.get("consoleLength", 25))
+        hostData = bool(functionConfig.get("hostData", True))
+        addressType = str(functionConfig.get("addressType", "Device"))
         # loads all options from configs
 
         self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
@@ -1731,16 +1927,16 @@ class DSI_MainWindow(QMainWindow):
         # if the smallURL is empty
             smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
             # shameless plug <3 (only applies if there's no defined URL)
-        spotifyURL = jsonConfig.get("spotifyURLType", "Track")
-        songNameSpacerL = jsonConfig.get("spacerL", "\u227a")
-        songNameSpacerR = jsonConfig.get("spacerR", "\u227b")
-        preText = jsonConfig.get("preText", "")
-        postText = jsonConfig.get("postText", "")
-        enableSong = jsonConfig.get("enableSong", True)
-        enableArtist = jsonConfig.get("enableArtist", True)
-        enableAlbum = jsonConfig.get("enableAlbum", True)
-        albumFallback = jsonConfig.get("albumFallback", "A playlist")
-        picCycleList = jsonConfig.get("pictureCycleType", "Spotify")
+        spotifyURL = str(jsonConfig.get("spotifyURLType", "Track"))
+        songNameSpacerL = str(jsonConfig.get("spacerL", "\u227a"))
+        songNameSpacerR = str(jsonConfig.get("spacerR", "\u227b"))
+        preText = str(jsonConfig.get("preText", ""))
+        postText = str(jsonConfig.get("postText", ""))
+        enableSong = bool(jsonConfig.get("enableSong", True))
+        enableArtist = bool(jsonConfig.get("enableArtist", True))
+        enableAlbum = bool(jsonConfig.get("enableAlbum", True))
+        albumFallback = str(jsonConfig.get("albumFallback", "A playlist"))
+        picCycleList = str(jsonConfig.get("pictureCycleType", "Spotify"))
         # grabs each option from config, loads into global var
 
         self.labelSwap.emit("Customisation configurations loaded, proceeding...", 0)
@@ -1751,6 +1947,7 @@ class DSI_MainWindow(QMainWindow):
     def finalConfigLoad(self):
         """Function that loads the last part of the config"""
         global picCycleList, picCycleTime, picCycleType, smallPic, hoverText
+        # global -> local
 
         if picCycleList == "File":
         # checks if the config option is set to "File"
@@ -1776,7 +1973,7 @@ class DSI_MainWindow(QMainWindow):
         # if the list is on Spotify (or empty), doesn't modify it
             None
 
-        picCycleTime = jsonConfig.get("pictureCycleTime", 10)
+        picCycleTime = int(jsonConfig.get("pictureCycleTime", 10))
         # grabs the cycle time
         try:
         # tries to turn the time into minutes (ensures integer type, multiplies by 60)
@@ -1786,9 +1983,9 @@ class DSI_MainWindow(QMainWindow):
             picCycleTime = 600
             # sets to default of 10 minutes
 
-        picCycleType = jsonConfig.get("pictureCycleBehavior", "Random")
-        smallPic = jsonConfig.get("smallPic", "")
-        hoverText = jsonConfig.get("smallPicHover", "Spotify")
+        picCycleType = str(jsonConfig.get("pictureCycleBehavior", "Random"))
+        smallPic = str(jsonConfig.get("smallPic", ""))
+        hoverText = str(jsonConfig.get("smallPicHover", "Spotify"))
         # loads last settings
 
         QTimer.singleShot(500, self.shaaConfigLoad)
@@ -1801,14 +1998,15 @@ class DSI_MainWindow(QMainWindow):
         global songInfoField1, songInfoField2, shaaFallbackTotal, shaaFallback, shaaInfoDetails, songInfoFallback
         global songInfoFormatPlays, songInfoSpacer, songInfoFormatMins, songInfoFormatTextFirst, songInfoFormatDetails
         global songInfoFormatDetailsSpacer, songInfoDetailsDoubleSpace, dsiShoutout
+        global enableFirstTime, firstTimeFormat, enableTopHour, topHourFormat, enableTopTracks
         # a lot of global -> local
 
         if not disableShaa:
         # if the SHAA-related stuff isn't disabled
 
-            songInfoField1 = shaaConfig.get("songInfoField1", "Track")
-            songInfoField2 = shaaConfig.get("songInfoField2", 0)
-            shaaFallbackTotal = shaaConfig.get("songInfoFallbackTotal", True)
+            songInfoField1 = str(shaaConfig.get("songInfoField1", "Track"))
+            songInfoField2 = int(shaaConfig.get("songInfoField2", 0))
+            shaaFallbackTotal = bool(shaaConfig.get("songInfoFallbackTotal", True))
             if shaaFallbackTotal:
             # if the fallback total usage is enabled
                 shaaFallback = "Total"
@@ -1828,14 +2026,19 @@ class DSI_MainWindow(QMainWindow):
             # if the field isn't custom, uses "total" as an additional string
                 songInfoFallback = "total"
 
-            songInfoFormatDetails = shaaConfig.get("songInfoDetailsText", "Total Hours")
-            songInfoFormatPlays = shaaConfig.get("songInfoFormatPlays", "plays")
-            songInfoSpacer = shaaConfig.get("songInfoFormatSpacer", "\u203b")
-            songInfoFormatMins = shaaConfig.get("songInfoFormatMins", "minutes")
-            songInfoFormatTextFirst = shaaConfig.get("songInfoDetailsTextFirst", True)
-            songInfoFormatDetailsSpacer = shaaConfig.get("songInfoDetailsSpacer", ":")
-            songInfoDetailsDoubleSpace = shaaConfig.get("songInfoDetailsDoubleSpace", False)
-            dsiShoutout = shaaConfig.get("dsiShoutout", True)
+            songInfoFormatDetails = str(shaaConfig.get("songInfoDetailsText", "Total Hours"))
+            songInfoFormatPlays = str(shaaConfig.get("songInfoFormatPlays", "plays"))
+            songInfoSpacer = str(shaaConfig.get("songInfoFormatSpacer", "\u203b"))
+            songInfoFormatMins = str(shaaConfig.get("songInfoFormatMins", "minutes"))
+            songInfoFormatTextFirst = bool(shaaConfig.get("songInfoDetailsTextFirst", True))
+            songInfoFormatDetailsSpacer = str(shaaConfig.get("songInfoDetailsSpacer", ":"))
+            songInfoDetailsDoubleSpace = bool(shaaConfig.get("songInfoDetailsDoubleSpace", False))
+            enableFirstTime = bool(shaaConfig.get("enableFirstTime", True))
+            firstTimeFormat = str(shaaConfig.get("firstTimeFormat", "Listening for the first time!"))
+            enableTopHour = bool(shaaConfig.get("enableTopHour", False))
+            topHourFormat = str(shaaConfig.get("topHourFormat", "Listening at peak hours"))
+            enableTopTracks = bool(shaaConfig.get("enableTopTracks", True))
+            dsiShoutout = bool(shaaConfig.get("dsiShoutout", True))
             # grabs everything from config
 
         else:
@@ -1878,7 +2081,7 @@ class DSI_MainWindow(QMainWindow):
         """Function that returns the time formatted"""
         if timestampStyle == "Uptime":
         # if the config option is set to uptime
-            currentTime = int(datetime.datetime.now().timestamp())
+            currentTime = int(datetime.now().timestamp())
             # takes the current time when Time() is called
             uptime = currentTime - startTime
             # calculates the seconds apart between current and startup time
@@ -1893,7 +2096,7 @@ class DSI_MainWindow(QMainWindow):
 
         elif timestampStyle == "System Time":
         # if the config option is set to clock
-            return (datetime.datetime.now().strftime("%H:%M:%S") + " ")
+            return (datetime.now().strftime("%H:%M:%S") + " ")
             # shortens the call to current system timestamp, adds empty space
 
         else:
@@ -1937,9 +2140,10 @@ class DSI_MainWindow(QMainWindow):
 
     def timeGrabber(self):
         """Function that grabs the total time counts from totalTimes file"""
-        global totalHours, totalMinutes, totalSeconds, totalPlays, disableShaa
+        global totalHours, totalMinutes, totalSeconds, totalPlays, totalAverage, topHour, disableShaa
+        global topTracks, topArtists, topAlbums
         # global -> local
-        self.labelSwap.emit("Grabbing total times from file...", 0)
+        self.labelSwap.emit("Grabbing SHA details from file...", 0)
         # user update
 
         if os.path.isfile(timeDir):
@@ -1954,21 +2158,62 @@ class DSI_MainWindow(QMainWindow):
                 totalSeconds = f"{float(totalDict.get("totalSeconds", 0)):,.0f}"
                 totalPlays = f"{int(totalDict.get("totalPlays", 0)):,.0f}"
                 # grabs the numbers, formats as beautified number strings (eg. 25,593.24 hours / 2,520,149 minutes...)
+                totalAverage = f"{totalDict.get("totalAverage", "0:00")}"
+                # grabs the average song duration across all history
+
+                uniqueTracks = int(totalDict.get("uniqueTracks", 0))
+                uniqueArtists = int(totalDict.get("uniqueArtists", 0))
+                uniqueAlbums = int(totalDict.get("uniqueAlbums", 0))
+                # grabs the number of unique items (unused)
+
+                topTracksDict: dict[str, int] = dict(totalDict.get("topTracks", {}))
+                topArtistsDict: dict[str, int] = dict(totalDict.get("topArtists", {}))
+                topAlbumsDict: dict[str, int] = dict(totalDict.get("topAlbums", {}))
+                # grabs the dictionaries of top items {"URI": time (ms)}
+
+                if len(topTracksDict) > 0:
+                # if there's more than 0 items
+                    topTracks = list(sorted(topTracksDict, key=topTracksDict.get, reverse=True))
+                    # sorts the track dictionary by the values, turns into a list of just the URIs
+
+                hourlyPlays: dict[str, int] = dict(totalDict.get("hourlyPlays", {"25": 0}))
+                # grabs the {"hournum": playnum} dictionary
+                hour, plays = max(hourlyPlays.items(), key=lambda item: item[1])
+                # grabs the highest playcount + hour, stores both
+                topHour = {hour: plays}
+                # stores in global var
+
+                timestamp = int(totalDict.get("timestamp", 0))
+                # grabs the saved timestamp as an integer
+
+                self.historySongCounter.setText(f"Account Stats:\nSongs played: {totalPlays}\nTime played: {totalHours} hours\nAverage duration: {totalAverage}")
+                # sets the text for the historical stats label
+
+                if timestamp != 0:
+                # if the timestamp is anything but 0 (got loaded correctly)
+                    timestamp = datetime.fromtimestamp(timestamp)
+                    # converts to a datetime object
+                    timestampString = timestamp.strftime("%d %B %Y").lstrip("0")
+                    # formats the timestamp to eg. "03 August 2025", then strips the left 0 if one exists
+                else:
+                # is 0 somehow
+                    timestampString = "N/A"
+                    # unavailable string
 
                 if enableUpdates:
                 # if updates are enabled
-                    self.labelSwap.emit(f"Times saved: {totalHours} hours = {totalMinutes} minutes = {totalSeconds} seconds = {totalPlays} plays", 0)
+                    self.labelSwap.emit(f"Times saved ({timestampString}):\n{totalHours} hours\n{totalMinutes} minutes\n{totalSeconds} seconds\n{totalPlays} plays", 0)
                     # prints the total times at start
         else:
         # if the file for SHA doesn't exist
             if not disableShaa:
             # if SHAA isn't disabled
-                self.labelSwap.emit("Could not find totalTimes.txt file, please ensure proper SHAA installation...", 2)
+                self.labelSwap.emit("Could not find totalTimes.json file, please ensure proper SHAA installation...", 2)
                 # there's already a print informing about non-SHAA installation later
                 disableShaa = True
                 # disables SHAA functionality (can't access files)
 
-        QTimer.singleShot(2500, self.readyStateReadier)
+        QTimer.singleShot(2000, self.readyStateReadier)
         # calls the next stage 
 
 ### Ready State Setter ###
@@ -1987,20 +2232,18 @@ class DSI_MainWindow(QMainWindow):
         self.submitButton.deleteLater()
         # deletes the now useless buttons
 
-        self.mainLayout.setColumnMinimumWidth(1, 0)
-        self.mainLayout.setColumnMinimumWidth(2, 400)
-        self.mainLayout.setColumnMinimumWidth(3, 0)
+        self.mainLayout.setColumnMinimumWidth(0, 200)
+        self.mainLayout.setColumnMinimumWidth(1, 450)
+        self.mainLayout.setColumnMinimumWidth(2, 200)
         # sets the minimum width for columns
 
         self.mainLayout.setColumnStretch(0, 0)
         self.mainLayout.setColumnStretch(1, 0)
         self.mainLayout.setColumnStretch(2, 0)
-        self.mainLayout.setColumnStretch(3, 0)
-        self.mainLayout.setColumnStretch(4, 0)
         # stops each column from expanding on their own
 
-        self.blacklistSongName.show()
-        # enables the song name field
+        self.resize(self.windowSizeX, self.windowSizeX)
+        # resizes the window automatically to fit everything (square)
 
         self.readyTag.emit()
         # sends a signal to the ready tag to allow progress (starts the threads)
@@ -2010,7 +2253,7 @@ class DSI_MainWindow(QMainWindow):
     def programReadyState(self):
         """Function that activates things after the rest of the program is caught up"""
 
-        self.swapStatsButton.show()
+        self.cycleStatsButton.show()
         self.debugInfoButton.show()
         self.openFuncConfigButton.show()
         self.openUriMapperButton.show()
@@ -2063,7 +2306,7 @@ def eventer():
 
 ### Spotify Data Grabber Function ###
 
-def authPlayback():
+def authPlayback() -> dict | None:
     """Function to more "safely" handle Spotify API requests and errors"""
     
     global main
@@ -2389,16 +2632,14 @@ def whitelistManager(action: str) -> list | None:
             # adds the info dictionary to the favorite list
     
     if action == "Add":
-        if len(favoriteList) == 10:
+    # action is to add a new item to whitelist
+        if len(favoriteList) >= 10:
         # if there's 10 items already in the list
-            mainWin.labelSwap.emit("The favorited song list is full!\nPlease remove one before favoriting this song.", 2)
+            mainWin.labelSwap.emit("The favorited song list is full!\nPlease remove one before favoriting this song!", 2)
             # user update
         else:
         # if there's not 10
-            blacklist[currentURI] = {
-                "status": "starred",
-                "info": blacklistInfo
-                }
+            blacklist[currentURI] = {"status": "starred", "info": blacklistInfo}
             # forms a new blacklist entry with the current song's info
             mainWin.labelSwap.emit(f"Added {blacklistInfo["Song Name"]} to favorite list!", 3)
             # user update
@@ -2679,12 +2920,15 @@ def cppPackets(packet: dict):
 
 ### Song Data File Field Selection/Creation ###
 
-def song(pictureQueue, event):
+def song(pictureQueue: queue.Queue, event):
     """The function that handles all song data gathering and parsing"""
     global uriList, cppLargeImage, uriMap, pauseStart
     global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtistName, cppFull
     global csSongName, csArtistURL, csAlbumName, csAlbumURL, csPlaylistURL
     # global -> local
+
+    mainWin.blacklistTag.emit("Init", "", "")
+    # sends an empty signal to initialise (shows the manage button and song name)
 
     while not songThreadEvent.is_set():
     # while the event isn't set, keeps looping
@@ -2698,28 +2942,26 @@ def song(pictureQueue, event):
         cppLargeHoverList = []
         # creates an empty list for strings to get added into as the loop progresses 
 
-        csFull = currentInfo
+        csFull: dict = currentInfo
         # gets a huge dictionary containing all the information about current song
         # "cs" in the variables just stands for CurrentSong, which, while descriptive, made the later variables insanely long
 
         if not csFull or not csFull.get("item"):
         # if the dictionary doesn't exist or can't be called
-            cppFull = {
-                "Playback State": False
-            }
-            # sets the playback state field to False
+            cppFull = {"Playback State": False}
+            # sets the playback state field to False in the global dictionary
 
         else:
         # dictionary is valid and can be called
-            csItem = csFull.get("item")
+            csItem: dict = csFull.get("item")
             # takes the first part of the song's info (leaving out device info and various user states)
-            csAlbum = csItem.get("album")
+            csAlbum: dict = csItem.get("album")
             # takes a smaller part of the song's info (still contains a ton of extra)
 
             csDevice = csFull.get("device")
             # gets a list of device information
 
-            csName = csItem.get("name")
+            csName = str(csItem.get("name"))
             # stores the name of the song
             csSongName = csName
             # stores a duplicate for the final packet
@@ -2731,6 +2973,11 @@ def song(pictureQueue, event):
             shaaPlaycountSong = None
             shaaPlaytime = None
             # starts up variables as None
+            
+            singlePlay = False
+            # local boolean to check if the song has been played once
+            firstPlay = False
+            # local boolean to check if the song has ever been played
 
             if not isLocalSong:
             # these fields are only valid when it's not a local song
@@ -2738,19 +2985,19 @@ def song(pictureQueue, event):
                 csURI = csItem.get("uri")
                 # grabs the URI of the song - which is what determines the song matching
 
-                csImages = csAlbum.get("images")
+                csImages: list[dict] = csAlbum.get("images")
                 # gets the information about the album's images
                 csCover = csImages[0].get("url")
                 # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
 
-                csArtists = csItem.get("artists")
+                csArtists: list[dict] = csItem.get("artists")
                 # stores all the artists listed on the song
                 csArtistName = csArtists[0].get("name")
                 # stores the first artist's name (in case there's multiple artists, only grabs first)
 
                 csAlbumName = csAlbum.get("name")
                 # stores the album name
-                csAlbumURLs = csAlbum.get("external_urls")
+                csAlbumURLs: dict = csAlbum.get("external_urls")
                 # stores all the album urls 
                 csAlbumURL = csAlbumURLs.get("spotify")
                 # gets the spotify url 
@@ -2787,15 +3034,15 @@ def song(pictureQueue, event):
 
             if not isLocalSong:
             # can't access these if the playing song is local
-                cstrackURL = csItem.get("external_urls")
+                cstrackURL: dict = csItem.get("external_urls")
                 # stores the list that contains track's url
-                csAlbumLinks = csAlbum.get("external_urls") 
+                csAlbumLinks: dict = csAlbum.get("external_urls") 
                 # stores the list that contains album url
-                csArtistLinks = csArtists[0].get("external_urls")
+                csArtistLinks: dict = csArtists[0].get("external_urls")
                 # stores the list that contains artist's url
                 csArtistURL = csArtistLinks.get("spotify")
                 # stores the artist URL
-                csPlaylist = csFull.get("context")
+                csPlaylist: dict = csFull.get("context")
                 # stores the list that contains the playlist url
 
             if csPlaylist == None:
@@ -2804,7 +3051,7 @@ def song(pictureQueue, event):
                 # if not, sets onPlaylist to false
             else:
             # if there is a playlist playing
-                csPlaylistURLs = csPlaylist.get("external_urls")
+                csPlaylistURLs: dict = csPlaylist.get("external_urls")
                 # gets the list of external urls attached to that playlist
                 csPlaylistURL = csPlaylistURLs.get("spotify")
                 # grabs the Spotify playlist URL
@@ -2984,6 +3231,10 @@ def song(pictureQueue, event):
                             # user update
                         uriList.append(finalURI)
                         # adds it to the list of URIs
+                        if enableFirstTime:
+                        # if first time behavior is enabled
+                            firstPlay = True
+                            # track hasn't been played before (since it's not in the URI list)
 
                     if (finalURI not in csvReader.index) and (altURI in csvReader.index):
                     # if the URI is not found in the CSV index, but the alternate URI is
@@ -2993,13 +3244,35 @@ def song(pictureQueue, event):
                         # if the user updates are enabled
                             mainWin.labelSwap.emit("Using song stats from mapped URI", 0)
                             # user update
-
+                
                 if finalURI in csvReader.index:
                 # checks if the URI is in the CSV
                     if enableUpdates:
                     # if the user updates are enabled
                         mainWin.labelSwap.emit(f"Song stats found", 0)
                         # user update
+
+                ### Top Hour ###
+
+                    if enableTopHour:
+                    # if the top hour is enabled
+                        currentHour = f"{pd.Timestamp.now().hour:02d}"
+                        # gets the current hour number as a string with leading 0s (how the dictionary is constructed)
+                        if currentHour in topHour:
+                        # if the current hour matches the stored top hour
+                            songStuffList.append(topHourFormat)
+                            # adds the top hour format
+                            songStuffList.append(songInfoSpacer)
+                            # adds the spacer item, too
+
+                ### Top Track/Album/Artist ###
+
+                    if enableTopTracks and len(topTracks) > 0:
+                    # if the top tracks prefix is enabled and there's at least 1 top track stored
+                        if finalURI in topTracks:
+                        # if that URI is in the top tracks dictionary
+                            songStuffList.append(f"#{topTracks.index(finalURI)+1} track with")
+                            # adds the track identifier and string prefix
 
                 ### Plays / Field 1 ###
 
@@ -3019,6 +3292,11 @@ def song(pictureQueue, event):
                             playcountTotal = playcount
                             # saves the total as the playcount of the song
 
+                        if playcountTotal == 1:
+                        # if the playcount equals 1
+                            singlePlay = True
+                            # sets single play to True (affects formatting)
+
                         shaaPlaycount = f"{playcountTotal:,.0f}"
                         # formats the string properly
                         songStuffList.append(shaaPlaycount)
@@ -3036,8 +3314,14 @@ def song(pictureQueue, event):
 
                 ### Field 1 Format ###
 
-                    songStuffList.append(songInfoFormatPlays)
-                    # adds the first field's custom end styling
+                    if singlePlay and songInfoFormatPlays.lower().endswith("s"):
+                    # if the track has been played only once and the string contains a plural ("plays", "listens", "repeats"...)
+                        songStuffList.append(songInfoFormatPlays[:-1])
+                        # adds just the single form instead (removes the last character)
+                    else:
+                    # not matching style / not single playcount
+                        songStuffList.append(songInfoFormatPlays)
+                        # adds the first field's custom end styling
 
                 ### Spacer ###
 
@@ -3102,6 +3386,15 @@ def song(pictureQueue, event):
 
                     songStuffList.append(songInfoFormatMins)
                     # adds the second field's custom end styling
+                
+                elif firstPlay:
+                # not in the CSV and it's the first time that song is played
+                    songStuffList.append(firstTimeFormat)
+                    # adds the first time listening format string
+                    if enableUpdates:
+                    # user informs enabled
+                        mainWin.labelSwap.emit(f"Using first time special text!", 0)
+                        # user inform on first time track
                         
             ### Details / Field 3 / Total Hours ###
 
@@ -3254,14 +3547,27 @@ def song(pictureQueue, event):
 
             ### No Track Match ###
 
-                if finalURI not in csvReader.index:
-                # if the track wasn't found in CSV
+                if (finalURI not in csvReader.index) and not firstPlay:
+                # if the track wasn't found in CSV and it's not the first time for the track
                     if enableUpdates:
                     # if the updates are enabled
                         mainWin.labelSwap.emit(f"{csName} not found in CSV, using fallback values", 0)
                         # lets user know the song wasn't found in CSV
                     
-                    ### Field 1 / Field 2 ###
+                ### Top Hour ###
+
+                    if enableTopHour:
+                    # if the top hour is enabled
+                        currentHour = pd.Timestamp.now().hour
+                        # gets the current hour number
+                        if currentHour in topHour:
+                        # if the current hour matches the stored
+                            songStuffList.append(topHourFormat)
+                            # adds the top hour format
+                            songStuffList.append(songInfoSpacer)
+                            # adds the spacer item, too
+
+                ### Field 1 / Field 2 ###
 
                     if shaaFallback == "Total":
                     # if the selected fallback is Total/total
@@ -3299,11 +3605,15 @@ def song(pictureQueue, event):
             if songStuffList:
             # if there's anything in songStuffList (not empty)
                 cppState = " ".join(songStuffList)
-
-            else:
-            # if the list *is* empty
+                # forms the 'state' string 
+            elif not firstPlay:
+            # if the list is empty, and it's not the first play of the track
                 cppState = "An amount of time spent listening"
                 # puts a fallback string instead
+            else:
+            # list is empty *because* first play is enabled
+                cppState = ""
+                # empty string
 
         ### Song Style ###
 
@@ -3397,11 +3707,6 @@ def song(pictureQueue, event):
                 cppLargeImage = csCover
                 # replaces the image link with the spotify album cover if so
 
-            if not disableShaa:
-            # if shaa is enabled (not disabled)
-                mainWin.blacklistTag.emit("New Song", csName, finalURI)
-                # sends a signal to the blacklist manager to change the name and information
-
             if finalURI in blacklist:
             # if the song('s URI) is in the blacklist
                 if blacklist[finalURI]["status"] == "blacklisted":
@@ -3413,12 +3718,11 @@ def song(pictureQueue, event):
                     # if there's more than 0 items in the list
                         pickedSong = random.choice(favoriteList)
                         # gets a random song from the list of favorite songs
-                        mainWin.labelSwap.emit("This song is blacklisted, using a favorited song instead...", 0)
-                        # user inform
                         cppReplace = pickedSong["info"]
                         # gets the song's full dictionary
                         cppSongName = cppReplace["Song"]
                         cppAlbumName = cppReplace["Album"]
+                        csArtistName = cppReplace["Artist Name"]
                         cppState = cppReplace["State"]
                         cppLargeImage = cppReplace["Large Image"]
                         cppLargeHover = cppReplace["Large Text"]
@@ -3426,9 +3730,19 @@ def song(pictureQueue, event):
                         csURL = cppReplace["Spotify URL"]
                         smallURL = cppReplace["Small URL"]
                         # grabs all the relevant details that will replace the current song's information
+                        mainWin.blacklistTagFull.emit("New Song", csName, finalURI, cppReplace)
+                        # sends a signal to the blacklist manager with the full details
                     else:
                         mainWin.labelSwap.emit("This song is blacklisted, but no favorited songs found!\nPlease favorite at least one song to utilize blacklisting!", 2)
                         # user update
+                else:
+                # URI is in the blacklist, but not blacklisted (favorite)
+                    mainWin.blacklistTag.emit("New Song", csName, finalURI)
+                    # sends a signal to the blacklist manager to change the name and information
+            else:
+            # if the URI isn't in the blacklist
+                mainWin.blacklistTag.emit("New Song", csName, finalURI)
+                # sends a signal to the blacklist manager to change the name and information
 
             cppFull = {
                 "Playback State": True,
@@ -3461,16 +3775,16 @@ def song(pictureQueue, event):
             # forms a dictionary of the current song's full info (sent to C++ and Flask app, if enabled)
 
         blacklistInfo = {
-            "Song Name": csName,
-            "Artist Name": csArtistName,
-            "Song": cppSongName,
-            "Album": cppAlbumName,
-            "State": cppState,
-            "Large Image": cppLargeImage,
-            "Large Text": cppLargeHover,
-            "Small Text": hoverText,
-            "Spotify URL": csURL,
-            "Small URL": smallURL
+            "Song Name": cppFull["Song Name"],
+            "Artist Name": cppFull["Artist Name"],
+            "Song": cppFull["Song"],
+            "Album": cppFull["Album"],
+            "State": cppFull["State"],
+            "Large Image": cppFull["Large Image"],
+            "Large Text": cppFull["Large Text"],
+            "Small Text": cppFull["Small Text"],
+            "Spotify URL": cppFull["Spotify URL"],
+            "Small URL": cppFull["Small URL"]
         }
         # forms a smaller dictionary of the current song's info (this is just for the "blacklist" preview)
 
