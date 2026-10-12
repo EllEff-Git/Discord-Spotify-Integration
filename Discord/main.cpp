@@ -283,6 +283,9 @@ int main() {
             // starts a loop to refresh info
             while (running) {
 
+                // sets up a boolean to check if the spotify playback is valid
+                bool playbackState = true;
+
                 // sets up a boolean to check if an update is required due to timer
                 bool requiredUpdate = false;
 
@@ -339,6 +342,17 @@ int main() {
 
                     // parses the received packet into a json form 
                     json data = json::parse(packet);
+
+                    // grabs the boolean that represents whether the playback is currently on or not
+                    playbackState = data["Playback State"].get<bool>();
+                    
+                    // if playback is cut from Spotify (stopped playing)
+                    if (!playbackState) {
+                        // goes to sleep for 5 seconds
+                        std::this_thread::sleep_for(std::chrono::seconds(5));
+                        // resets the loop
+                        continue;
+                    }
 
                     // tries to reassign all the variables from the data packet
                     try {

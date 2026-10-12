@@ -7,23 +7,17 @@ import json, os, sys, asyncio
 
 
 
-class Ui_DSIWindow(object):
+class dsiConfigWindow(QMainWindow):
     """The window class"""
-    def setupUi(self, DSIWindow):
-    # setup (sorry if the docs are a bit weird, this was made with the Qt Creator, I wrote docs after <3)
-        if not DSIWindow.objectName():
-        # checks for a name 
-            DSIWindow.setObjectName(u"DSIWindow")
-            # sets the name
-        DSIWindow.setMinimumSize(850, 750)
-        # sets the window size
-        self.window = DSIWindow
-        # stores a reference in self to the actual window (so that it can be closed later)
+    def __init__(self):
+        super().__init__()
+        # init
 
-        self.centralWidget = QWidget(DSIWindow)
+        self.setMinimumSize(850, 750)
+        # sets the window size
+
+        self.mainWidget = QWidget()
         # makes a QWidget out of the main window
-        self.centralWidget.setObjectName(u"main")
-        # sets the object name
 
         self.thisExeDir = os.path.dirname(sys.executable)
         # the directory this exe is located in
@@ -36,13 +30,10 @@ class Ui_DSIWindow(object):
         # stores the "main" folder (DSI, which is 3 folders up)
         self.configPath = os.path.join(self.configFolderPath, "config.json")
         # stores the config file path
-        self.shaaPath = os.path.join(self.mainFolder, "runtime", "Qt", "shaaWindow", "shaaWindow.exe")
-        # stores the SHAA configuration window path
 
-        self.window.setWindowIcon(QIcon(self.mainIcon))
+        self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
-
-        self.window.setWindowTitle("DSI Customisation Configurator")
+        self.setWindowTitle("DSI Customisation Configurator")
         # sets title name
 
         def readConfig() -> dict:
@@ -90,7 +81,7 @@ class Ui_DSIWindow(object):
 
 ### Window Layout ###
 
-        self.fullWindowLayout = QGridLayout(self.centralWidget)
+        self.fullWindowLayout = QGridLayout(self.mainWidget)
         self.fullWindowLayout.setSpacing(15)
         self.fullWindowLayout.setContentsMargins(15, 0, 20, 15)
         # the main layout, contains all other widgets and layouts
@@ -446,37 +437,24 @@ class Ui_DSIWindow(object):
 ### Buttons (2 / 0) ###
 
         self.buttonLayout = QGridLayout()
-        # this layout just contains 2 buttons, the shaa button and the starter button
+        # this layout just the starter button
 
         self.fullWindowLayout.addLayout(self.buttonLayout, 2, 0)
         # adds the vertical (button) layout to the full layout
 
-        self.shaaConfigureButton = QPushButton()
-        # the button that opens the SHAA configuration window
-        self.shaaConfigureButton.setText("Configure SHAA Details")
-        # sets the text
-        self.shaaConfigureButton.setToolTip("Opens a new window to configure SHAA details")
-        # tooltip
-        self.shaaConfigureButton.setMinimumSize(250, 60)
-        # sets a minimum size
-
-        self.dsiStarterButton = QPushButton()
+        self.saveAndCloseButton = QPushButton()
         # the button that closes this window and continues previous function (DSI or func config)
-        self.dsiStarterButton.setText("Save and close")
+        self.saveAndCloseButton.setText("Save and close")
         # sets the text
-        self.dsiStarterButton.setToolTip("Closes this window and continues DSI process")
+        self.saveAndCloseButton.setToolTip("Closes this window and continues DSI process")
         # tooltip
-        self.dsiStarterButton.setMinimumSize(250, 60)
+        self.saveAndCloseButton.setMinimumSize(250, 60)
         # sets a minimum size
 
-        self.buttonLayout.addWidget(self.shaaConfigureButton, 0, 0)
-        # adds the button to the layout
-        self.buttonLayout.addWidget(self.dsiStarterButton, 1, 0)
+        self.buttonLayout.addWidget(self.saveAndCloseButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the start button to the layout
 
-        self.shaaConfigureButton.clicked.connect(self.runShaaWindow)
-        # runs the SHAA configuration window when pressed
-        self.dsiStarterButton.clicked.connect(self.writeConfig)
+        self.saveAndCloseButton.clicked.connect(self.writeConfig)
         # "connects" the starter button to the config writer (also closes the window)
 
 
@@ -630,7 +608,7 @@ class Ui_DSIWindow(object):
 
     ### Central Widget ###
 
-        DSIWindow.setCentralWidget(self.centralWidget)
+        self.setCentralWidget(self.mainWidget)
         # sets central widget
 
 ### Connects ###
@@ -656,17 +634,6 @@ class Ui_DSIWindow(object):
         # if the text changes, calls the previewStringWriter
         self.songSpacerR.textChanged.connect(self.previewStringWriter)
         # if the text changes, calls the previewStringWriter
-
-### SHAA Window ###
-
-    def runShaaWindow(self):
-        """Function to run the SHAA configuration window"""
-        async def asyncRunner():
-            # has an integrated async function so it can run asynchronously from the main process
-            shaaConfig = await asyncio.create_subprocess_exec(self.shaaPath)
-            # runs the SHAA configurator as a subprocess of this subprocess
-        asyncio.run(asyncRunner())
-        # runs the async runner
 
 ### Config Write ###
 
@@ -698,7 +665,7 @@ class Ui_DSIWindow(object):
             json.dump(configuration, cfg, indent=3)
             # dumps everything in
 
-        self.window.close()
+        self.close()
         # closes the whole window
 
 ### Preview String ###
@@ -782,13 +749,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # creates a Qt Application
 
-    DSIcfgWindow = QMainWindow()
+    DSIcfgWindow = dsiConfigWindow()
     # creates a window
-    ui = Ui_DSIWindow()
-    # takes the UI class
-    ui.setupUi(DSIcfgWindow)
-    # "populates" the UI class
-
     DSIcfgWindow.show()
     # displays the window
 

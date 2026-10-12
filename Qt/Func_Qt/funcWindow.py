@@ -7,23 +7,16 @@ import json, os, sys, asyncio
 
 
 
-class Ui_FuncWindow(object):
+class functionConfigWindow(QMainWindow):
     """The window class"""
-    def setupUi(self, FuncWindow):
-    # setup (sorry if the docs are a bit weird, this was made with the Qt Creator, I wrote docs after <3)
-        if not FuncWindow.objectName():
-        # checks for a name 
-            FuncWindow.setObjectName(u"FuncWindow")
-            # sets the name
-        FuncWindow.setMinimumSize(925, 350)
-        # sets the window size 
-        self.window = FuncWindow
-        # stores a reference in self to the actual window (so that it can be closed later)
+    def __init__(self):
+        super().__init__()
+        # init
 
-        self.main = QWidget(FuncWindow)
-        # makes a QWidget out of the main window
-        self.main.setObjectName(u"main")
-        # sets the object name
+        self.setMinimumSize(925, 350)
+        # sets the window size 
+        self.mainWidget = QWidget()
+        # makes a QWidget for the main window
 
         self.thisExeDir = os.path.dirname(sys.executable)
         # the directory this exe is located in
@@ -36,15 +29,11 @@ class Ui_FuncWindow(object):
         # stores the "main" folder (DSI, which is 3 folders up)
         self.configPath = os.path.join(self.configFolderPath, "functionConfig.json")
         # stores the config file's path
-        self.dsiPath = os.path.join(self.mainFolder, "runtime", "Qt", "dsiWindow", "dsiWindow.exe")
-        # stores the DSI configuration window path
 
-        self.window.setWindowIcon(QIcon(self.mainIcon))
+        self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
-
-        self.window.setWindowTitle("DSI Functionality Configuration")
+        self.setWindowTitle("DSI Functionality Configuration")
         # sets title name
-
         self.firstTime = False
         # stores a boolean for the first time launch (False by default)
 
@@ -88,19 +77,12 @@ class Ui_FuncWindow(object):
         self.loadedConfig = readConfig()
         # runs the config reader to get new config info, stores it
 
-        self.centralWidget = QWidget(FuncWindow)
-        # the main, central widget
-        self.centralWidget.setObjectName("centralWidget")
-        # sets name
-
 
 
     ### Main Layout ###
 
-        self.mainLayout = QGridLayout(self.centralWidget)
+        self.mainLayout = QGridLayout(self.mainWidget)
         # sets the main layout to use a grid of the central
-        self.mainLayout.setObjectName("mainLayout")
-        # sets name
         self.mainLayout.setContentsMargins(25, 25, 25, 25)
         # sets margins of 25px 
         self.mainLayout.setVerticalSpacing(25)
@@ -110,8 +92,6 @@ class Ui_FuncWindow(object):
 
         self.optionLayout = QGridLayout()
         # adds a grid layout for the options
-        self.optionLayout.setObjectName("optionLayout")
-        # sets name
         self.optionLayout.setContentsMargins(25, 25, 25, 25)
         # sets margins of 25px
         self.optionLayout.setVerticalSpacing(15)
@@ -284,7 +264,7 @@ class Ui_FuncWindow(object):
 
         self.enableFlaskLabel = QLabel("Enable Data Hosting")
         # label for data hosting
-        self.enableFlaskLabel.setToolTip("Enable a localhost server that hosts parsed data\nUseful if running both DSI and SBO on the same network/device")
+        self.enableFlaskLabel.setToolTip("Enable sharing DSI data to local network or device\nUseful if running both DSI and SBO on the same network/device")
         # tooltip
 
         self.enableFlaskCheck = QCheckBox()
@@ -331,22 +311,13 @@ class Ui_FuncWindow(object):
         self.mainLayout.addLayout(self.buttonLayout, 2, 0)
         # adds the layout to main (row 2, under the options)
 
-        self.dsiConfigButton = QPushButton()
-        # a button to run the DSI config
-        self.dsiConfigButton.setText("Configure DSI Details")
-        # sets text
-        self.dsiConfigButton.setToolTip("Opens a configuration window to change DSI visual details\nSHAA configuration can also be found here")
-        # tooltip
-        self.dsiConfigButton.setMinimumSize(240, 45)
-        # sets a minimum size
-
-        self.startDsiButton = QPushButton()
+        self.saveAndCloseButton = QPushButton()
         # a button to close and start DSI
-        self.startDsiButton.setText("Save and close")
+        self.saveAndCloseButton.setText("Save and close")
         # sets text
-        self.startDsiButton.setToolTip("Closes this configuration window and continues DSI function")
+        self.saveAndCloseButton.setToolTip("Closes this configuration window and continues DSI function")
         # tooltip
-        self.startDsiButton.setMinimumSize(240, 45)
+        self.saveAndCloseButton.setMinimumSize(240, 45)
         # sets a minimum size
 
         self.firstTimeButton = QPushButton()
@@ -358,21 +329,18 @@ class Ui_FuncWindow(object):
         self.firstTimeButton.setMinimumSize(240, 45)
         # sets a minimum size
 
-        self.buttonLayout.addWidget(self.dsiConfigButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.buttonLayout.addWidget(self.startDsiButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.buttonLayout.addWidget(self.firstTimeButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.buttonLayout.addWidget(self.saveAndCloseButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.buttonLayout.addWidget(self.firstTimeButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds all to the layout, vertically aligned
 
-        self.dsiConfigButton.clicked.connect(self.runDSIwindow)
-        # connects the DSI config button to the async runner
-        self.startDsiButton.clicked.connect(self.writeConfig)
+        self.saveAndCloseButton.clicked.connect(self.writeConfig)
         # connects the DSI start button to the config write + exit
         self.firstTimeButton.clicked.connect(self.firstTimePrompt)
         # connects the first time button to the prompt
 
     ### Central Widget ###
 
-        FuncWindow.setCentralWidget(self.centralWidget)
+        self.setCentralWidget(self.mainWidget)
         # sets central widget
 
 ### First Time Prompt ###
@@ -410,17 +378,6 @@ class Ui_FuncWindow(object):
         # if everything is ok
             None
             # closes
-
-### DSI Window Run ###
-
-    def runDSIwindow(self):
-        """Function to run the DSI configuration window"""
-        async def asyncRunner():
-            # has an integrated async function so it can run asynchronously from the main process
-            dsiConfig = await asyncio.create_subprocess_exec(self.dsiPath)
-            # runs the DSI configurator as a subprocess of this subprocess
-        asyncio.run(asyncRunner())
-        # runs the async runner
 
 ### Config Write ###
 
@@ -477,7 +434,7 @@ class Ui_FuncWindow(object):
             json.dump(configuration, cfg, indent=3)
             # dumps everything in
 
-        self.window.close()
+        self.close()
         # closes the whole process
 
 
@@ -490,13 +447,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # creates a Qt Application
 
-    FuncCfgWindow = QMainWindow()
-    # creates a window
-    ui = Ui_FuncWindow()
-    # takes the UI class
-    ui.setupUi(FuncCfgWindow)
-    # "populates" the UI class
-
+    FuncCfgWindow = functionConfigWindow()
+    # instantiates the window class
     FuncCfgWindow.show()
     # displays the window
 

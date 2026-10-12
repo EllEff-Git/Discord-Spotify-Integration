@@ -7,18 +7,15 @@ import json, os, sys
 
 
 
-class Ui_SHAAWindow(object):
+class SHAAconfigWindow(QMainWindow):
     """The window class"""
-    def setupUi(self, SHAAWindow):
-    # setup (sorry if the docs are a bit weird, this was made with the Qt Creator, I wrote docs after <3)
-        if not SHAAWindow.objectName():
-        # checks for a name 
-            SHAAWindow.setObjectName(u"SHAAWindow")
-            # sets the name
-        SHAAWindow.setMinimumSize(1600, 900)
+
+    def __init__(self):
+        super().__init__()
+        # init
+
+        self.setMinimumSize(1600, 900)
         # sets the window size 
-        self.window = SHAAWindow
-        # stores a reference in self to the actual window (so that it can be closed later)
 
         self.thisExeDir = os.path.dirname(sys.executable)
         # the directory this exe is located in
@@ -32,7 +29,7 @@ class Ui_SHAAWindow(object):
         self.configPath = os.path.join(self.configFolderPath, "shaaConfig.json")
         # stores the config file's path
 
-        self.window.setWindowIcon(QIcon(self.mainIcon))
+        self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
 
         def readConfig() -> dict:
@@ -100,7 +97,7 @@ class Ui_SHAAWindow(object):
         self.songInfoDetailOptions.remove(self.loadedDetailOption)
         # removes the current option
 
-        self.mainWidget = QWidget(SHAAWindow)
+        self.mainWidget = QWidget()
         # window's central widget
 
         self.gridLayoutWidget = QWidget(self.mainWidget)
@@ -109,7 +106,6 @@ class Ui_SHAAWindow(object):
     
         self.mainLayout = QGridLayout(self.gridLayoutWidget)
         self.mainLayout.setSpacing(10)
-        self.mainLayout.setObjectName(u"mainLayout")
         self.mainLayout.setContentsMargins(20, 10, 20, 10)
         # makes and configures the main layout
 
@@ -128,7 +124,6 @@ class Ui_SHAAWindow(object):
 ### Bottom Right ###
 
         self.bottomRightGrid = QGridLayout()
-        self.bottomRightGrid.setObjectName(u"bottomRightGrid")
         self.bottomRightGrid.setHorizontalSpacing(5)
         self.bottomRightGrid.setVerticalSpacing(10)
         self.bottomRightGrid.setContentsMargins(10, 10, 10, 10)
@@ -583,15 +578,15 @@ class Ui_SHAAWindow(object):
 
     ### Opt 5 ###
 
-        self.topTrackLabel = QLabel(self.gridLayoutWidget)
-        self.topTrackLabel.setText("Whether to enable top track prefixes before the first/second fields\nEx. '#2 track with 2,345 plays \u203b 6,789 minutes'")
-        self.topRightGrid.addWidget(self.topTrackLabel, 15, 0, 1, 1)
+        self.topItemLabel = QLabel(self.gridLayoutWidget)
+        self.topItemLabel.setText("Whether to enable top 10 prefixes before the first/second fields\nUses the same spacer as the one between fields 1 and 2\nEx. '#2 track with 2,345 plays \u203b 6,789 minutes' or '#3 album with 23,456 plays \u203b 67,891 minutes'")
+        self.topRightGrid.addWidget(self.topItemLabel, 15, 0, 1, 1)
         # adds to row 15
 
-        self.topTrackCheck = QCheckBox(self.gridLayoutWidget)
-        self.topTrackCheck.setText("Top Track Prefixes")
-        self.topTrackCheck.setChecked(self.loadedConfig.get("enableTopTracks", True))
-        self.topRightGrid.addWidget(self.topTrackCheck, 16, 0, 1, 1)
+        self.topItemCheck = QCheckBox(self.gridLayoutWidget)
+        self.topItemCheck.setText("Top Item Prefixes")
+        self.topItemCheck.setChecked(self.loadedConfig.get("enableTopTracks", True))
+        self.topRightGrid.addWidget(self.topItemCheck, 16, 0, 1, 1)
         # adds to row 16
 
     ### Spacer ###
@@ -604,8 +599,7 @@ class Ui_SHAAWindow(object):
 
     ### Main ###
 
-        SHAAWindow.setCentralWidget(self.mainWidget)
-        QMetaObject.connectSlotsByName(SHAAWindow)
+        self.setCentralWidget(self.mainWidget)
 
 
     def writeConfig(self):
@@ -635,7 +629,7 @@ class Ui_SHAAWindow(object):
             json.dump(configuration, cfg, indent=3)
             # dumps everything in
 
-        self.window.close()
+        self.close()
         # closes the whole process
 
 if __name__ == "__main__":
@@ -643,13 +637,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     # creates a Qt Application
 
-    SHAAcfgWindow = QMainWindow()
+    SHAAcfgWindow = SHAAconfigWindow()
     # creates a window
-    ui = Ui_SHAAWindow()
-    # takes the UI class
-    ui.setupUi(SHAAcfgWindow)
-    # "populates" the UI class
-
     SHAAcfgWindow.show()
     # displays the window
 

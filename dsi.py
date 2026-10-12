@@ -72,6 +72,9 @@ dsiConfigExePath = os.path.join(qtFolderPath, "dsiWindow", "dsiWindow.exe")
 
 shaaConfigPath = os.path.join(configFolderPath, "shaaConfig.json")
 """The SHAA x DSI configuration json file"""
+shaaConfigExePath = os.path.join(qtFolderPath, "shaaWindow", "shaaWindow.exe")
+"""The SHAA x DSI configurar program/window"""
+
 secretConfigPath = os.path.join(configFolderPath, "secretConfig.json")
 """The main configuration file, contains client secret info"""
 
@@ -244,7 +247,7 @@ enableTopHour = False
 """Whether to enable top hour listening custom string, boolean"""
 topHourFormat = "Listening at peak hours"
 """Custom string to use when listening at top hour, string"""
-enableTopTracks = True
+enableTopItems = True
 """Whether to enable top track prefixes, boolean"""
 dsiShoutout = False
 """Whether to add a shoutout to DSI at the end of the details section, boolean"""
@@ -267,6 +270,10 @@ blacklistInfo = None
 """Dictionary containing the current song's info"""
 currentURI = None
 """The current song's track URI"""
+deviceName = None
+"""The currently playing device's name (str)"""
+volumeLevel = None
+"""The currently playing device's Spotify volume (percent, int)"""
 cppLargeImage = ""
 """Makes an empty image string, in case it fails to make first load"""
 pauseUpdated = False
@@ -277,8 +284,8 @@ totalAverage = "0:00"
 """Variable to store the total historical average playtime to playcount"""
 topHour = {}
 """Variable to store the top hour and its playcount ({hour: count})"""
-topTracks = topArtists = topAlbums = []
-"""List variables to store the top tracks, artists and albums, sorted by playtime ([uri, uri2, uri3])"""
+topTracks = topArtists = topAlbums = {}
+"""Dictionaries that store the URIs to each top X item(s) and their ranks in the respective dictionary"""
 
 oldCount = trackCounter = 0
 """Variables to track 'song IDs'"""
@@ -290,6 +297,8 @@ timePlayed = 0
 """Variable to store total playtime during DSI uptime"""
 lastPlayStamp = 0
 """Variable to store timestamp for playtime calculation"""
+storedStart = time.time()
+"""Variable to store the start time of the current track"""
 lastDSIsave = time.time()
 """Variable to store the last time DSI was auto-saved"""
 
@@ -458,6 +467,10 @@ class DSI_MainWindow(QMainWindow):
         # allows the label to expand
         self.mainLabel.setMinimumWidth(400)
         # sets a minimum size for the label
+        self.mainLabel.setMaximumWidth(self.consoleScroll.width())
+        # sets the max width to match to match the console's width
+        self.mainLabel.setWordWrap(True)
+        # ensures text too long still wraps
         self.consoleScroll.setWidget(self.mainLabel)
         # sets the console to use the mainLabel
 
@@ -485,7 +498,7 @@ class DSI_MainWindow(QMainWindow):
         # a button to open the directory
         self.directoryButton.setFixedSize(50, 50)
         # sets size
-        self.directoryButton.setToolTip("Open the configuration location\nThis is where you should drop your dsi.csv and totalTimes.json files if you are using DSI with SHAA")
+        self.directoryButton.setToolTip("Open the configuration location\nThis is where your configurations and SHAA files are located")
         # tooltip
         self.directoryButton.clicked.connect(lambda: os.startfile(configFolderPath))
         # connects the button to just opening the installation directory
@@ -645,14 +658,17 @@ class DSI_MainWindow(QMainWindow):
         self.debugInfoButton.hide()
         # hides the button on start
 
+        self.buttonSpacer = QSpacerItem(100, 50)
+        # a spacer item to gap the visual/functional buttons
+
         self.openFuncConfigButton = QPushButton("Configure")
-        # a button to open the functional config (gateway to other configs)
+        # a button to open the config launcher pad
         self.openFuncConfigButton.setFixedSize(125, 50)
         # sets fixed size
-        self.openFuncConfigButton.setToolTip("Enter the config")
+        self.openFuncConfigButton.setToolTip("Open the configuration launcher")
         # tooltip
 
-        self.openFuncConfigButton.clicked.connect(self.openFuncConfigWin)
+        self.openFuncConfigButton.clicked.connect(self.openConfigLauncher)
         # connects the button click to the detail display
         self.openFuncConfigButton.hide()
         # hides the button on start
@@ -661,7 +677,7 @@ class DSI_MainWindow(QMainWindow):
         # a button to open the URI mapper
         self.openUriMapperButton.setFixedSize(125, 50)
         # sets fixed size
-        self.openUriMapperButton.setToolTip("Open and run the URI mapping program")
+        self.openUriMapperButton.setToolTip("Run the URI mapping program")
         # tooltip
 
         self.openUriMapperButton.clicked.connect(self.openURImapper)
@@ -669,10 +685,11 @@ class DSI_MainWindow(QMainWindow):
         self.openUriMapperButton.hide()
         # hides the button on start
 
-        self.functionLayout.addWidget(self.openUriMapperButton, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.functionLayout.addWidget(self.openFuncConfigButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.functionLayout.addWidget(self.cycleStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.debugInfoButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.cycleStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addItem(self.buttonSpacer, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.openFuncConfigButton, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)        
+        self.functionLayout.addWidget(self.openUriMapperButton, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the buttons
 
     ### Status Elements ###
@@ -857,6 +874,11 @@ class DSI_MainWindow(QMainWindow):
 
     ### Run Arguments ###
 
+        self.configWindow = ConfigWindow(self)
+        # instantiates the configuration window class 
+        self.configWindow.hide()
+        # hides by default
+
         QTimer.singleShot(0, self.checkUpdate)
         # runs the GitHub update check
         QTimer.singleShot(0, self.requiredItemCheck)
@@ -868,10 +890,6 @@ class DSI_MainWindow(QMainWindow):
 
     def checkUpdate(self):
         """Function that checks if there's a new version of the program"""
-
-        updateAvailable = 0
-        # update check, defaults to 0
-        # 0 = no update, 1 = update, 2 = program newer than github
 
         try:
         # tries to get tags
@@ -890,56 +908,13 @@ class DSI_MainWindow(QMainWindow):
                 # grabs the 0th element's name (latest)
                 latestTag = latestTagRaw.replace("v", "").strip()
                 # strips the v(ersion) identifier, cleans up
-                latestList = latestTag.split(".")
-                # splits the latest tag into a list of date elements (year num, month, day, hour/min)
-                currentList= self.version.split(".")
-                # splits the current tag into a list of date elements
+                latestVersion = tuple(int(x) for x in latestTag.split("."))
+                # splits the latest tag into a tuple of date elements (year num, month, day, hour/min)
+                installedVersion = tuple(int(x) for x in self.version.split("."))
+                # splits the current tag into a tuple of date elements
 
-                if latestList[0] == currentList[0]:
-                # if the year elements are the same
-                    if latestList[1] == currentList[1]:
-                    # if the month elements are the same
-                        if latestList[2] == currentList[2]:
-                        # if the day elements are the same
-                            if latestList[3] == currentList[3]:
-                            # if the hour elements are the same
-                                updateAvailable = 0
-                                # sets to 0 (no update)
-                            elif latestList[3] > currentList[3]:
-                            # if the latest is newer than current
-                                updateAvailable = 1
-                                # sets the boolean to True
-                            else:
-                            # current is newer than latest
-                                updateAvailable = 2
-                                # sets the check to 2
-                        elif latestList[0] > currentList[0]:
-                        # if the latest is newer than current
-                            updateAvailable = 1
-                            # sets the boolean to True
-                        else:
-                        # current is newer than latest
-                            updateAvailable = 2
-                            # sets the check to 2
-                    elif latestList[1] > currentList[1]:
-                    # if the latest is newer than current
-                        updateAvailable = 1
-                        # sets the boolean to True
-                    else:
-                    # current is newer than latest
-                        updateAvailable = 2
-                        # sets the check to 2
-                elif latestList[0] > currentList[0]:
-                # if the latest is newer than current
-                    updateAvailable = 1
-                    # sets the boolean to True
-                else:
-                # current is newer than latest
-                    updateAvailable = 2
-                    # sets the check to 2
-
-                if updateAvailable == 1:
-                # if there's a newer version (higher number)
+                if latestVersion > installedVersion:
+                # latest is higher than current -> update
                     latestURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration/releases/latest"
                     # the URL to set
                     self.versionTag.setText(
@@ -950,7 +925,7 @@ class DSI_MainWindow(QMainWindow):
                         f'</a>'
                     )
                     # updates text to include a prompt + link to the newest update
-                elif updateAvailable == 2:
+                elif latestVersion < installedVersion:
                 # if the current is higher than the latest github release (test build)
                     self.versionTag.setText(f"DSI v{self.version}\nBleeding Edge!")
                     # you should never see this, this is a testing tag
@@ -1154,13 +1129,11 @@ class DSI_MainWindow(QMainWindow):
 
 ### Functional Configuration Window ###
 
-    def openFuncConfigWin(self):
-        """Function to open the functional config"""
+    def openConfigLauncher(self):
+        """Function to open the configuration launcher"""
         
-        self.funcConfigProc = QProcess(self)
-        # stores a reference to the functional config process in self
-        self.funcConfigProc.start(funcConfigExePath)
-        # runs the functionality configurator
+        self.configWindow.show()
+        # shows the window to open configs
 
 ### URI Mapper Window ###
 
@@ -1189,14 +1162,27 @@ class DSI_MainWindow(QMainWindow):
 
         if action == "New Song":
         # if the action is to check a new song (song changed)
-            try:
-            # tries to grab the artist
-                artist = csArtistName
-                # grabs the artist name from the global variable
-            except:
-            # if it fails (sometimes Spotify gives some empty data)
+
+            artist = csArtistName
+            # grabs the artist name from the global variable
+            if not csArtistName or csArtistName is None:
+            # if the artist name is blank (None, thanks to Spotify)
                 artist = "An Artist"
                 # preset string
+            
+            device = f"Playing on {deviceName}"
+            # grabs the device name from the global variable
+            if not deviceName or deviceName is None:
+            # if the device name is blank (None, thanks to Spotify)
+                device = ""
+                # empty string
+            
+            volume = f"at {volumeLevel}%"
+            # grabs the volume level from the global variable
+            if not volumeLevel or volumeLevel is None:
+            # if the volume level is blank (None, thanks to Spotify)
+                volume = ""
+                # empty string
 
             if uri in blacklist:
             # if the passed URI exists in the blacklist
@@ -1208,21 +1194,21 @@ class DSI_MainWindow(QMainWindow):
                     # gets the new display song's name
                     newArtist = favoriteDict.get("Artist Name")
                     # gets the new display artist's name
-                    self.blacklistSongName.setText(f"\nPlaying blacklisted:\n{track} by {artist}\nDisplaying:\n{newSong} by {newArtist}")
+                    self.blacklistSongName.setText(f"\nPlaying Blacklisted:\n{track} by {artist}\nDisplaying:\n{newSong} by {newArtist}")
                     # displays blacklisted view
                 elif status == "starred":
                 # song favorited
-                    self.blacklistSongName.setText(f"\nPlaying favorited:\n{track} by {artist}\n\n")
+                    self.blacklistSongName.setText(f"\nPlaying Favorited:\n{track} by {artist}\n\n")
                     # displays favorited view
                 else:
                 # song status none
-                    self.blacklistSongName.setText(f"\Currently playing:\n{track} by {artist}\n\n")
+                    self.blacklistSongName.setText(f"\nCurrently Playing:\n{track} by {artist}\n\n{device} {volume}")
                     # displays default view
             else:
             # if the URI doesn't exist in the blacklist
                 status = "none"
                 # sets the status to none
-                self.blacklistSongName.setText(f"\nCurrently playing:\n{track} by {artist}\n\n")
+                self.blacklistSongName.setText(f"\nCurrently Playing:\n{track} by {artist}\n\n{device} {volume}")
                 # displays default view
 
         elif action == "Remove" or action == "Unstar":
@@ -1998,7 +1984,7 @@ class DSI_MainWindow(QMainWindow):
         global songInfoField1, songInfoField2, shaaFallbackTotal, shaaFallback, shaaInfoDetails, songInfoFallback
         global songInfoFormatPlays, songInfoSpacer, songInfoFormatMins, songInfoFormatTextFirst, songInfoFormatDetails
         global songInfoFormatDetailsSpacer, songInfoDetailsDoubleSpace, dsiShoutout
-        global enableFirstTime, firstTimeFormat, enableTopHour, topHourFormat, enableTopTracks
+        global enableFirstTime, firstTimeFormat, enableTopHour, topHourFormat, enableTopItems
         # a lot of global -> local
 
         if not disableShaa:
@@ -2037,7 +2023,7 @@ class DSI_MainWindow(QMainWindow):
             firstTimeFormat = str(shaaConfig.get("firstTimeFormat", "Listening for the first time!"))
             enableTopHour = bool(shaaConfig.get("enableTopHour", False))
             topHourFormat = str(shaaConfig.get("topHourFormat", "Listening at peak hours"))
-            enableTopTracks = bool(shaaConfig.get("enableTopTracks", True))
+            enableTopItems = bool(shaaConfig.get("enableTopTracks", True))
             dsiShoutout = bool(shaaConfig.get("dsiShoutout", True))
             # grabs everything from config
 
@@ -2150,7 +2136,7 @@ class DSI_MainWindow(QMainWindow):
         # checks if the totalTimes.json file exists
             with open(timeDir, "r", encoding="utf-8") as times:
             # if yes, opens the file
-                totalDict = json.load(times)
+                totalDict: dict[str] = json.load(times)
                 # loads the file as a dictionary
 
                 totalHours = f"{float(totalDict.get("totalHours", 0)):,.2f}"
@@ -2166,15 +2152,10 @@ class DSI_MainWindow(QMainWindow):
                 uniqueAlbums = int(totalDict.get("uniqueAlbums", 0))
                 # grabs the number of unique items (unused)
 
-                topTracksDict: dict[str, int] = dict(totalDict.get("topTracks", {}))
-                topArtistsDict: dict[str, int] = dict(totalDict.get("topArtists", {}))
-                topAlbumsDict: dict[str, int] = dict(totalDict.get("topAlbums", {}))
-                # grabs the dictionaries of top items {"URI": time (ms)}
-
-                if len(topTracksDict) > 0:
-                # if there's more than 0 items
-                    topTracks = list(sorted(topTracksDict, key=topTracksDict.get, reverse=True))
-                    # sorts the track dictionary by the values, turns into a list of just the URIs
+                topTracks = dict(totalDict.get("topTracks", {}))
+                topArtists = dict(totalDict.get("topArtists", {}))
+                topAlbums = dict(totalDict.get("topAlbums", {}))
+                # grabs the dictionaries of top items {"URI": {"Time": (ms), "Count": (x), "Rank": #}}
 
                 hourlyPlays: dict[str, int] = dict(totalDict.get("hourlyPlays", {"25": 0}))
                 # grabs the {"hournum": playnum} dictionary
@@ -2264,6 +2245,135 @@ class DSI_MainWindow(QMainWindow):
         self.discordStatusIcon.show()
         self.discordStatusLabel.show()
         # enables all the status icons
+
+
+
+### Config Dialog ###
+
+class ConfigWindow(QDialog):
+    """Window class to show the configuration selection"""
+    def __init__(self, parentWindow: DSI_MainWindow):
+    # init
+        super().__init__(parent = parentWindow)
+        # init 2
+
+        self.mainIcon = iconPath
+        # the directory containing the program icon png (built-in)
+
+        self.setMinimumSize(550, 300)
+        # sets the window size 
+        self.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
+        self.setWindowTitle("DSI Configuration")
+        # sets title name
+
+        self.parentWindow = parentWindow
+        # stores parent window (main win) in self
+        self.activeConfig = None
+        # stores the currently active configuration window
+    
+    ### Buttons ###
+
+        self.mainLayout = QGridLayout()
+        # base layout
+        self.setLayout(self.mainLayout)
+        # sets the layout
+
+        self.taskLabel = QLabel("Select a configuration to open")
+        # label
+
+        self.configLayout = QHBoxLayout()
+        # horizontal layout
+        self.mainLayout.addLayout(self.configLayout, 1, 0)
+        # adds the config layout to the main
+
+        self.funcConfigButton = QPushButton("Functional\nConfiguration")
+        self.funcConfigButton.setFixedSize(120, 60)
+        self.funcConfigButton.clicked.connect(lambda: self.configWindowStart("Functional"))
+        # func config
+        self.dsiConfigButton = QPushButton("DSI Visual\nConfiguration")
+        self.dsiConfigButton.setFixedSize(120, 60)
+        self.dsiConfigButton.clicked.connect(lambda: self.configWindowStart("DSI"))
+        # DSI config
+        self.shaaConfigButton = QPushButton("SHAA Visual\nConfiguration")
+        self.shaaConfigButton.setFixedSize(120, 60)
+        self.shaaConfigButton.clicked.connect(lambda: self.configWindowStart("SHAA"))
+        # SHAA config 
+
+        self.hideWindowButton = QPushButton("Close Window")
+        self.hideWindowButton.setFixedSize(120, 45)
+        self.hideWindowButton.clicked.connect(self.hide)
+        # closes the config launcher
+
+        self.configLayout.addWidget(self.funcConfigButton)
+        self.configLayout.addWidget(self.dsiConfigButton)
+        self.configLayout.addWidget(self.shaaConfigButton)
+        # adds all the config buttons
+        self.mainLayout.addWidget(self.taskLabel, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.hideWindowButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds the button to "close"
+
+### Threads ###
+
+    def funcThread(self):
+        """Function to run the functional config"""
+
+        funcConfigProc = subprocess.Popen([funcConfigExePath], creationflags=subprocess.CREATE_NO_WINDOW)
+        # runs the functionality configurator asynchronously
+        funcConfigProc.wait()
+        # waits for the process to end (blocking)
+        self.activeConfig = None
+        # resets to none
+    
+    def dsiThread(self):
+        """Function to run the DSI visual config"""
+
+        dsiConfigProc = subprocess.Popen([dsiConfigExePath], creationflags=subprocess.CREATE_NO_WINDOW)
+        # runs the DSI visual configurator asynchronously
+        dsiConfigProc.wait()
+        # waits for the process to end (blocking)
+        self.activeConfig = None
+        # resets to none
+
+    def shaaThread(self):
+        """Function to run the SHAA config"""
+
+        shaaConfigProc = subprocess.Popen([shaaConfigExePath], creationflags=subprocess.CREATE_NO_WINDOW)
+        # runs the SHAA configurator asynchronously
+        shaaConfigProc.wait()
+        # waits for the process to end (blocking)
+        self.activeConfig = None
+        # resets to none
+        
+### Config Run ###
+    
+    def configWindowStart(self, config: str):
+        """Function to start a configuration window"""
+        if self.activeConfig is not None:
+        # if there's an actively open config
+            self.taskLabel.setText(f"{self.activeConfig} window is open, cannot open another configuration!")
+            # sets a warning
+            return
+            # stops
+        else:
+        # no window open yet
+            self.activeConfig = config
+            # sets the config state variable to match
+            self.taskLabel.setText(f"{config} configuration window open...")
+            # sets text
+
+        if config == "Functional":
+        # called config = functional
+            threading.Thread(target=self.funcThread, daemon=True).start()
+            # starts a thread for the configuration window (so it doesn't block everything with .wait())
+        elif config == "DSI":
+        # called config = DSI
+            threading.Thread(target=self.dsiThread, daemon=True).start()
+            # starts a thread for the configuration window (so it doesn't block everything with .wait())
+        elif config == "SHAA":
+        # called config = SHAA
+            threading.Thread(target=self.shaaThread, daemon=True).start()
+            # starts a thread for the configuration window (so it doesn't block everything with .wait())
 
 
 
@@ -2440,7 +2550,7 @@ def authPlayback() -> dict | None:
                     # calls the icon changer with red icon
                     time.sleep(600)
                     # waits 10 minutes
-                    mainWin.stopper("Shut Down")
+                    mainWin.saveSignal.emit("Shut Down")
                     # prompts user, then exits
 
                 time.sleep(3)
@@ -2814,7 +2924,7 @@ def runCpp(event):
     cppProgram = subprocess.Popen([cppPath], cwd=cppDir, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0, creationflags=subprocess.CREATE_NO_WINDOW)
     # opens the C++/Discord exe, passes the current working directory and captures output, errors and allows input
 
-    def cppQueueManager(output: any, cppQueue: any):
+    def cppQueueManager(output, cppQueue):
         """Function to manage the C++ output queue"""
         for line in iter(output.readline, b''):
         # for every line in the output
@@ -2889,18 +2999,12 @@ def runCpp(event):
                     # ensures the API icon is now yellow
                     cppFails += 1
                     # adds 1 to the fail counter
-                    if cppFails >= 3:
+                    if cppFails == 3:
                     # if the fail counter climbs above 3
-                        cppFails = 0
-                        # resets to 0
                         mainWin.iconChanger("Discord", "Red")
                         # ensures the API icon is now red
-                        mainWin.labelSwap.emit(f"Shut down Discord RPC due to Discord API errors, please press the 'Re-run DiscordRPC' to restart, or manually exit and restart DSI", 3)
+                        mainWin.labelSwap.emit(f"Shut down Discord RPC due to Discord API errors, please manually exit and restart DSI\nYou'll likely be prompted to re-authorise Discord", 3)
                         # sends a user log to inform user
-                        mainWin.rerunRPCbutton.show()
-                        # enables the button to allow user to restart RPC
-                        cppThreadEvent.set()
-                        # sets an event, telling the loop to close the subprocess
 
     cppProgram.wait()
     # waits for the program to close
@@ -2922,7 +3026,7 @@ def cppPackets(packet: dict):
 
 def song(pictureQueue: queue.Queue, event):
     """The function that handles all song data gathering and parsing"""
-    global uriList, cppLargeImage, uriMap, pauseStart
+    global uriList, cppLargeImage, uriMap, pauseStart, deviceName, volumeLevel
     global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtistName, cppFull
     global csSongName, csArtistURL, csAlbumName, csAlbumURL, csPlaylistURL
     # global -> local
@@ -2958,8 +3062,12 @@ def song(pictureQueue: queue.Queue, event):
             csAlbum: dict = csItem.get("album")
             # takes a smaller part of the song's info (still contains a ton of extra)
 
-            csDevice = csFull.get("device")
+            csDevice: dict = csFull.get("device")
             # gets a list of device information
+            deviceName = csDevice.get("name")
+            # gets the name of the playing device
+            volumeLevel = csDevice.get("volume_percent")
+            # gets the volume level of the spotify instance
 
             csName = str(csItem.get("name"))
             # stores the name of the song
@@ -2973,7 +3081,9 @@ def song(pictureQueue: queue.Queue, event):
             shaaPlaycountSong = None
             shaaPlaytime = None
             # starts up variables as None
-            
+
+            topItem = False
+            # boolean for whether the current track is in one of the top item dictionaries
             singlePlay = False
             # local boolean to check if the song has been played once
             firstPlay = False
@@ -2990,10 +3100,50 @@ def song(pictureQueue: queue.Queue, event):
                 csCover = csImages[0].get("url")
                 # gets the album cover url (used to pass to Discord if pictureCycle = Spotify)
 
-                csArtists: list[dict] = csItem.get("artists")
+                csArtists = csItem.get("artists")
                 # stores all the artists listed on the song
-                csArtistName = csArtists[0].get("name")
-                # stores the first artist's name (in case there's multiple artists, only grabs first)
+
+                csArtistList = []
+                # creates an empty list of artists
+                for musician in csArtists:
+                # for every artist in the list of artists (from Spotify)
+                    artist = musician.get("name")
+                    # gets the name of the artist from a dictionary
+                    csArtistList.append(artist)
+                    # appends it to the list of artists 
+
+                if len(csArtistList) > 1:
+                # if there's more than 1 artist
+                    csArtistFirstHalf = csArtistList[0:-1]
+                    # grabs all the artists except the last one
+                    csArtistLast = csArtistList[-1]
+                    # grabs the last artist
+
+                    if len(csArtistFirstHalf) > 1:
+                    # checks if there's more than 1 artist in the first half
+                        csArtistString = ", ".join(csArtistFirstHalf)
+                        # joins together with commas
+                    else:
+                    # if there's not more than 1 artist in the first half
+                        csArtistString = "".join(csArtistFirstHalf)
+                        # just joins with nothing (turns into a string basically)
+
+                    csArtistString = (csArtistString + " and ")
+                    # adds the "and" in between the first half and the last artist
+                    csArtistString = (csArtistString + csArtistLast)
+                    # adds the last artist to the string
+                    csArtistName = csArtistString
+                    # constructs a string from the artist names
+                else:
+                # if there's not more (just 1)
+                    csArtistName = csArtistList[0]
+                    # gets the name of the only artist
+                try:
+                    csArtistURL = csArtists[0].get("name")
+                    # gets the name of the 0th artist
+                except:
+                    csArtistURL = "https://open.spotify.com/artist/06HL4z0CvFAxyc27GXpf02"
+                    # uses Taylor Swift as fallback
 
                 csAlbumName = csAlbum.get("name")
                 # stores the album name
@@ -3086,12 +3236,12 @@ def song(pictureQueue: queue.Queue, event):
                         csURL = smallURL
                         # sets it to smallURL as a fallback                    
             else:
-            # if the config option for url type is invalid, defaults to my website :)
-                csURL = "https://elleffnotelf.com"
-                # sets url
+            # if the config option for url type is invalid, defaults to DSI's github :)
+                csURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration/"
+                # sets url to fallback
 
 
-            ### SHAAless Behavior ###
+        ### SHAAless Behavior ###
 
 
             if not os.path.exists(SHAAdir) or disableShaa:
@@ -3265,22 +3415,42 @@ def song(pictureQueue: queue.Queue, event):
                             songStuffList.append(songInfoSpacer)
                             # adds the spacer item, too
 
-                ### Top Track/Album/Artist ###
-
-                    if enableTopTracks and len(topTracks) > 0:
-                    # if the top tracks prefix is enabled and there's at least 1 top track stored
-                        if finalURI in topTracks:
-                        # if that URI is in the top tracks dictionary
-                            songStuffList.append(f"#{topTracks.index(finalURI)+1} track with")
-                            # adds the track identifier and string prefix
-
                 ### Plays / Field 1 ###
 
                     playcount = csvReader.loc[finalURI, "Playcount"]
                     playtime = csvReader.loc[finalURI, "Total Time"]
                     # sets temp variables that lookup the cells based on the track and columns
 
-                    if songInfoField1 == "Track":
+                ### Top Track/Album/Artist ###
+
+                    if enableTopItems:
+                    # if the top items config option is enabled (special prefix)
+                        if finalURI in topTracks.keys():
+                        # if that URI is in the top tracks dictionary
+                            songStuffList.append(f"#{topTracks["Rank"]} track {songInfoSpacer}")
+                            # adds the track identifier and string prefix
+
+                        elif finalURI in topAlbums.keys():
+                        # if that URI is in the top albums dictionary
+                            songStuffList.append(f"#{topAlbums["Rank"]} album {songInfoSpacer}")
+                            # adds the album identifier and string prefix
+                            playtime = topAlbums["Time"]
+                            playcount = topAlbums["Count"]
+                            # overrides the CSV values with the album values from JSON
+                            topItem = True
+                            # sets the boolean to True (uses the values here)
+
+                        elif finalURI in topArtists.keys():
+                        # if that URI is in the top artists dictionary
+                            songStuffList.append(f"#{topArtists["Rank"]} artist {songInfoSpacer}")
+                            # adds the artist identifier and string prefix
+                            playtime = topArtists["Time"]
+                            playcount = topArtists["Count"]
+                            # overrides the CSV values with the artist values from JSON
+                            topItem = True
+                            # sets the boolean to True (uses the values here)
+
+                    if songInfoField1 == "Track" or topItem:
                     # if the selected type for first field is Track
 
                         if isinstance(playcount, pd.Series):
@@ -3330,7 +3500,7 @@ def song(pictureQueue: queue.Queue, event):
 
                 ### Minutes / Field 2 ###
 
-                    if songInfoField2 in [0, 2, 4]:
+                    if songInfoField2 in [0, 2, 4] or topItem:
                     # if the selected type for the second field is 0 (track minutes), 2 (track hours) or 4 (track seconds)
 
                         if isinstance(playtime, pd.Series):
@@ -3345,12 +3515,12 @@ def song(pictureQueue: queue.Queue, event):
                         shaaPlaytimeMin = f"{(playtimeTotal / 60):,.1f}"
                         # stores a second variable for minutes (for details window)
 
-                        if songInfoField2 == 0:
+                        if songInfoField2 in [0, 1]:
                         # track minutes
                             playtimeTotal = (playtimeTotal / 60)
                             # divides the seconds into minutes
                         
-                        elif songInfoField2 == 2:
+                        elif songInfoField2 in [2, 3]:
                         # track hours
                             playtimeTotal = (playtimeTotal / 3600)
                             # divides the seconds into hours
@@ -3801,7 +3971,7 @@ def song(pictureQueue: queue.Queue, event):
 
 def looper():
     """Function that checks song info on a loop"""
-    global currentURI, currentInfo, pauseUpdated, trackCounter, noPlayCounter, lastPlayStamp, lastDSIsave
+    global currentURI, currentInfo, pauseUpdated, trackCounter, noPlayCounter, lastPlayStamp, lastDSIsave, storedStart
     # global -> local
 
     while True:
@@ -3819,6 +3989,8 @@ def looper():
 
         info = authPlayback()
         # picks up all the info Spotify sends in an update
+        currentInfo = info
+        # sets the global variable to match
 
         if not info or not info.get("item"):
             # checks if the info "package" has something and if it contains valid information
@@ -3831,8 +4003,6 @@ def looper():
                     # user inform on change of process
                 noPlayCounter += 1
                 # adds 1 to the counter
-                songEvent.set()
-                # since this only runs when the program first starts, sets an event immediately to song, to refresh data
                 time.sleep(refreshTime + 10)
                 # waits for rf+10 seconds (slower API rate)
                 continue
@@ -3842,17 +4012,17 @@ def looper():
             # if the counter is less than 3
                 mainWin.labelSwap.emit("No playback detected, re-checking in 5 seconds", 2)
                 # user inform
-                songEvent.set()
-                # since this only runs when the program first starts, sets an event immediately to song, to refresh data
+                if noPlayCounter == 0:
+                # on the first iteration
+                    songEvent.set()
+                    # sets a song event -> feed C++ "no playback" status
                 time.sleep(5)
                 # waits for a few seconds
                 noPlayCounter += 1
                 # adds 1 to the counter
                 continue
                 # resets back to looper start
-        
-        currentInfo = info
-        # sets the global variable to match
+
         noPlayCounter = 0
         # resets the "no playing state" counter to 0, since the loop has progressed here
 
@@ -3875,7 +4045,7 @@ def looper():
             # uses the last stored value (shouldn't be very far off)
 
         if currentURI is None:
-            # when the program first starts, the currentURI will be "None", this updates it
+        # when the program first starts, the currentURI will be "None", this updates it
             currentURI = songURI
             # sets the current song to match 
             storedStart = songStart
