@@ -1198,7 +1198,7 @@ class DSI_MainWindow(QMainWindow):
                     # displays blacklisted view
                 elif status == "starred":
                 # song favorited
-                    self.blacklistSongName.setText(f"\nPlaying Favorited:\n{track} by {artist}\n\n")
+                    self.blacklistSongName.setText(f"\nPlaying Favorited:\n{track} by {artist}\n\n{device} {volume}")
                     # displays favorited view
                 else:
                 # song status none
@@ -3427,25 +3427,25 @@ def song(pictureQueue: queue.Queue, event):
                     # if the top items config option is enabled (special prefix)
                         if finalURI in topTracks.keys():
                         # if that URI is in the top tracks dictionary
-                            songStuffList.append(f"#{topTracks["Rank"]} track {songInfoSpacer}")
+                            songStuffList.append(f"#{topTracks[finalURI]["Rank"]} track {songInfoSpacer}")
                             # adds the track identifier and string prefix
 
                         elif finalURI in topAlbums.keys():
                         # if that URI is in the top albums dictionary
-                            songStuffList.append(f"#{topAlbums["Rank"]} album {songInfoSpacer}")
+                            songStuffList.append(f"#{topAlbums[finalURI]["Rank"]} album {songInfoSpacer}")
                             # adds the album identifier and string prefix
-                            playtime = topAlbums["Time"]
-                            playcount = topAlbums["Count"]
+                            playtime = topAlbums[finalURI]["Time"]
+                            playcount = topAlbums[finalURI]["Count"]
                             # overrides the CSV values with the album values from JSON
                             topItem = True
                             # sets the boolean to True (uses the values here)
 
                         elif finalURI in topArtists.keys():
                         # if that URI is in the top artists dictionary
-                            songStuffList.append(f"#{topArtists["Rank"]} artist {songInfoSpacer}")
+                            songStuffList.append(f"#{topArtists[finalURI]["Rank"]} artist {songInfoSpacer}")
                             # adds the artist identifier and string prefix
-                            playtime = topArtists["Time"]
-                            playcount = topArtists["Count"]
+                            playtime = topArtists[finalURI]["Time"]
+                            playcount = topArtists[finalURI]["Count"]
                             # overrides the CSV values with the artist values from JSON
                             topItem = True
                             # sets the boolean to True (uses the values here)

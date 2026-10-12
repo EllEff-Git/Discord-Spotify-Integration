@@ -324,7 +324,7 @@ int main() {
 
                 // if the packet is valid
                 if (packetValid) {
-                    
+
                     // variables for validation
                     uint32_t size = ntohl(stdinSize);
                     std::vector<char> buffer(size);
@@ -340,22 +340,41 @@ int main() {
                     // grabs the packet from the sent buffer
                     std::string packet(buffer.begin(), buffer.end());
 
-                    // parses the received packet into a json form 
-                    json data = json::parse(packet);
+                    // data packets are JSON (dictionaries)
+                    json data;
 
-                    // grabs the boolean that represents whether the playback is currently on or not
-                    playbackState = data["Playback State"].get<bool>();
-                    
-                    // if playback is cut from Spotify (stopped playing)
-                    if (!playbackState) {
-                        // goes to sleep for 5 seconds
-                        std::this_thread::sleep_for(std::chrono::seconds(5));
-                        // resets the loop
+                    // packet read in try to prevent blow up
+                    try {
+                        // parses the received packet into a dictionary form 
+                        data = json::parse(packet);
+                    }
+
+                    // if it blows up
+                    catch (const json::exception& e) {
+                        // sends error message
+                        std::cerr << "Error with DSI data:" << e.what() << std::endl;
+                        // waits a couple seconds
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        // reset loop
                         continue;
                     }
 
                     // tries to reassign all the variables from the data packet
                     try {
+
+                        // grabs the boolean that represents whether the playback is currently on or not
+                        playbackState = data["Playback State"].get<bool>();
+                        
+                        // if playback is cut from Spotify (stopped playing)
+                        if (!playbackState) {
+                            // clears the currently active Discord RP
+                            client->ClearRichPresence();
+                            // waits a few seconds
+                            std::this_thread::sleep_for(std::chrono::seconds(5));
+                            // reset loop
+                            continue;
+                        }
+
                         // variables get grabbed from packet (ensures they use the correct type)
                         songName = data["Song"].get<std::string>();
                         albumName = data["Album"].get<std::string>();
@@ -373,7 +392,11 @@ int main() {
                     // if it fails
                     catch(const std::exception& e) {
                         // sends error message
-                        std::cerr << "Error with Python packet:" << e.what() << std::endl;
+                        std::cerr << "Error with DSI data:" << e.what() << std::endl;
+                        // waits a couple seconds
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        // reset loop
+                        continue;
                     }
 
                     // checks if the song has changed since the last update (trackIDs don't match)
@@ -450,7 +473,7 @@ int main() {
                             assets.SetLargeImage(LargeImage);
                         }
                     }
-        
+
                     // Large text appears on hovering the large image (and under the song info)
                     assets.SetLargeText(LargeText);
                     // Large URL is the Spotify link to the selected type (Artist, Song, Album, Playlist) of the currently playing track
@@ -488,12 +511,12 @@ int main() {
                     timestamps.SetEnd(unixEnd);
                     // pushes timestamps to "activity"
                     activity.SetTimestamps(timestamps);
-                    
+
                     // updates user rich presence with given info
                     client->UpdateRichPresence(activity, [](discordpp::ClientResult result) {
 
                         // if it goes through fine
-                        if(result.Successful()) {
+                        if (result.Successful()) {
 
                             // updates the last update timestamp to match system time
                             lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
@@ -503,7 +526,7 @@ int main() {
                                 // updates user
                                 std::cout << "Rich Presence updated" << std::endl;
                                 // sets the bool to true, to prevent double-prints
-                                bool rpcUpdated = true;
+                                rpcUpdated = true;
                             }
                             // sets the error states both to false, so they can go through next time
                             ::LargeImageFail = false;
