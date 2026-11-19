@@ -2,7 +2,7 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
 # Required imports to manage the PyQt window
-import json, os, sys, asyncio
+import json, os, sys
 # Required for config management
 
 

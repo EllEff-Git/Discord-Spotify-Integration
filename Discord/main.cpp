@@ -35,7 +35,7 @@ std::uint64_t APPLICATION_ID = 0;
 std::string SmallImage = "";
 
 // an album fallback string (if song + album is too long)
-std::string albumFallback = "An Album";
+std::string AlbumFallback = "An Album";
 
 // initialises bools for image(s) failing
 // this is not common, but prevents more than 1 failure
@@ -45,32 +45,36 @@ std::atomic<bool> LargeImageFail = false;
 std::atomic<bool> SmallImageFail = false;
 
 // the previous pause state (to compare)
-std::atomic<bool> pauseStateOld = false;
+std::atomic<bool> PrevPauseState = false;
 // whether the playback stop has been acknowledged (C++ -> Python)
-std::atomic<bool> pauseAcknowledged = false;
+std::atomic<bool> PauseAcknowledged = false;
 
 // a timestamp for checking when the RPC was last updated
-std::uint64_t lastUpdate = 0;
+std::uint64_t LastRPUpdate = 0;
 // a timestamp for current time
-std::uint64_t currentTime = 0;
+std::uint64_t CurrentSystemTime = 0;
 
-// the track ID (given by Python, just a counter, basically)
-std::uint64_t trackID = 0;
+// a boolean to check whether Rich Presence *should* be updated or not (Python pause call)
+std::atomic<bool> RPUpdatesPaused = false;
+
 // the previous track ID (to compare)
-std::uint64_t oldTrackID = 0;
+std::uint64_t PrevTrackID = 0;
 
 // flag to control application run state
 std::atomic<bool> running = true;
 // flag to control rich presence update prints
-std::atomic<bool> rpcUpdated = false;
+std::atomic<bool> RPCUpdated = false;
+
+// error count per track (reset on successful RPU)
+std::uint64_t ErrorCount = 0;
 
 // signal handler to stop the application
 void signalHandler(int signum) {
     running.store(false);
 }
 
-// function used later to trim any potentially long fields, to fit Discord's max of 128 UTF-16 units
-std::string utfTrim(const std::string& input, size_t maxUnits = 113) {
+// function used later to trim any potentially long fields, to fit Discord's max of 128 UTF-16 units (set to 113 for stability)
+std::string UTFStringTrim(const std::string& input, size_t maxUnits = 113) {
     // if the whole string is empty, falls back to default
     if (input.empty()) return "Listening to Spotify // Data via DSI";
 
@@ -96,7 +100,7 @@ std::string utfTrim(const std::string& input, size_t maxUnits = 113) {
 
     // function that checks for invisible characters *inside* the string (previously was only start/end)
     auto isInvisible = [](wchar_t c) {
-    return c == L'\t' || c == L'\r' || c == 0x200B || c == 0xFEFF;
+        return c == L'\t' || c == L'\r' || c == 0x200B || c == 0xFEFF;
     };
 
     // goes through every character in the string
@@ -146,17 +150,36 @@ std::string utfTrim(const std::string& input, size_t maxUnits = 113) {
 
     // makes sure the string fits discord requirements (2 =< x =< 128 characters)
     if (units < 2) {
-        // if it's not, uses fallback string
-        trimmed = L"Listening to Spotify // Data via DSI";
+        // if it's doesn't, uses fallback string
+        return "Listening to Spotify // Data via DSI";
     }
 
-    // tries to convert back to utf-8 (which is what Discord wants the text in, for some damn reason)
+    // try (may go boom)
     try {
+        // converts to UTF-16 and returns the string
         return converter.to_bytes(trimmed);
     }
-    // if it fails, reverts back to fallback string 
+    // if it goes boom
     catch (...) {
+        // returns a preset fallback string
         return "Listening to Spotify // Data via DSI";
+    }
+}
+
+// function used to get the UTF-16 size of a text
+size_t UTF16Length(const std::string& input) {
+    // try because may go boom
+    try {
+        // converts the text to UTF-16 (from UTF-8)
+        std::wstring_convert< std::codecvt_utf8_utf16<wchar_t> > converter;
+
+        // returns the number of bytes the passed string is
+        return converter.from_bytes(input).size();
+    }
+    // if it goes boom
+    catch (...) {
+        // returns a C++ max size argument -> "yeah this is definitely too big"
+        return SIZE_MAX;
     }
 }
 
@@ -234,7 +257,7 @@ int main() {
     // grabs all the required variables
     AppID = config["Discord Application ID"];
     SIMG = config["Small Image Filename"];
-    albumFallback = config["Album Fallback"];
+    AlbumFallback = config["Album Fallback"];
     DSIDver = config["Version"];
 
     // replaces placeholder image key with the one from the JSON (name or URL)
@@ -279,7 +302,7 @@ int main() {
         if (!RPCrunning.exchange(true)) {
 
             // updates lastUpdate once to prevent required update right away
-            lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+            LastRPUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
             // updates user via stdout
             std::cout << "Loading Discord Status" << std::endl;
@@ -290,94 +313,97 @@ int main() {
             // an object that contains the last values of each variable
             struct PlaybackData {
                 // song name
-                std::string songName = "Loading";
+                std::string SongName = "Jamming out";
                 // album name
-                std::string albumName = "An album";
+                std::string AlbumName = " ";
                 // song details (track plays, custom text...)
-                std::string songStuff = "Discord Spotify Integration";
+                std::string RPState = "Discord Spotify Integration";
 
                 // main image url/name
                 std::string LargeImage = "";
                 // the bottom text/what's shown on large image hover
-                std::string LargeText = "DSI";
+                std::string LargeText = DSIDver;
                 // the text to show on the small image hover
-                std::string SmallText = "Spotify";
+                std::string SmallImageText = "Spotify";
 
                 // large image/bottom text link
-                std::string SpotifyURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration";
+                std::string LargeImageURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration";
                 // small picture link (the picture is set separately, doesn't change per cycle)
                 std::string SmallURL = "https://discord.gg";
 
                 // starting UNIX timestamp
-                int64_t unixStart = 0;
+                int64_t UNIXstart = 0;
                 // ending UNIX timestamp
-                int64_t unixEnd = 0;
+                int64_t UNIXend = 0;
                 // the track number
-                int64_t trackID = 0;
+                int64_t TrackID = 0;
 
                 // current Spotify playback state (is API sending data or is Spotify fully closed)
-                bool playbackState = false;
+                bool PlaybackState = true;
                 // is Spotify playback paused (API is up, sending data, but paused)
-                bool pauseState = false;
+                bool PauseState = false;
             };
 
             // a reference to the data structure
-            PlaybackData currentData;
+            PlaybackData CurrentRPData;
+
+            // a default reference to the data structure
+            PlaybackData DefaultRPData;
 
             // gets the STDIN from python
-            HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+            HANDLE STDINHandle = GetStdHandle(STD_INPUT_HANDLE);
             // byte count variable
-            DWORD byteCount = 0;
+            DWORD PacketByteCount = 0;
 
             // starts a loop to refresh info
             while (running) {
 
                 // a boolean to check if an update is required due to timer
-                bool requiredUpdate = false;
+                bool UpdateRequired = false;
                 // a boolean to check song status
-                bool songChanged = false;
+                bool TrackChanged = false;
                 // a boolean to check pause state change
-                bool pauseChanged = false;
+                bool PauseChanged = false;
 
                 // updates current time to match, well, current time
-                currentTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                CurrentSystemTime = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
                 // checks if the last time RPC was updated was more than 15 seconds ago
-                if ((lastUpdate + 15) < currentTime) {
+                if ((LastRPUpdate + 15) < CurrentSystemTime) {
                     // changes the requiredUpdate to true to trigger an update
-                    requiredUpdate = true;
+                    UpdateRequired = true;
                 }
 
                 // boolean to check if Python has sent a new packet
-                bool newPythonPacket = PeekNamedPipe(hStdin, nullptr, 0, nullptr, &byteCount, nullptr);
+                bool IsNewPythonPacket = PeekNamedPipe(STDINHandle, nullptr, 0, nullptr, &PacketByteCount, nullptr);
 
                 // if there *is* a new packet from Python in stdin and it's a full packet
-                if (newPythonPacket && byteCount >= sizeof(uint32_t)) {
+                if (IsNewPythonPacket && PacketByteCount >= sizeof(uint32_t)) {
 
                     // the stdin byte size variable
-                    uint32_t stdinSize = 0;
+                    uint32_t STDINSize = 0;
                     // stdin read byte size variable
-                    DWORD readSize = 0;
+                    DWORD PacketReadSize = 0;
 
                     // checks the packet to ensure it's available (checks the size of the packet, ensures the whole thing is actually received first)
-                    bool packetReady = PeekNamedPipe(hStdin, &stdinSize, sizeof(stdinSize), &readSize, nullptr, nullptr);
+                    bool PacketReadReady = PeekNamedPipe(STDINHandle, &STDINSize, sizeof(STDINSize), &PacketReadSize, nullptr, nullptr);
 
                     // if the packet is ready to be read
-                    if (packetReady && readSize == sizeof(stdinSize)) {
+                    if (PacketReadReady && PacketReadSize == sizeof(STDINSize)) {
                         
                         // the packet size gets stored
-                        uint32_t packetSize = ntohl(stdinSize);
+                        uint32_t PythonPacketSize = ntohl(STDINSize);
                         // a max size for the packet (X * bytes), currently set to 1MB, doesn't really matter, generally ~1KB (1000 Bytes)
-                        constexpr uint32_t maxSize = 1024 * 1024;
+                        constexpr uint32_t MaxPyPacketSize = 1024 * 1024;
 
                         // ensures the packet size (has to have *a* size, can't be above max)
-                        if ((packetSize > 0) && (packetSize <= maxSize) && (byteCount >= (sizeof(uint32_t) + packetSize))) {
+                        if ((PythonPacketSize > 0) && (PythonPacketSize <= MaxPyPacketSize) && (PacketByteCount >= (sizeof(uint32_t) + PythonPacketSize))) {
 
                             // how much of the header has been consumed (eaten)
-                            uint32_t headerEaten = 0;
+                            uint32_t HeaderBytesEaten = 0;
 
                             // checks the packet's header contents via helper (consumes)
-                            if (!ReadExact(hStdin, &headerEaten, sizeof(headerEaten))) {
+                            if (!ReadExact(STDINHandle, &HeaderBytesEaten, sizeof(HeaderBytesEaten))) {
                                 // couldn't read the packet, waits 500ms
                                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                                 // resets loop
@@ -385,10 +411,10 @@ int main() {
                             }
 
                             // makes a read buffer (consumes)
-                            std::vector<char> buffer(packetSize);
+                            std::vector<char> PythonPacketBuffer(PythonPacketSize);
                             
                             // checks the packet's contents via helper (uses the consumed packet)
-                            if (!ReadExact(hStdin, buffer.data(), packetSize)) {
+                            if (!ReadExact(STDINHandle, PythonPacketBuffer.data(), PythonPacketSize)) {
                                 // couldn't read the packet, waits 500ms
                                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                                 // resets loop
@@ -396,12 +422,12 @@ int main() {
                             }
 
                             // forms a string packet from the buffer (packet)
-                            std::string packet(buffer.begin(), buffer.end());
+                            std::string PythonPacketString(PythonPacketBuffer.begin(), PythonPacketBuffer.end());
                             // data packets are JSON (dictionaries)
-                            json data;
+                            json PacketData;
 
                             // packet is empty (shouldn't happen)
-                            if (packet.empty()) {
+                            if (PythonPacketString.empty()) {
                                 // waits 500ms
                                 std::this_thread::sleep_for(std::chrono::milliseconds(500));
                                 // resets loop
@@ -411,7 +437,7 @@ int main() {
                             // packet read in try to prevent blow up
                             try {
                                 // parses the received packet into a dictionary form 
-                                data = json::parse(packet);
+                                PacketData = json::parse(PythonPacketString);
                             }
                             // if it blows up
                             catch (const json::exception& e) {
@@ -425,62 +451,98 @@ int main() {
 
                             // tries to reassign all the variables from the data packet
                             try {
-                                // grabs the boolean that represents whether the playback is currently on or not
-                                bool newPlaybackState = data["Playback State"].get<bool>();
+                                // checks if the packet is an update pause command
+                                if (PacketData.contains("Pause Updates")) {
+                                    // grabs the boolean from the entry
+                                    ::RPUpdatesPaused = PacketData["Pause Updates"].get<bool>();
 
-                                // if the stored playback state doesn't match the new one
-                                if (newPlaybackState != currentData.playbackState) {
-                                    // overrides the pause change bool (it doesn't have any impact on the program, easiest bool to force an update)
-                                    pauseChanged = true;
-                                    // sets the current data to match new playback state (if this is from True -> False, it gets overwritten with the next check)
-                                    currentData.playbackState = newPlaybackState;
-                                }
-                                
-                                // if playback is cut from Spotify (stopped playing)
-                                if (currentData.playbackState == false && pauseAcknowledged == false) {
-                                    // sends a message, if it hasn't been sent yet (prevents spam/Python side UI bugs)
-                                    std::cout << "Paused Discord RPC" << std::endl;
-                                    // sets the boolean to true so it doesn't get re-sent
-                                    ::pauseAcknowledged = true;
-                                    // clears the currently active Discord Rich Presence (activity)
-                                    client->ClearRichPresence();
-                                    // waits a few seconds
-                                    std::this_thread::sleep_for(std::chrono::seconds(3));
-                                    // reset loop
-                                    continue;
-                                }
-                                // if playback is cut, and the pause has been sent to Python
-                                else if (currentData.playbackState ==  false && pauseAcknowledged == true) {
-                                    // waits a few seconds
-                                    std::this_thread::sleep_for(std::chrono::seconds(3));
-                                    // reset loop
-                                    continue;
+                                    // if the updates are paused on this loop
+                                    if (RPUpdatesPaused == true) {
+                                        // updates user
+                                        std::cout << "Paused Discord rich presence updates" << std::endl;
+                                        // clears the currently active Discord Rich Presence (activity)
+                                        client->ClearRichPresence();
+                                        // wait a few seconds
+                                        std::this_thread::sleep_for(std::chrono::seconds(3));
+                                        // reset loop
+                                        continue;
+                                    }
+                                    // updates are resumed on this loop
+                                    else {
+                                        // updates user
+                                        std::cout << "Resumed Discord rich presence updates" << std::endl;
+                                        // resets loop immediately to get to a new packet asap
+                                        continue;
+                                    }
                                 }
 
-                                // a packet sent to reset image bools manually
-                                bool imageFlag = data["Reset Images"].get<bool>();
-                                // request to reset the image flags
-                                if (imageFlag) {
-                                    // sets both image fail states to false
-                                    ::LargeImageFail = false;
-                                    ::SmallImageFail = false;
-                                    // reset loop (this packet doesn't contain anything else, just the state and image flags)
-                                    continue;
-                                }
+                                // doesn't contain a pause update bool
+                                else {
+                                    // grabs the boolean that represents whether the playback is currently on or not
+                                    bool ActivePlaybackState = PacketData["Playback State"].get<bool>();
 
-                                // variables get grabbed from packet (ensures they use the correct type)
-                                currentData.songName = data["Song"].get<std::string>();
-                                currentData.albumName = data["Album"].get<std::string>();
-                                currentData.songStuff = data["State"].get<std::string>();
-                                currentData.LargeImage = data["Large Image"].get<std::string>();
-                                currentData.LargeText = data["Large Text"].get<std::string>();
-                                currentData.SmallText = data["Small Text"].get<std::string>();
-                                currentData.SpotifyURL = data["Spotify URL"].get<std::string>();
-                                currentData.SmallURL = data ["Small URL"].get<std::string>();
-                                currentData.unixStart = data["UNIX Start"].get<int64_t>();
-                                currentData.unixEnd = data["UNIX End"].get<int64_t>();
-                                currentData.pauseState = data["Pause"].get<bool>();
-                                currentData.trackID = data["Track ID"].get<int64_t>();
+                                    // if the stored playback state doesn't match the new one
+                                    if (ActivePlaybackState != CurrentRPData.PlaybackState) {
+                                        // overrides the pause change bool (it doesn't have any impact on the program, easiest bool to force an update)
+                                        PauseChanged = true;
+                                        // sets the current data to match new playback state (if this is from True -> False, it gets overwritten with the next check)
+                                        CurrentRPData.PlaybackState = ActivePlaybackState;
+                                    }
+                                    
+                                    // if playback is cut from Spotify (stopped playing)
+                                    if (CurrentRPData.PlaybackState == false && PauseAcknowledged == false) {
+                                        // sends a message, if it hasn't been sent yet (prevents spam/Python side UI bugs)
+                                        std::cout << "Cleared Discord RPC" << std::endl;
+                                        // sets the boolean to true so it doesn't get re-sent
+                                        ::PauseAcknowledged = true;
+                                        // clears the currently active Discord Rich Presence (activity)
+                                        client->ClearRichPresence();
+                                        // waits a few seconds
+                                        std::this_thread::sleep_for(std::chrono::seconds(3));
+                                        // reset loop
+                                        continue;
+                                    }
+                                    // if playback is cut, and the pause has been sent to Python
+                                    else if (CurrentRPData.PlaybackState == false && PauseAcknowledged == true) {
+                                        // waits a few seconds
+                                        std::this_thread::sleep_for(std::chrono::seconds(3));
+                                        // reset loop
+                                        continue;
+                                    }
+
+                                    // a packet sent to reset image bools manually
+                                    bool ResetImageBools = PacketData["Reset Images"].get<bool>();
+                                    // request to reset the image flags
+                                    if (ResetImageBools) {
+                                        // sets both image fail states to false
+                                        ::LargeImageFail = false;
+                                        ::SmallImageFail = false;
+                                        // reset loop (this packet doesn't contain anything else, just the state and image flags)
+                                        continue;
+                                    }
+
+                                    // variables get grabbed from packet (ensures they use the correct type)
+                                    CurrentRPData.SongName = PacketData["Song"].get<std::string>();
+                                    CurrentRPData.AlbumName = PacketData["Album"].get<std::string>();
+                                    CurrentRPData.RPState = PacketData["State"].get<std::string>();
+                                    CurrentRPData.LargeImage = PacketData["Large Image"].get<std::string>();
+                                    CurrentRPData.LargeText = PacketData["Large Text"].get<std::string>();
+                                    CurrentRPData.SmallImageText = PacketData["Small Text"].get<std::string>();
+                                    CurrentRPData.LargeImageURL = PacketData["Spotify URL"].get<std::string>();
+                                    CurrentRPData.SmallURL = PacketData ["Small URL"].get<std::string>();
+                                    CurrentRPData.UNIXstart = PacketData["UNIX Start"].get<int64_t>();
+                                    CurrentRPData.UNIXend = PacketData["UNIX End"].get<int64_t>();
+                                    CurrentRPData.PauseState = PacketData["Pause"].get<bool>();
+                                    CurrentRPData.TrackID = PacketData["Track ID"].get<int64_t>();
+
+                                   // if the flag has been set to True
+                                    if (RPUpdatesPaused == true) {
+                                        // waits 2 seconds
+                                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                                        // reset loop
+                                        continue;
+                                    }
+                                }
                             }
                             // if it fails
                             catch(const std::exception& e) {
@@ -494,29 +556,74 @@ int main() {
 
                             // checks if the song has changed since the last update (trackIDs don't match)
                             // if it has, changes songChanged to true - this ensures the song changing or being paused gets caught
-                            if (currentData.trackID != oldTrackID) {
+                            if (CurrentRPData.TrackID != PrevTrackID) {
                                 // sets the old value to match new
-                                oldTrackID = currentData.trackID;
+                                PrevTrackID = CurrentRPData.TrackID;
                                 // sets the boolean to true so the next check goes through
-                                songChanged = true;
+                                TrackChanged = true;
                             }
-                            // checks if the song has been paused since last check
-                            // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
-                            if (currentData.pauseState != pauseStateOld.load()) {
-                                // sets the boolean to true so the next check goes through
-                                pauseChanged = true;
-                                // updates the previous pause state to match current
-                                pauseStateOld.store(currentData.pauseState);
+                            
+                            // if the track hasn't changed, but there's been an error for the current track
+                            if (!TrackChanged && ErrorCount == 1) {
+                                // user inform
+                                std::cerr << "Using default DSI Discord activity values" << std::endl;
+                                // uses the default data object's values (so that the activity stays up, but doesn't try to load broken stuff)
+                                CurrentRPData.SongName = DefaultRPData.SongName;
+                                CurrentRPData.AlbumName = DefaultRPData.AlbumName;
+                                CurrentRPData.RPState = DefaultRPData.RPState;
+                                CurrentRPData.LargeImage = DefaultRPData.LargeImage;
+                                CurrentRPData.LargeText = DefaultRPData.LargeText;
+                                CurrentRPData.SmallImageText = DefaultRPData.SmallImageText;
+                                CurrentRPData.LargeImageURL = DefaultRPData.LargeImageURL;
+                                CurrentRPData.SmallURL = DefaultRPData.SmallURL;
+                                CurrentRPData.UNIXstart = DefaultRPData.UNIXstart;
+                                CurrentRPData.UNIXend = DefaultRPData.UNIXend;
+                                CurrentRPData.PauseState = DefaultRPData.PauseState;
+                                CurrentRPData.TrackID = DefaultRPData.TrackID;
+                            }
+                            // if the same track has more than 1 error (meaning even the fix didn't work)
+                            else if (!TrackChanged && ErrorCount > 1) {
+                                // on the first run of this branch
+                                if (ErrorCount == 1) {
+                                    // user inform
+                                    std::cerr << "Failed to use DSI default values, pausing activity updates until a new track is detected" << std::endl;
+                                    // clears the currently active Discord Rich Presence (activity)
+                                    client->ClearRichPresence();
+                                }
+                                // waits a couple seconds
+                                std::this_thread::sleep_for(std::chrono::seconds(2));
+                                // resets loop
+                                continue;
                             }
 
-                            // these 2 checks are done to see if the album should be left in or dropped to keep the string integrity
-                            // checks if the length of the songName (details) field *with* album is eq or less than 103 (cap of 108 for that field)
-                            if ((currentData.songName + currentData.albumName).length() <= 103) {
-                                currentData.songName = currentData.songName + " " + currentData.albumName;
+                            // checks if the song has been paused since last check
+                            // if it has (the pause state is not the previous state (meaning it goes from pause -> unpause or vice versa))
+                            if (CurrentRPData.PauseState != PrevPauseState.load()) {
+                                // sets the boolean to true so the next check goes through
+                                PauseChanged = true;
+                                // updates the previous pause state to match current
+                                PrevPauseState.store(CurrentRPData.PauseState);
                             }
-                            // checks if the length of the songName (details) field *with* fallback string is eq or less than 108 (cap of 108 for that field)
-                            else if ((currentData.songName + albumFallback).length() <= 108) {
-                                currentData.songName = currentData.songName + " " + albumFallback;
+
+                            // this check is done to see if the album should be left in, replaced by a fallback or kept whole depending on the length
+                            // new string that combines the song name and album (full details field by default)
+                            std::string DetailsField = CurrentRPData.SongName + " " + CurrentRPData.AlbumName;
+
+                            // checks if the length of the songName (details) field *with* album is eq or less than 103 (seems to be a functional spot, higher = boom)
+                            if (UTF16Length(DetailsField) <= 103) {
+                                // uses the merged field string
+                                CurrentRPData.SongName = DetailsField;
+                            }
+                            // default details field is too long
+                            else {
+                                // new string that combines the song name and album fallback string from config
+                                std::string DetailsFieldFallback = CurrentRPData.SongName + " " + AlbumFallback;
+
+                                // checks if that length is too long
+                                if (UTF16Length(DetailsFieldFallback) <= 108) {
+                                    // uses the pre-set fallback string instead from config
+                                    CurrentRPData.SongName = CurrentRPData.SongName + " " + AlbumFallback;
+                                }
                             }
                         } // packet size check close
                     } // packet ready check close
@@ -524,42 +631,51 @@ int main() {
 
                 // only pushes the update if everything is fine, and the song has changed/paused/update is required
                 // I found that if no update is pushed for a longer period of time, Discord may just lose the status completely and drop it
-                if (songChanged || pauseChanged || requiredUpdate) {
+                if (TrackChanged || PauseChanged || UpdateRequired) {
+
+                    // if the flag has been set to True
+                    if (RPUpdatesPaused == true) {
+                        // waits 2 seconds
+                        std::this_thread::sleep_for(std::chrono::seconds(2));
+                        // reset loop
+                        continue;
+                    }
 
                     // if the update isn't a timer-based one (meaning something has "actually changed")
-                    if (songChanged || pauseChanged) {
+                    if (TrackChanged || PauseChanged) {
                         // updates the rpc update boolean to ensure it prints rpc status
-                        rpcUpdated = false;
+                        RPCUpdated = false;
                     }
 
                     // ensures the fields doesn't exceed the character limit (128 is what Discord claims, 108 is pretty safe)
-                    currentData.songName = utfTrim(currentData.songName);
-                    currentData.songStuff = utfTrim(currentData.songStuff);
-                    currentData.LargeText = utfTrim(currentData.LargeText);
-                    currentData.SmallText = utfTrim(currentData.SmallText);
+                    CurrentRPData.SongName = UTFStringTrim(CurrentRPData.SongName);
+                    CurrentRPData.RPState = UTFStringTrim(CurrentRPData.RPState);
+                    CurrentRPData.LargeText = UTFStringTrim(CurrentRPData.LargeText);
+                    CurrentRPData.SmallImageText = UTFStringTrim(CurrentRPData.SmallImageText);
 
                     // sets up rich presence details
                     discordpp::Activity activity;
 
                     // sets the rich presence to "Listening to:"
                     activity.SetType(discordpp::ActivityTypes::Listening);
-                    // sets the "state" (song playtime, count, etc) - in games, equivalent is "Playing solo/duo..."
-                    activity.SetState(currentData.songStuff);
-                    // sets the "details" (song name) - in games, equivalent is "Competitive"
-                    activity.SetDetails(currentData.songName);
                     // stateURL only works when a party size is set - which isn't available with this program
-                    // activity.SetStateUrl("https://discord.com");
+                    // activity.SetStateUrl("https://discord.gg");
+
+                    // sets the "details" (song name) - in games, equivalent is "Competitive"
+                    activity.SetDetails(CurrentRPData.SongName);
+                    // sets the "state" (song playtime, count, etc) - in games, equivalent is "Playing solo/duo..."
+                    activity.SetState(CurrentRPData.RPState);
 
                     // sets up the rich presence assets (pictures)
                     discordpp::ActivityAssets assets;
 
                     // Large Image is the main picture
                     // if the field is still empty, doesn't push it through (will cause a fail otherwise)
-                    if (currentData.LargeImage.empty() || currentData.LargeImage[0] == ' ') {
+                    if (CurrentRPData.LargeImage.empty() || CurrentRPData.LargeImage[0] == ' ') {
                         // if it hasn't been registered yet
                         if (!LargeImageFail) {
                             // user inform
-                            std::cout << "Large Image is empty or faulty" << std::endl;
+                            std::cout << "Large Image is empty" << std::endl;
                         }
                     }
                     // not empty
@@ -569,17 +685,16 @@ int main() {
                         // if the field isn't empty or "faulty" on the first go (or hasn't failed yet)
                         else {
                             // sets the image from Python data
-                            assets.SetLargeImage(currentData.LargeImage);
+                            assets.SetLargeImage(CurrentRPData.LargeImage);
                         }
                     }
 
                     // Large text appears on hovering the large image (and under the song info)
-                    assets.SetLargeText(currentData.LargeText);
+                    assets.SetLargeText(CurrentRPData.LargeText);
                     // Large URL is the Spotify link to the selected type (Artist, Song, Album, Playlist) of the currently playing track
-                    assets.SetLargeUrl(currentData.SpotifyURL);
-
+                    assets.SetLargeUrl(CurrentRPData.LargeImageURL);
                     // Small URL is the link when you click the smaller picture
-                    assets.SetSmallUrl(currentData.SmallURL);
+                    assets.SetSmallUrl(CurrentRPData.SmallURL);
 
                     // Small Image is the circle in the corner of Large Image, text is on hover
                     // if the field is still empty, doesn't push it through (will cause a fail otherwise)
@@ -587,7 +702,7 @@ int main() {
                         // if it hasn't been registered yet
                         if (!SmallImageFail) {
                             // user inform
-                            std::cout << "Small Image is empty or faulty" << std::endl;
+                            std::cout << "Small Image is empty" << std::endl;
                         }
                     }
                     // not empty
@@ -601,7 +716,7 @@ int main() {
                         }
                     }
                     // Small text is the text that appears when you hover over the small picture
-                    assets.SetSmallText(currentData.SmallText);
+                    assets.SetSmallText(CurrentRPData.SmallImageText);
 
                     // pushes assets to "activity"
                     activity.SetAssets(assets);
@@ -610,9 +725,9 @@ int main() {
                     discordpp::ActivityTimestamps timestamps;
 
                     // sets the song's start time (in UNIX timestamp)
-                    timestamps.SetStart(currentData.unixStart);
+                    timestamps.SetStart(CurrentRPData.UNIXstart);
                     // sets the song's end time (in UNIX timestamp)
-                    timestamps.SetEnd(currentData.unixEnd);
+                    timestamps.SetEnd(CurrentRPData.UNIXend);
                     // pushes timestamps to "activity"
                     activity.SetTimestamps(timestamps);
 
@@ -623,28 +738,32 @@ int main() {
                         if (result.Successful()) {
 
                             // updates the last update timestamp to match system time
-                            lastUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+                            LastRPUpdate = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 
                             // checks if rpc has been updated already, only prints if not
-                            if (!rpcUpdated) {
+                            if (!RPCUpdated) {
                                 // updates user
                                 std::cout << "Rich Presence updated" << std::endl;
                                 // sets the bool to true, to prevent double-prints
-                                rpcUpdated = true;
+                                RPCUpdated = true;
                             }
-
+                            // resets the error count
+                            ErrorCount = 0;
                             // sets the pause acknowledge boolean to false, since the RPC has now been successfully updated -> next fail is a "real" fail
-                            ::pauseAcknowledged = false;
+                            ::PauseAcknowledged = false;
                         }
                         // if it fails to push user RPC update
                         else {
                             // sets the update boolean to false
-                            rpcUpdated = false;
+                            RPCUpdated = false;
+
+                            // sets up temp string
+                            std::string ErrorString = "";
                             
                             // if the error message contains "connection error"
                             if ((result.Error().find("Connection failed")!=std::string::npos)) {
                                 // sends generic connection error (this is more or less your connection -> Discord (sometimes their API, rare))
-                                std::cout << "Rich Presence update failed: Issue connecting to Discord API" << std::endl;
+                                ErrorString = "Rich Presence update failed due to an issue connecting to Discord API";
                                 // sets both picture fail states to false (not the cause)
                                 ::SmallImageFail = false;
                                 ::LargeImageFail = false;
@@ -652,7 +771,7 @@ int main() {
                             // if the error message contains "LargeImage"
                             else if ((result.Error().find("LargeImage")!=std::string::npos) && !LargeImageFail) {
                                 // large image error inform
-                                std::cout << "Rich Presence update failed: Large Image error" << std::endl;
+                                ErrorString = "Rich Presence update failed due to a Large Image error";
                                 // sets the fail states
                                 ::LargeImageFail = true;
                                 ::SmallImageFail = false;
@@ -660,7 +779,7 @@ int main() {
                             // if the error message contains "SmallImage"
                             else if ((result.Error().find("SmallImage")!=std::string::npos) && !SmallImageFail) {
                                 // small image error inform
-                                std::cout << "Rich Presence update failed: Small Image error" << std::endl;
+                                ErrorString = "Rich Presence update failed due to a Small Image error";
                                 // sets the fail states
                                 ::SmallImageFail = true;
                                 ::LargeImageFail = false;
@@ -670,7 +789,7 @@ int main() {
                             // *typically* this means that Discord auth expired and needs to reconnect (roughly a weekly thing), Python has inform to advise for that
                             else if ((result.Error().find("external assets")!=std::string::npos)) {
                                 // asset error user inform
-                                std::cout << "Rich Presence update failed: Discord API asset error" << std::endl;
+                                ErrorString = "Rich Presence update failed due to a Discord API asset error";
                                 // sets both picture fail states to false (likely not the cause)
                                 ::SmallImageFail = false;
                                 ::LargeImageFail = false;
@@ -678,11 +797,23 @@ int main() {
                             // if the error is something else
                             else {
                                 // generic issue with error included
-                                std::cerr << "Rich Presence update failed:" << result.Error() << std::endl;
+                                ErrorString = "Rich Presence update failed:" + result.Error();
                                 // sets both picture fail states to false (likely not the cause)
                                 ::SmallImageFail = false;
                                 ::LargeImageFail = false;
                             }
+
+                            // if there hasn't been an error reported yet
+                            if (ErrorCount == 0) {
+                                // sends the error string to STDOUT
+                                std::cerr << ErrorString << std::endl;
+                            }
+                        
+                            // adds 1 to the error counter
+                            ErrorCount += 1;
+                            // pauses the thread for a bit (prevents crazy CPU spikes)
+                            std::this_thread::sleep_for(std::chrono::seconds(2));
+
                         } // else close
                         
                     }); // UpdateRichPresence close

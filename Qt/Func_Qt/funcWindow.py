@@ -2,7 +2,7 @@ from PyQt6.QtCore import *
 from PyQt6.QtGui import *
 from PyQt6.QtWidgets import *
 # Required imports to manage the PyQt window
-import json, os, sys, asyncio
+import json, os, sys
 # Required for config management
 
 
@@ -13,7 +13,18 @@ class functionConfigWindow(QMainWindow):
         super().__init__()
         # init
 
-        self.setMinimumSize(925, 350)
+        self.monitorSizeX = app.primaryScreen().size().width()
+        self.monitorSizeY = app.primaryScreen().size().height()
+        # grabs the main window sizes to use as default sizes
+
+        self.mainWinX = max(400, int(self.monitorSizeX / 6))
+        self.mainWinY = int(self.mainWinX * 2)
+        # forms default window sizes 
+        self.mainWinPosX = ((self.monitorSizeX - self.mainWinX) / 2)
+        self.mainWinPosY = ((self.monitorSizeY - self.mainWinY) / 2)
+        # forms default window positions
+
+        self.setMinimumSize(self.mainWinX, self.mainWinY)
         # sets the window size 
         self.mainWidget = QWidget()
         # makes a QWidget for the main window
@@ -63,7 +74,14 @@ class functionConfigWindow(QMainWindow):
                     "consoleLength": 25,
                     "marketCode": "",
                     "hostData": True,
-                    "addressType": "Device"
+                    "addressType": "Device",
+                    "autoSaveTimer": 2,
+                    "autoRestart": True,
+                    "savePosData": True,
+                    "DSIwidth": self.mainWinX,
+                    "DSIheight": self.mainWinY,
+                    "DSIxPos": self.mainWinPosX,
+                    "DSIyPos": self.mainWinPosY,
                 }
                 # forms a new configuration file from preset defaults
 
@@ -76,6 +94,11 @@ class functionConfigWindow(QMainWindow):
 
         self.loadedConfig = readConfig()
         # runs the config reader to get new config info, stores it
+
+    ### Int Validator ###
+
+        self.hourValidator = QIntValidator(0, 24)
+        # int validator for 0-24 hours (auto-save)
 
 
 
@@ -133,7 +156,7 @@ class functionConfigWindow(QMainWindow):
 
     ### Refresh Time ###
 
-        self.refreshTimeLabel = QLabel("Refresh time")
+        self.refreshTimeLabel = QLabel("Refresh Time")
         # label for the refresh timer
         self.refreshTimeLabel.setToolTip("How often new data is requested from Spotify API\nRecommended: 5 - 10, minimum: 3")
         # tooltip
@@ -151,7 +174,7 @@ class functionConfigWindow(QMainWindow):
 
     ### Update Print ###
 
-        self.printUpdatesLabel = QLabel("Print updates")
+        self.printUpdatesLabel = QLabel("Print Updates")
         # label for the update printing
         self.printUpdatesLabel.setToolTip("Display program progress updates")
         # tooltip
@@ -166,7 +189,7 @@ class functionConfigWindow(QMainWindow):
 
     ### Error Print ###
 
-        self.printErrorsLabel = QLabel("Print errors")
+        self.printErrorsLabel = QLabel("Print Errors")
         # label for the error printing
         self.printErrorsLabel.setToolTip("Display program errors")
         # tooltip
@@ -181,9 +204,9 @@ class functionConfigWindow(QMainWindow):
 
     ### Disable Config ###
 
-        self.disableCfgWinLabel = QLabel("Disable config window")
+        self.disableCfgWinLabel = QLabel("Disable Auto-Config")
         # label for config window disabling
-        self.disableCfgWinLabel.setToolTip("Skip opening the configuration window(s)")
+        self.disableCfgWinLabel.setToolTip("Skip opening the configuration windows at startup\nThey can be accessed at any time via the Configure button, this just manages the auto-run functionality")
         # tooltip
 
         self.disableCfgWinCheck = QCheckBox()
@@ -198,7 +221,7 @@ class functionConfigWindow(QMainWindow):
 
         self.consoleLengthLabel = QLabel("Console Length")
         # label for console length
-        self.consoleLengthLabel.setToolTip("How many lines of the program status are stored\nDefault: 25, minimum: 5")
+        self.consoleLengthLabel.setToolTip("How many lines of the program status are stored\nDefault: 25, minimum: 5, maximum: 250")
         # tooltip
 
         self.consoleLengthLine = QLineEdit()
@@ -299,7 +322,57 @@ class functionConfigWindow(QMainWindow):
         self.optionLayout.addWidget(self.addressTypeDropdown, 10, 0, alignment=Qt.AlignmentFlag.AlignRight)
         # adds both to layout
 
+    ### Auto-Save Timer ###
 
+        self.autoSaveTimerLabel = QLabel("Auto-Save Time")
+        # label for the auto-save
+        self.autoSaveTimerLabel.setToolTip("How often to save the DSI stats, unmapped URIs, blacklist and favorites to disk\n0-24 (hours) accepted, in integers\n0 disables auto-saving (only saves when manually exiting via Exit button)")
+        # tooltip
+
+        self.autoSaveTimerLine = QLineEdit()
+        # the
+        self.autoSaveTimerLine.setMaximumWidth(40)
+        # sets max width to avoid it pushing everything insanely far
+        self.autoSaveTimerLine.setText(f"{self.loadedConfig.get("autoSaveTimer", 2)}")
+        # sets the text to match the config
+        self.autoSaveTimerLine.setValidator(self.hourValidator)
+        # sets the hour validator (only accepts 0-99 (gets trimmed to 24 at save))
+
+        self.optionLayout.addWidget(self.autoSaveTimerLabel, 11, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.autoSaveTimerLine, 11, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds both to layout
+
+    ### Auto-Restart ###
+
+        self.autoRestartLabel = QLabel("Restart Automatically")
+        # label for the automatic restarting
+        self.autoRestartLabel.setToolTip("Whether to enable automatic internal restarting\nThis only acts when Spotify API is the reason for the shut down in the first place\nWaits 30 minutes before automatically restarting to allow potential Spotify outage to pass")
+        # tooltip
+
+        self.autoRestartCheck = QCheckBox()
+        # checkbox for the automatic restart
+        self.autoRestartCheck.setChecked(self.loadedConfig.get("autoRestart", True))
+        # sets the check state based on the config
+
+        self.optionLayout.addWidget(self.autoRestartLabel, 12, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.autoRestartCheck, 12, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds both to layout
+
+    ### Save Positional Data ###
+
+        self.savePosDataLabel = QLabel("Save Window Coordinates")
+        # label for the positional saving
+        self.savePosDataLabel.setToolTip("Whether to enable automatic position and window size saving at exit every time\nThe window is moved and sized at launch to these numbers, this just manages the storing aspect")
+        # tooltip
+        
+        self.savePosDataCheck = QCheckBox()
+        # checkbox for the positional saving
+        self.savePosDataCheck.setChecked(self.loadedConfig.get("savePosData", True))
+        # sets the check state based on the config
+
+        self.optionLayout.addWidget(self.savePosDataLabel, 13, 1, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.optionLayout.addWidget(self.savePosDataCheck, 13, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        # adds both to layout
 
     ### Buttons ###
 
@@ -394,26 +467,54 @@ class functionConfigWindow(QMainWindow):
         except:
         # if it can't (not an int/float)
             refreshTime = 10.0
-            # sets to safe 10 second float
+            # sets to default
+
+        if refreshTime < 3:
+        # if the time is set to less than 3 seconds (will result in API rate limits)
+            refreshTime = 3.0
+            # caps at the lowest allowed time (1x/3s)
 
         consoleLength = self.consoleLengthLine.text()
         # grabs the text from the console length edit line
 
-        if not type(consoleLength) == int:
-        # if the consoleLength isn't an integer
-            try:
-            # tries to convert
-                consoleLength = int(consoleLength)
-                # turns it into integer (if it's float)
-            except:
-            # if it can't
-                consoleLength = 25
-                # sets safe number
+        try:
+        # tries to
+            consoleLength = int(consoleLength)
+            # turns it into integer
+        except:
+        # if it can't
+            consoleLength = 25
+            # sets to default
         
         if consoleLength < 5:
-        # if the console length is set to lower than 5
+        # if the console length is lower than 5
             consoleLength = 5
             # sets to minimum of 5
+        elif consoleLength > 250:
+        # if the console length is higher than 250 (performance concern)
+            consoleLength = 250
+            # caps at 250
+
+        autoSaveTime = self.autoSaveTimerLine.text()
+        # grabs the text from the auto-save interval edit line
+
+        try:
+        # tries to
+            autoSaveTime = int(autoSaveTime)
+            # turns it into integer
+        except:
+        # if it can't
+            autoSaveTime = 2
+            # sets to default
+
+        if autoSaveTime < 0:
+        # if the timer is somehow negative
+            autoSaveTime = 0
+            # sets to 0 (disabled)
+        elif autoSaveTime > 24:
+        # if the timer is more than 24 hours
+            autoSaveTime = 24
+            # caps at 24
 
         configuration = {
             "disableCfgWin": self.disableCfgWinCheck.isChecked(),
@@ -425,7 +526,14 @@ class functionConfigWindow(QMainWindow):
             "clockStyle": self.clockStyleDropdown.currentText(),
             "marketCode": self.marketCodeLine.text(),
             "hostData": self.enableFlaskCheck.isChecked(),
-            "addressType": self.addressTypeDropdown.currentText()
+            "addressType": self.addressTypeDropdown.currentText(),
+            "autoSaveTimer": autoSaveTime,
+            "autoRestart": self.autoRestartCheck.isChecked(),
+            "savePosData": self.savePosDataCheck.isChecked(),
+            "DSIwidth": self.loadedConfig.get("DSIwidth", self.mainWinX),
+            "DSIheight": self.loadedConfig.get("DSIheight", self.mainWinY),
+            "DSIxPos": self.loadedConfig.get("DSIxPos", self.mainWinPosX),
+            "DSIyPos": self.loadedConfig.get("DSIyPos", self.mainWinPosY)
         }
         # forms a configuration based on the states of each of the fields
 

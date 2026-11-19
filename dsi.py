@@ -4,7 +4,7 @@ import random, subprocess
 # Required to choose random pictures and to start the C++ file
 import os, sys, time, threading, queue
 # Required for system information, background tasking and queueing
-import spotipy, requests, json, logging
+import spotipy, requests, json, logging, socket, unicodedata
 # Required for basic function of Spotify data requests and storing
 from spotipy.oauth2 import SpotifyOAuth
 # Required for authorizing with Spotify
@@ -133,14 +133,15 @@ functionConfig = {}
 """The config file for functionality"""
 secretConfig = {}
 """The config file with client IDs and such"""
-jsonConfig = {}
+dsiVisualConfig = {}
 """The config file with DSI customisation config"""
 shaaConfig = {}
 """The config file specifically for SHA(A) features"""
+
 blacklist = {}
 """The blacklist of songs from blacklist.json"""
-uriList = []
-"""The list of URIs from uriList.json"""
+maplessURIs = {}
+"""The dictionaries of URIs from uriList.json"""
 
 spotifyClientID = None
 """Spotify Client ID, string"""
@@ -161,6 +162,12 @@ addressType = "Device"
 """Whether to host the data at device-only accessible or local network-accessible address"""
 refreshTime = 10.0
 """Program update cycle interval time, float/int"""
+autoSaveTimer = 2
+"""Program auto-save timer, hours/int (0 = disabled)"""
+autoRestart = True
+"""Program automatic restart (for Spotify API errors only), boolean"""
+savePosData = True
+"""Whether to save the window position and sizes to file at exit"""
 
 enablePause = True
 """The "paused on" text enabler, boolean"""
@@ -264,7 +271,7 @@ pauseStart = None
 """Makes a starter variable that stores a timestamp when a pause occurs"""
 currentInfo = None
 """Song info dictionary"""
-cppFull = None
+cppFull = {}
 """Currently playing song dict sent to the C++ program"""
 blacklistInfo = None
 """Dictionary containing the current song's info"""
@@ -295,7 +302,7 @@ cycleCount = 0
 """Variable to check the cycle count of hours, minutes and seconds (if enabled)"""
 timePlayed = 0
 """Variable to store total playtime during DSI uptime"""
-lastPlayStamp = 0
+lastPlayStamp = time.time()
 """Variable to store timestamp for playtime calculation"""
 storedStart = time.time()
 """Variable to store the start time of the current track"""
@@ -312,10 +319,8 @@ disableShaa = False
 """Boolean to check whether SHA(A) functionality should be disabled or not"""
 cppProgram = None
 """The C++ program subprocess (gets defined in its function)"""
-cppFails = 0
-"""How many asset failures have been detected from the C++ subprocess"""
 stopLooper = False
-"""Boolean to stop the looper from running"""
+"""Boolean (flag) to stop the looper from running"""
 
 
 
@@ -345,18 +350,33 @@ def version():
 
 def runSPData():
 # Spotify data page runner
+    spPort = 41809
+    # pre-determined port
+
     if addressType == "Device":
     # if the config option is set to Device-only
         address = "127.0.0.1"
         # uses device-only address
     else:
     # not device-only
+        tempSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # forms a temporary socket connection (IPv4 + UDP ^)
         address = "0.0.0.0"
-        # uses local network address
-    mainWin.labelSwap.emit(f"Hosting parsed Spotify data at {address}:41809/spData", 1)
+        # hosted address
+        try:
+        # quick connection check
+            tempSocket.connect(("8.8.8.8", 80))
+            # checks Google's DNS port
+            address = tempSocket.getsockname()[0]
+            # grabs the first element of the returned tuple of (IP, port)
+        finally:
+        # when done (or exception)
+            tempSocket.close()
+            # closes
+    mainWin.labelSwap.emit(f"Hosting parsed Spotify data at {address}:{spPort}/spData", 1)
     # user inform
-    localSPData.run(host=address, port=41809)
-    # runs the Flask app on the local network (x:41809/spData)
+    localSPData.run(host=address, port=spPort)
+    # runs the Flask app on the local network (ADD:PORT with /spData and /version)
 
 
 
@@ -400,7 +420,13 @@ class DSI_MainWindow(QMainWindow):
         self.windowSizeY = int(self.windowSizeX * (9 / 16))
         # base window sizes (uses the larger of the two, 900 or ~33% of the monitor's width, 16:9 aspect ratio for height)
         # for a 1080p/1440p monitor, it should work out to ~ 900 x 510
-        # 4K = 1280 x 720 (literally 1/3rd in both dimensions)
+        # 4K = 1280 x 720 (literally a third in both dimensions)
+
+        self.windowPosX = int((startApp.primaryScreen().size().width() - self.windowSizeX) / 2)
+        self.windowPosY = int((startApp.primaryScreen().size().height() - self.windowSizeY) / 2)
+        # base window location coordinates (0, 0 is top left corner, by default, aims to place the window in the direct center of the screen)
+        # subtracts the window itself first, to only get the part of the monitor that's left over, then divides in two to get the offset 
+        # (how far from the edge(s) the window should be)
 
     ### Basic Window Setup ###
 
@@ -410,6 +436,8 @@ class DSI_MainWindow(QMainWindow):
         # the window icon
         self.setMinimumSize(QSize(self.windowSizeX, self.windowSizeY))
         # the window size minimums
+        self.move(self.windowPosX, self.windowPosY)
+        # moves the window to the defined points (center)
 
     ### UI Element Base ###
 
@@ -650,19 +678,19 @@ class DSI_MainWindow(QMainWindow):
         self.cycleStatsButton.hide()
         # hides the button on start
 
-        self.currentSongInfoButton = QPushButton("Song Details")
-        # a button to display API-level details about the song
-        self.currentSongInfoButton.setFixedSize(125, 50)
+        self.functionNestButton = QPushButton("Actions")
+        # a button to display user-interactable action buttons in a nested window
+        self.functionNestButton.setFixedSize(125, 50)
         # sets fixed size
-        self.currentSongInfoButton.setToolTip("Display details about the currently playing song")
+        self.functionNestButton.setToolTip("Open the action button view")
         # tooltip
 
-        self.currentSongInfoButton.clicked.connect(self.songDetailsWindow)
-        # connects the button click to the detail display
-        self.currentSongInfoButton.hide()
+        self.functionNestButton.clicked.connect(lambda: self.openSubWindow("Action"))
+        # connects the button click to the nested action window
+        self.functionNestButton.hide()
         # hides the button on start
 
-        self.buttonSpacer = QSpacerItem(100, 50)
+        self.buttonSpacer = QSpacerItem(80, 50)
         # a spacer item to gap the visual/functional buttons
 
         self.openFuncConfigButton = QPushButton("Configure")
@@ -672,7 +700,7 @@ class DSI_MainWindow(QMainWindow):
         self.openFuncConfigButton.setToolTip("Open the configuration launcher")
         # tooltip
 
-        self.openFuncConfigButton.clicked.connect(self.openConfigLauncher)
+        self.openFuncConfigButton.clicked.connect(lambda: self.openSubWindow("Config"))
         # connects the button click to the detail display
         self.openFuncConfigButton.hide()
         # hides the button on start
@@ -689,12 +717,46 @@ class DSI_MainWindow(QMainWindow):
         self.openUriMapperButton.hide()
         # hides the button on start
 
-        self.functionLayout.addWidget(self.currentSongInfoButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.functionLayout.addWidget(self.functionNestButton, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.cycleStatsButton, 1, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addItem(self.buttonSpacer, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         self.functionLayout.addWidget(self.openFuncConfigButton, 3, 0, alignment=Qt.AlignmentFlag.AlignCenter)        
         self.functionLayout.addWidget(self.openUriMapperButton, 4, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the buttons
+
+    ### Action Elements ###
+
+        self.currentSongInfoButton = QPushButton("Song Details")
+        # a button to display API-level details about the song
+        self.currentSongInfoButton.setFixedSize(125, 50)
+        # sets fixed size
+        self.currentSongInfoButton.setToolTip("Display details about the currently playing song")
+        # tooltip
+
+        self.currentSongInfoButton.clicked.connect(self.songDetailsWindow)
+        # connects the button click to the detail display
+
+        self.uriMapConfigureButton = QPushButton("Manipulate\nURI Map")
+        # a button to manipulate the URI map
+        self.uriMapConfigureButton.setFixedSize(125, 50)
+        # sets fixed size
+        self.uriMapConfigureButton.setToolTip("Open a window to modify the mapped URI entries")
+        # tooltip
+
+        self.uriMapConfigureButton.clicked.connect(lambda: self.openSubWindow("URI"))
+        # connects the button click to the URI manipulation display
+
+        self.pauseCPPbutton = QPushButton("Pause Discord Rich\nPresence Updates")
+        # a button to (temporarily) pause the Discord Rich Presence updates until re-clicked
+        self.pauseCPPbutton.setFixedSize(125, 50)
+        # sets fixed size
+        self.pauseCPPbutton.setToolTip("Places the Discord Rich Presence updates in a paused state\nThis program continues to work, but won't send data to the Discord API")
+        # tooltip
+
+        self.pauseCPPbutton.clicked.connect(self.pauseRPUpdates)
+        # connects the button click to the C++ pausing function
+        self.cppPauseStatus = False
+        # boolean to store the C++ pause status in (True = updates paused, False = updating as per usual)
 
     ### Status Elements ###
 
@@ -718,8 +780,6 @@ class DSI_MainWindow(QMainWindow):
         # makes the button part invisible
         self.spotifyStatusIcon.setFixedSize(18, 18)
         # sets the max size of the button slightly larger than the icon
-        self.statusLayout.addWidget(self.spotifyStatusIcon, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        # adds the icon to the top left corner
 
         self.spotifyStatusLabel = QPushButton("Spotify API")
         # the Spotify API status label (button)
@@ -734,8 +794,6 @@ class DSI_MainWindow(QMainWindow):
             }
         """)
         # makes the button itself invisible
-        self.statusLayout.addWidget(self.spotifyStatusLabel, 0, 1, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the label next to its icon (right side)
 
         self.discordStatusIcon = QPushButton()
         # the Discord API status indicator
@@ -751,8 +809,6 @@ class DSI_MainWindow(QMainWindow):
         # makes the button part invisible
         self.discordStatusIcon.setFixedSize(18, 18)
         # sets the max size of the button slightly larger than the icon
-        self.statusLayout.addWidget(self.discordStatusIcon, 1, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        # adds the icon to the bottom left corner
 
         self.discordStatusLabel = QPushButton("Discord API")
         # the Discord API status label (button)
@@ -769,8 +825,14 @@ class DSI_MainWindow(QMainWindow):
         # makes the button itself invisible
         self.discordStatusLabel.clicked.connect(lambda: self.restarter("C++", True))
         # clicking calls the restarting function to restart C++ with True (restart, not just shut off)
-        self.statusLayout.addWidget(self.discordStatusLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the label next to its icon (right side)
+
+        self.discordRPPauseLabel = QLabel("")
+        # Discord Rich Presence pause status (warning, if the Discord API connection is paused manually)
+        self.discordRPPauseLabel.setStyleSheet("""
+            color: red;
+            font-size: 9px;
+        """)
+        # makes it red, smaller than normal
 
         self.discordResetImageButton = QPushButton("Retry Images")
         # Discord image reset button
@@ -780,8 +842,14 @@ class DSI_MainWindow(QMainWindow):
         # tooltip
         self.discordResetImageButton.clicked.connect(self.imageFailReset)
         # clicking calls the image reset function to tell C++ to reset the image bool(s)
-        self.statusLayout.addWidget(self.discordResetImageButton, 2, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
-        # adds the label under the others (middle)
+
+        self.statusLayout.addWidget(self.spotifyStatusIcon, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        self.statusLayout.addWidget(self.spotifyStatusLabel, 0, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.statusLayout.addWidget(self.discordStatusIcon, 1, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        self.statusLayout.addWidget(self.discordStatusLabel, 1, 1, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.statusLayout.addWidget(self.discordRPPauseLabel, 2, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.statusLayout.addWidget(self.discordResetImageButton, 3, 1, 1, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        # adds all the buttons and their icons
 
         self.spotifyStatusIcon.hide()
         self.spotifyStatusLabel.hide()
@@ -904,12 +972,21 @@ class DSI_MainWindow(QMainWindow):
         self.lines = deque(maxlen = consoleLength)
         # creates a "deque" to hold lines (strings), to form a "pseudo-console"
 
-    ### Run Arguments ###
+    ### Window References ###
 
-        self.configWindow = ConfigWindow(self)
-        # instantiates the configuration window class 
-        self.configWindow.hide()
-        # hides by default
+        self.configWindow = None
+        self.uriWindow = None
+        self.actionWindow = None
+        # stores a referenceless placeholder for internal window classes
+
+    ### Keybinds ###
+
+        self.saveKeybind = QShortcut(QKeySequence("Ctrl+S"), self)
+        # stores a keybind for Ctrl + S
+        self.saveKeybind.activated.connect(lambda: self.stopper("Auto-Save"))
+        # pressing Ctrl + S calls the auto-save function
+
+    ### Run Arguments ###
 
         QTimer.singleShot(0, self.checkUpdate)
         # runs the GitHub update check
@@ -1075,6 +1152,36 @@ class DSI_MainWindow(QMainWindow):
         self.discordResetImageButton.hide()
         # hides the button again
 
+### Pause Rich Presence ###
+
+    def pauseRPUpdates(self):
+        """A function to pause the C++ updates"""
+
+        newState = not self.cppPauseStatus
+        # grabs the opposite boolean as the state to set the pause state to (eg. if it's False (not paused) -> True (paused))
+
+        pausePacket = {"Pause Updates": newState}
+        # simple packet with the pause state boolean
+
+        cppPackets(pausePacket)
+        # calls the C++ packet sender function to do exactly that
+
+        if newState:
+        # True = paused
+            self.pauseCPPbutton.setText("Resume Discord Rich\nPresence Updates")
+            # changes text to indicate what the button will do next
+            self.discordRPPauseLabel.setText("Discord RP Paused!")
+            # shows the text
+        else:
+        # False = unpaused
+            self.pauseCPPbutton.setText("Pause Discord Rich\nPresence Updates")
+            # changes text to indicate what the button will do next
+            self.discordRPPauseLabel.setText("")
+            # hides the text
+
+        self.cppPauseStatus = newState
+        # updates the variable with the new state
+
 ### Song Details ###
 
     def songDetails(self, action:str = None):
@@ -1186,21 +1293,53 @@ class DSI_MainWindow(QMainWindow):
         info.exec()
         # executes (shows)
 
-### Functional Configuration Window ###
+### Subservient Windows ###
 
-    def openConfigLauncher(self):
-        """Function to open the configuration launcher"""
-        
-        self.configWindow.show()
-        # shows the window to open configs
+    def openSubWindow(self, window: str):
+        """Function to open an instantiated window"""
+
+        if window == "Config":
+        # requested window is the config window
+            if self.configWindow:
+            # if the window is defined
+                self.configWindow.show()
+                # shows the window to open configs
+        elif window == "URI":
+        # requested window is the URI manipulation window
+            if self.uriWindow:
+            # if the window is defined
+                self.uriWindow.trackPlacer(250000)
+                # calls the trackplacer to fill the table of tracks first
+                self.actionWindow.hide()
+                # hides the action window (to let the URI window go on top)
+                self.uriWindow.show()
+                # shows the window to modify URI mappings
+        elif window == "Action":
+        # requested window is the action window
+            if self.actionWindow:
+            # if the window is defined
+                self.actionWindow.show()
+                # shows the window to allow action calls
 
 ### URI Mapper Window ###
 
     def openURImapper(self):
-        """Function to run the URImap.exe file"""
+        """Function to run the URI mapper in a thread"""
 
-        subprocess.Popen([uriMapExePath], creationflags=subprocess.CREATE_NEW_CONSOLE)
-        # opens as a subprocess, forces new console creation (since URImapper is a console-only program)
+        def runURImapper():
+            """Sub-function to actually run the executable"""
+            uriMapper = subprocess.Popen([uriMapExePath], creationflags=subprocess.CREATE_NEW_CONSOLE)
+            # opens as a subprocess, forces new console creation (since URImapper is a console-only program
+            returnCode = uriMapper.wait()
+            # waits for the mapper to finish (blocking), captures exit code
+
+            self.labelSwap.emit(f"URI mapper finished, reloading map", 2)
+            # user inform
+            URIFileReader("Map")
+            # calls the URI map reader to update the global variable
+        
+        threading.Thread(target=runURImapper, daemon=True).start()
+        # a thread for the URI mapper to sit in, so that the UI doesn't freeze
 
 ### Auto-Scroll ###
 
@@ -1521,6 +1660,12 @@ class DSI_MainWindow(QMainWindow):
 
         if status:
         # status = True means restart -> running
+            if hasattr(self, "restartTimer"):
+            # checks if there's an auto-restart timer
+                self.restartTimer.stop()
+                # calls to stop it (prevent double-restart call)
+                self.restartTimer.deleteLater()
+                # calls to delete it 
             self.exitLayout.removeWidget(self.restartButton)
             # removes the restart button from the exit layout
             self.exitButton.setFixedSize(200, 50)
@@ -1541,12 +1686,24 @@ class DSI_MainWindow(QMainWindow):
             # displays the restart button
             self.labelSwap.emit(f"All subprocesses closed, restart ready!", 3)
             # user inform on new status
+            if autoRestart:
+            # if the automatic restarting is enabled
+                self.restartTimestamp = datetime.fromtimestamp(time.time() + 1800)
+                # forms a timestamp for when the automatic restart should happen
+                self.restartTimer = QTimer()
+                # makes a QT timer 
+                self.restartTimer.timeout.connect(lambda: self.restartHelper(True))
+                # connects the timer "timeout" (stop) to the restart helper (this function) with True call
+                restartTimestampHuman = self.restartTimestamp.strftime("%H:%M:%S")
+                # "translates" the timestamp from UNIX float to 'human-readable' time
+                self.labelSwap.emit(f"Automatic restart scheduled for {restartTimestampHuman}!", 3)
+                # user inform on pending auto-restart
 
 ### Program Closer ###
 
     def stopper(self, severity: str):
         """A function to close the program gracefully, saving progress"""
-        global blacklist, uriList, stopLooper
+        global blacklist, maplessURIs, stopLooper, lastDSIsave
         # global -> local
 
         self.labelSwap.emit("Saving DSI statistics...", 3)
@@ -1554,14 +1711,18 @@ class DSI_MainWindow(QMainWindow):
 
         self.blacklistWriter()
         # calls the blacklist writer to save the blacklist
-        uriWriter(uriList)
-        # calls the URI writer with the current list of URIs to save it
+        if enableMapping:
+        # if mapping is enabled
+            uriWriter(maplessURIs)
+            # calls the URI writer with the current list of URIs to save it
         statsWriter("Save")
         # calls the statistics writer with Save
 
+        lastDSIsave = time.time()
+        # saves the last time DSI was saved (prevents really fast updates)
+
         if severity != "Auto-Save":
         # if the severity isn't to use as a save function
-
             if severity == "Shut Down":
             # call to shut down
                 self.labelSwap.emit("Shutting down...", 3)
@@ -1580,6 +1741,8 @@ class DSI_MainWindow(QMainWindow):
 
             if severity == "Shut Down":
             # called to shut down
+                self.mainConfigWrite()
+                # ensures the config is up-to-date with position and location data
                 self.close()
                 # closes the window
                 startApp.quit()
@@ -1754,7 +1917,7 @@ class DSI_MainWindow(QMainWindow):
             # updates all the global variables
             self.labelSwap.emit("All required items loaded successfully, proceeding...", 0)
             # user update
-            self.configRun()
+            self.configsLoadCheck()
             # moves to next stage
         except:
         # if it fails (something's wrong with the file/input)
@@ -1849,7 +2012,7 @@ class DSI_MainWindow(QMainWindow):
         self.labelSwap.emit("Required items stored successfully, proceeding...", 0)
         # user update
 
-        self.configRun()
+        self.configsLoadCheck()
         # moves to next stage
 
     def requiredItemInput(self, field):
@@ -1916,118 +2079,228 @@ class DSI_MainWindow(QMainWindow):
 
 ### UI Class -> Config ###
 
-    def configRun(self): 
-        """Function to run the configuration window(s)"""
-        global functionConfig, jsonConfig, shaaConfig, disableShaa, skipConfigWindow, skipCfgWin
+    def configRun(self, config: str) -> dict | None: 
+        """Function to read the configuration files"""
+
+        if config == "Function":
+        # function config load call
+
+            if os.path.exists(funcConfigPath):
+            # if the functionality-related config exists
+                self.labelSwap.emit("Found functionality configuration, reading...", 0)
+                # user update
+                try:
+                # tries to open the json file
+                    with open(funcConfigPath, "r", encoding="utf-8") as fncCfg:
+                    # opens the config file in read mode
+                        functionConfig = json.load(fncCfg)
+                        # stores the loaded json file as functionConfig
+                        return functionConfig
+                        # returns the config
+                except Exception as err:
+                # if there's an error
+                    self.labelSwap.emit(f"Error reading the functional configuration file: {err}", 2)
+                    # user inform
+                    return None
+                    # None return
+            else:
+            # config doesn't exist
+                return None
+                # None return
+
+        elif config == "DSI":
+        # DSI visual config load call
+
+            if os.path.exists(dsiConfigPath):
+            # checks if the config already exists (not first time) and the skipping is enabled
+                self.labelSwap.emit("Found customisation configuration, reading...", 0)
+                # user update
+                try:
+                # tries to open the json file
+                    with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
+                    # opens the config file in read mode
+                        dsiVisualConfig = json.load(jsCfg)
+                        # stores the loaded json file as jsonConfig
+                        return dsiVisualConfig
+                        # returns the config
+                except Exception as err:
+                # if there's an error
+                    self.labelSwap.emit(f"Error reading the DSI visual configuration file: {err}", 2)
+                    # user inform
+                    return None
+                    # None return
+            else:
+            # if the dsi configuration doesn't exist
+                return None
+                # None return
+
+        elif config == "SHAA":
+        # SHAA config load call
+
+            if os.path.exists(shaaConfigPath):
+            # if the shaa configuration file does exist
+                try:
+                # tries to read the SHAA config file (try because it's not necessary, can be skipped)
+                    with open(shaaConfigPath, "r", encoding="utf-8") as shaaCfg:
+                    # opens the SHAA config
+                        shaaConfig = json.load(shaaCfg)
+                        # stores the loaded config
+                        return shaaConfig
+                        # returns the config
+                except:
+                # if the file can't be opened
+                    self.labelSwap.emit(f"Error reading the SHA addon configuration file: {err}", 0)
+                    # user update
+                    return None
+                    # None return
+            else:
+            # if the file doesn't exist
+                return None
+                # None return
+
+### Config Load Sequence ###
+
+    def configsLoadCheck(self):
+        """Function that loads the configs in sequence and checks their validity"""
+        global functionConfig, dsiVisualConfig, shaaConfig, skipConfigWindow
         # global -> local
 
-        if os.path.exists(funcConfigPath):
-        # if the functionality-related config exists
-            self.labelSwap.emit("Found functionality configuration, reading...", 0)
-            # user update
-            try:
-            # tries to open the json file
-                with open(funcConfigPath, "r", encoding="utf-8") as fncCfg:
-                # opens the config file in read mode
-                    functionConfig = json.load(fncCfg)
-                    # stores the loaded json file as functionConfig
-            except Exception as err:
-            # if there's an error
-                self.labelSwap.emit(f"Error reading the configuration file: {err}", 2)
-                # user inform            
-            try:
-            # tries to read the config
-                skipCfgWin = functionConfig.get("disableCfgWin", False)
-                # whether to prompt user with config window or not, boolean
-                if skipCfgWin:
-                # if the boolean is True
-                    self.labelSwap.emit("Configuration found and skipping is enabled, proceeding...", 0)
-                    # user update
-            except:
-            # if it can't be read
-                skipCfgWin = False
-                # sets to true if it can't be grabbed
-                self.labelSwap.emit("Could not skip config...", 2)
-                # user update
-        else:
-        # if the config file doesn't exist
-            skipCfgWin = False
-            # sets the config to false
+    ### Functional ###
 
-        if not skipCfgWin:
-        # if the file doesn't exist or config needs to be rechecked
+        functionConfig = self.configRun("Function")
+        # runs the config runner and grabs the returned config
+
+        if functionConfig is not None:
+        # if the reader returned a config, not just None
+            skipConfigWindow = functionConfig.get("disableCfgWin", False)
+            # whether to prompt user with config window or not, boolean
+            if skipConfigWindow:
+            # if the boolean is True
+                self.labelSwap.emit("Configuration found and skipping is enabled, proceeding...", 0)
+                # user update
+
+            if functionConfig.get("autoSaveTimer") is None or functionConfig.get("autoRestart") is None or functionConfig.get("savePosData") is None:
+            # if any of the latest config option additions don't exist in the file
+                skipConfigWindow = False
+                # forces the variable off, to force a config check from user
+
+        if functionConfig is None or not skipConfigWindow:
+        # if the file doesn't exist, needs to be re-configured or the boolean to skip the config is off
             self.hide()
             # hides the mainWindow (otherwise appears frozen)
             mainConfig = subprocess.run([funcConfigExePath], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
             # runs the functionality configurator (as blocking), continues task once it's done writing config
             if not mainConfig.returncode == 1:
-            # checks if the return code isn't 1 (0 is bad, 1 is good)
+            # checks if the return code isn't 1
                 self.show()
                 # re-shows itself
                 self.labelSwap.emit(f"Configuration complete, proceeding...", 0)
                 # sends the return code
+                functionConfig = self.configRun("Function")
+                # re-runs the config read for the functional config
 
-        if os.path.exists(dsiConfigPath):
-        # checks if the config already exists (not first time) and the skipping is enabled
-            self.labelSwap.emit("Found customisation configuration, reading...", 0)
-            # user update
-            try:
-            # tries to open the json file
-                with open(dsiConfigPath, "r", encoding="utf-8") as jsCfg:
-                # opens the config file in read mode
-                    jsonConfig = json.load(jsCfg)
-                    # stores the loaded json file as jsonConfig
-            except Exception as err:
-            # if there's an error
-                self.labelSwap.emit(f"Error reading the configuration file: {err}", 2)
-                # user inform
-        else:
-        # if the dsi configuration doesn't exist
+    ### DSI Visual ###
+
+        dsiVisualConfig = self.configRun("DSI")
+        # runs the config runner and grabs the returned config
+
+        if dsiVisualConfig is None or not skipConfigWindow:
+        # if the file doesn't exist, needs to be re-configured or the boolean to skip the config is off
             self.hide()
             # hides the mainWindow (otherwise appears frozen)
             dsiConfig = subprocess.run([dsiConfigExePath], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            # runs the dsi configurator (as blocking), continues task once it's done writing config
+            # runs the DSI configurator (as blocking), continues task once it's done writing config
             if not dsiConfig.returncode == 1:
-            # checks if the return code isn't 1 (0 is bad, 1 is good)
+            # checks if the return code isn't 1
                 self.show()
                 # re-shows itself
                 self.labelSwap.emit(f"Customisation configuration complete, proceeding...", 0)
                 # sends the return code
+                dsiVisualConfig = self.configRun("DSI")
+                # re-runs the config read for the DSI visual config
 
-        if os.path.exists(shaaConfigPath):
-        # if the shaa configuration file does exist
-            try:
-            # tries to read the SHAA config file (try because it's not necessary, can be skipped)
-                with open(shaaConfigPath, "r", encoding="utf-8") as shaaCfg:
-                # opens the SHAA config
-                    shaaConfig = json.load(shaaCfg)
-                    # stores the loaded 
-                    disableShaa = False
-                    # keeps shaa enabled
-                    self.labelSwap.emit("SHAA configuration detected...", 0)
-                    # user update
-            except:
-            # if the file can't be opened
-                disableShaa = True
-                # disables SHAA-related functions
-                self.labelSwap.emit("SHAA not configured, skipping...", 0)
-                # user update
-        else:
-        # if the file doesn't exist
-            disableShaa = True
-            # disables SHAA-related functions
-            self.labelSwap.emit("SHAA not configured, skipping...", 0)
-            # user update
+    ### SHAA Config ###
 
-        QTimer.singleShot(1000, self.mainConfigLoad)
+        nextTimer = 50
+        # timer starts at 50 (ms)
+
+        shaaConfig = self.configRun("SHAA")
+        # runs the config runner and grabs the returned config
+
+        if shaaConfig is None or not skipConfigWindow:
+        # if the file doesn't exist, needs to be re-configured or the boolean to skip the config is off
+            self.hide()
+            # hides the mainWindow (otherwise appears frozen)
+            shaCfg = subprocess.run([shaaConfigExePath], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            # runs the SHAA configurator (as blocking), continues task once it's done writing config
+            if not shaCfg.returncode == 1:
+            # checks if the return code isn't 1
+                self.show()
+                # re-shows itself
+                self.labelSwap.emit(f"SHAA configuration complete, proceeding...", 0)
+                # sends the return code
+                shaaConfig = self.configRun("SHAA")
+                # re-runs the config read for the SHA addon config
+
+        QTimer.singleShot(nextTimer, self.mainConfigLoad)
         # runs the next stage
+
+### Config Write ###
+
+    def mainConfigWrite(self):
+        """Function that writes the config with changes"""
+        global functionConfig
+        # global -> local
+
+        if savePosData:
+        # if saving window position/size data is enabled
+
+            dsiWidth = self.window().size().width()
+            dsiHeight = self.window().size().height()
+            # grabs the current window size
+            dsiPosX = self.window().pos().x()
+            dsiPosY = self.window().pos().y()
+            # grabs the current window position
+
+            widthOffsetBool = (abs(dsiWidth - self.windowSizeX) < self.windowSizeX * 0.05)
+            heightOffsetBool = (abs(dsiHeight - self.windowSizeY) < self.windowSizeY * 0.05)
+            # checks if the current window size and the stored size are within 5%
+            xPosOffsetBool = (abs(dsiPosX - self.windowPosX) < 10)
+            yPosOffsetBool = (abs(dsiPosY - self.windowPosY) < 10)
+            # checks if the current window position and the stored position are within 10px
+
+            if not (widthOffsetBool and heightOffsetBool and xPosOffsetBool and yPosOffsetBool):
+            # checks whether the window has remained in largely the same position/hasn't been resized
+                try:
+                # tries (opening, modifying and closing file could fail, better safe than sorry)
+                    with open(funcConfigPath, "r", encoding="utf-8") as fncCfg:
+                    # opens the config file in read mode
+                        functionConfig = json.load(fncCfg)
+                        # stores the loaded json file as functionConfig
+
+                    functionConfig["DSIwidth"] = dsiWidth
+                    functionConfig["DSIheight"] = dsiHeight
+                    # grabs the current window sizes (X and Y)
+                    functionConfig["DSIxPos"] = dsiPosX
+                    functionConfig["DSIyPos"] = dsiPosY
+                    # grabs the current window positions (X and Y)
+
+                    with open(funcConfigPath, "w", encoding="utf-8") as fncCfg:
+                    # opens the config file location
+                        json.dump(functionConfig, fncCfg, indent=3)
+                        # writes to file
+                except:
+                # if it does fail
+                    None
+                    # does nothing (saving the positions/sizes is a QoL thing that can be discarded)
 
 ### Config Load ###
     
     def mainConfigLoad(self):
-        """Function that loads and stores the config options"""
+        """Function that loads and captures the config options"""
         global refreshTime, enablePause, pauseStateText, enableUpdates, enableErrors
         global enableMapping, timestampStyle, startTime, consoleLength, hostData, addressType
+        global autoSaveTimer, autoRestart, savePosData
         # global -> local
 
         refreshTime = functionConfig.get("refreshTime", 10.0)
@@ -2036,17 +2309,13 @@ class DSI_MainWindow(QMainWindow):
         # tries to
             refreshTime = float(refreshTime)
             # turns the time into a float
-            if refreshTime < 3.0:
-            # if the refresh time is set too low
-                refreshTime = 3
-                # overrides to safe minimum of 3s  
         except:
         # if it fails
             refreshTime = 10.0
             # fallback value of 10.0
 
-        enablePause = bool(jsonConfig.get("enablePause", True))
-        pauseStateText = str(jsonConfig.get("pauseText", "Paused on:"))
+        enablePause = bool(dsiVisualConfig.get("enablePause", True))
+        pauseStateText = str(dsiVisualConfig.get("pauseText", "Paused on:"))
         enableUpdates = bool(functionConfig.get("printUpdates", True))
         enableErrors = bool(functionConfig.get("printErrors", True))
         enableMapping = bool(functionConfig.get("enableURI", True))
@@ -2054,6 +2323,13 @@ class DSI_MainWindow(QMainWindow):
         consoleLength = int(functionConfig.get("consoleLength", 25))
         hostData = bool(functionConfig.get("hostData", True))
         addressType = str(functionConfig.get("addressType", "Device"))
+        autoSaveTimer = int(functionConfig.get("autoSaveTimer", 2))
+        autoRestart = bool(functionConfig.get("autoRestart", True))
+        savePosData = bool(functionConfig.get("savePosData", True))
+        self.windowSizeX = int(functionConfig.get("DSIwidth", self.windowSizeX))
+        self.windowSizeY = int(functionConfig.get("DSIheight", self.windowSizeY))
+        self.windowPosX = int(functionConfig.get("DSIxPos", self.windowPosX))
+        self.windowPosY = int(functionConfig.get("DSIyPos", self.windowPosY))
         # loads all options from configs
 
         self.labelSwap.emit("Main configuration loaded, proceeding...", 0)
@@ -2066,21 +2342,21 @@ class DSI_MainWindow(QMainWindow):
         global smallURL, spotifyURL, songNameSpacerL, songNameSpacerR, preText, postText, enableSong, enableArtist, enableAlbum, albumFallback, picCycleList
         # global -> local
 
-        smallURL = jsonConfig.get("smallPicURL", None)
+        smallURL = dsiVisualConfig.get("smallPicURL", None)
         if smallURL is None:
         # if the smallURL is empty
             smallURL = "https://github.com/EllEff-Git/Discord-Spotify-Integration"
             # shameless plug <3 (only applies if there's no defined URL)
-        spotifyURL = str(jsonConfig.get("spotifyURLType", "Track"))
-        songNameSpacerL = str(jsonConfig.get("spacerL", "\u227a"))
-        songNameSpacerR = str(jsonConfig.get("spacerR", "\u227b"))
-        preText = str(jsonConfig.get("preText", ""))
-        postText = str(jsonConfig.get("postText", ""))
-        enableSong = bool(jsonConfig.get("enableSong", True))
-        enableArtist = bool(jsonConfig.get("enableArtist", True))
-        enableAlbum = bool(jsonConfig.get("enableAlbum", True))
-        albumFallback = str(jsonConfig.get("albumFallback", "A playlist"))
-        picCycleList = str(jsonConfig.get("pictureCycleType", "Spotify"))
+        spotifyURL = str(dsiVisualConfig.get("spotifyURLType", "Track"))
+        songNameSpacerL = str(dsiVisualConfig.get("spacerL", "\u227a"))
+        songNameSpacerR = str(dsiVisualConfig.get("spacerR", "\u227b"))
+        preText = str(dsiVisualConfig.get("preText", ""))
+        postText = str(dsiVisualConfig.get("postText", ""))
+        enableSong = bool(dsiVisualConfig.get("enableSong", True))
+        enableArtist = bool(dsiVisualConfig.get("enableArtist", True))
+        enableAlbum = bool(dsiVisualConfig.get("enableAlbum", True))
+        albumFallback = str(dsiVisualConfig.get("albumFallback", "A playlist"))
+        picCycleList = str(dsiVisualConfig.get("pictureCycleType", "Spotify"))
         # grabs each option from config, loads into global var
 
         self.labelSwap.emit("Customisation configurations loaded, proceeding...", 0)
@@ -2117,7 +2393,7 @@ class DSI_MainWindow(QMainWindow):
         # if the list is on Spotify (or empty), doesn't modify it
             None
 
-        picCycleTime = int(jsonConfig.get("pictureCycleTime", 10))
+        picCycleTime = int(dsiVisualConfig.get("pictureCycleTime", 10))
         # grabs the cycle time
         try:
         # tries to turn the time into minutes (ensures integer type, multiplies by 60)
@@ -2127,9 +2403,9 @@ class DSI_MainWindow(QMainWindow):
             picCycleTime = 600
             # sets to default of 10 minutes
 
-        picCycleType = str(jsonConfig.get("pictureCycleBehavior", "Random"))
-        smallPic = str(jsonConfig.get("smallPic", ""))
-        hoverText = str(jsonConfig.get("smallPicHover", "Spotify"))
+        picCycleType = str(dsiVisualConfig.get("pictureCycleBehavior", "Random"))
+        smallPic = str(dsiVisualConfig.get("smallPic", ""))
+        hoverText = str(dsiVisualConfig.get("smallPicHover", "Spotify"))
         # loads last settings
 
         QTimer.singleShot(500, self.shaaConfigLoad)
@@ -2283,81 +2559,88 @@ class DSI_MainWindow(QMainWindow):
 
 ### Total Time Grabber ###
 
-    def timeGrabber(self):
+    def timeGrabber(self, forceRefresh: bool = False):
         """Function that grabs the total time counts from totalTimes file"""
         global totalHours, totalMinutes, totalSeconds, totalPlays, totalAverage, topHour, disableShaa
         global topTracks, topArtists, topAlbums
         # global -> local
-        self.labelSwap.emit("Grabbing SHA details from file...", 0)
-        # user update
 
-        if os.path.isfile(timeDir):
-        # checks if the totalTimes.json file exists
-            with open(timeDir, "r", encoding="utf-8") as times:
-            # if yes, opens the file
-                totalDict: dict[str] = json.load(times)
-                # loads the file as a dictionary
+        nextTimer = 1000
+        # a 1-second timer to move to next stage (2.5 if no file found)
+        totalDict = None
+        # starts off as None
 
-                totalHours = f"{float(totalDict.get("totalHours", 0)):,.2f}"
-                totalMinutes = f"{float(totalDict.get("totalMinutes", 0)):,.0f}"
-                totalSeconds = f"{float(totalDict.get("totalSeconds", 0)):,.0f}"
-                totalPlays = f"{int(totalDict.get("totalPlays", 0)):,.0f}"
-                # grabs the numbers, formats as beautified number strings (eg. 25,593.24 hours / 2,520,149 minutes...)
-                totalAverage = f"{totalDict.get("totalAverage", "0:00")}"
-                # grabs the average song duration across all history
+        if (totalDict is None) or (forceRefresh):
+        # if the times haven't been loaded yet or it's a force refresh request (prevents re-assigning mid-run)
+            self.labelSwap.emit("Grabbing SHA details from file...", 0)
+            # user update
 
-                uniqueTracks = int(totalDict.get("uniqueTracks", 0))
-                uniqueArtists = int(totalDict.get("uniqueArtists", 0))
-                uniqueAlbums = int(totalDict.get("uniqueAlbums", 0))
-                # grabs the number of unique items (unused)
+            if os.path.isfile(timeDir):
+            # checks if the totalTimes.json file exists
+                with open(timeDir, "r", encoding="utf-8") as times:
+                # if yes, opens the file
+                    totalDict: dict[str] = json.load(times)
+                    # loads the file as a dictionary
 
-                topTracks = dict(totalDict.get("topTracks", {}))
-                topArtists = dict(totalDict.get("topArtists", {}))
-                topAlbums = dict(totalDict.get("topAlbums", {}))
-                # grabs the dictionaries of top items {"URI": {"Time": (ms), "Count": (x), "Rank": #}}
+                    totalHours = f"{float(totalDict.get("totalHours", 0)):,.2f}"
+                    totalMinutes = f"{float(totalDict.get("totalMinutes", 0)):,.0f}"
+                    totalSeconds = f"{float(totalDict.get("totalSeconds", 0)):,.0f}"
+                    totalPlays = f"{int(totalDict.get("totalPlays", 0)):,.0f}"
+                    # grabs the numbers, formats as beautified number strings (eg. 25,593.24 hours / 2,520,149 minutes...)
+                    totalAverage = f"{totalDict.get("totalAverage", "0:00")}"
+                    # grabs the average song duration across all history
 
-                hourlyPlays: dict[str, int] = dict(totalDict.get("hourlyPlays", {"25": 0}))
-                # grabs the {"hournum": playnum} dictionary
-                hour, plays = max(hourlyPlays.items(), key=lambda item: item[1])
-                # grabs the highest playcount + hour, stores both
-                topHour = {hour: plays}
-                # stores in global var
+                    uniqueTracks = int(totalDict.get("uniqueTracks", 0))
+                    uniqueArtists = int(totalDict.get("uniqueArtists", 0))
+                    uniqueAlbums = int(totalDict.get("uniqueAlbums", 0))
+                    # grabs the number of unique items (unused)
 
-                timestamp = int(totalDict.get("timestamp", 0))
-                # grabs the saved timestamp as an integer
+                    topTracks = dict(totalDict.get("topTracks", {}))
+                    topArtists = dict(totalDict.get("topArtists", {}))
+                    topAlbums = dict(totalDict.get("topAlbums", {}))
+                    # grabs the dictionaries of top items {"URI": {"Time": (ms), "Count": (x), "Rank": #}}
 
-                self.historySongCounter.setText(f"Account Stats:\nSongs played: {totalPlays}\nTime played: {totalHours} hours\nAverage duration: {totalAverage}")
-                # sets the text for the historical stats label
+                    hourlyPlays: dict[str, int] = dict(totalDict.get("hourlyPlays", {"25": 0}))
+                    # grabs the {"hournum": playnum} dictionary
+                    hour, plays = max(hourlyPlays.items(), key=lambda item: item[1])
+                    # grabs the highest playcount + hour, stores both
+                    topHour = {hour: plays}
+                    # stores in global var
 
-                if timestamp != 0:
-                # if the timestamp is anything but 0 (got loaded correctly)
-                    timestamp = datetime.fromtimestamp(timestamp)
-                    # converts to a datetime object
-                    timestampString = timestamp.strftime("%d %B %Y").lstrip("0")
-                    # formats the timestamp to eg. "03 August 2025", then strips the left 0 if one exists
-                else:
-                # is 0 somehow
-                    timestampString = "N/A"
-                    # unavailable string
+                    timestamp = int(totalDict.get("timestamp", 0))
+                    # grabs the saved timestamp as an integer
 
-            if enableUpdates:
-            # if updates are enabled
-                self.labelSwap.emit(f"Times saved ({timestampString}):\n{totalHours} hours\n{totalMinutes} minutes\n{totalSeconds} seconds\n{totalPlays} plays", 0)
-                # prints the total times at start
+                    self.historySongCounter.setText(f"Account Stats:\nSongs played: {totalPlays}\nTime played: {totalHours} hours\nAverage duration: {totalAverage}")
+                    # sets the text for the historical stats label
 
-            QTimer.singleShot(1000, self.readyStateReadier)
-            # calls the next stage
+                    if timestamp != 0:
+                    # if the timestamp is anything but 0 (got loaded correctly)
+                        timestamp = datetime.fromtimestamp(timestamp)
+                        # converts to a datetime object
+                        timestampString = timestamp.strftime("%d %B %Y").lstrip("0")
+                        # formats the timestamp to eg. "03 August 2025", then strips the left 0 if one exists
+                    else:
+                    # is 0 somehow
+                        timestampString = "N/A"
+                        # unavailable string
 
-        else:
-        # if the file for SHA doesn't exist
-            if not disableShaa:
-            # if SHAA isn't disabled
-                self.labelSwap.emit("Could not find totalTimes.json file, please ensure proper SHAA installation...", 2)
-                # there's already a print informing about non-SHAA installation later
-                disableShaa = True
-                # disables SHAA functionality (can't access files)
+                if enableUpdates:
+                # if updates are enabled
+                    self.labelSwap.emit(f"Times saved ({timestampString}):\n{totalHours} hours\n{totalMinutes} minutes\n{totalSeconds} seconds\n{totalPlays} plays", 0)
+                    # prints the total times at start
 
-            QTimer.singleShot(2500, self.readyStateReadier)
+            else:
+            # if the file for SHA doesn't exist
+                if not disableShaa:
+                # if SHAA isn't disabled
+                    self.labelSwap.emit("Could not find totalTimes.json file, please ensure proper SHAA installation...", 2)
+                    # there's already a print informing about non-SHAA installation later
+                    disableShaa = True
+                    # disables SHAA functionality (can't access files)
+                    nextTimer += 1500
+                    # adds 1.5 seconds to let user read text
+
+            QTimer.singleShot(nextTimer, self.readyStateReadier)
             # calls the next stage 
 
 ### Ready State Setter ###
@@ -2387,7 +2670,9 @@ class DSI_MainWindow(QMainWindow):
         # stops each column from expanding on their own
 
         self.resize(self.windowSizeX, self.windowSizeX)
-        # resizes the window automatically to fit everything (square)
+        # resizes the window automatically
+        self.move(self.windowPosX, self.windowPosY)
+        # moves the window to pre-determined coordinates
 
         self.readyTag.emit()
         # sends a signal to the ready tag to allow progress (starts the threads)
@@ -2397,8 +2682,27 @@ class DSI_MainWindow(QMainWindow):
     def programReadyState(self):
         """Function that activates things after the rest of the program is caught up"""
 
+        if self.configWindow is None:
+        # only re-assigns the variable if this is the first time (this can get called after startup)
+            self.configWindow = ConfigWindow(self)
+            # instantiates the configuration window class 
+            self.configWindow.hide()
+            # hides by default
+        if self.uriWindow is None:
+        # only re-assigns the variable if this is the first time (this can get called after startup)
+            self.uriWindow = URIWindow(self)
+            # instantiates the URI manipulation window class
+            self.uriWindow.hide()
+            # hides by default
+        if self.actionWindow is None:
+        # only re-assigns the variable if this is the first time (this can get called after startup)
+            self.actionWindow = ActionWindow(self)
+            # instantiates the action selection window class
+            self.actionWindow.hide()
+            # hides by default
+
         self.cycleStatsButton.show()
-        self.currentSongInfoButton.show()
+        self.functionNestButton.show()
         self.openFuncConfigButton.show()
         self.openUriMapperButton.show()
         # enables the function buttons button
@@ -2408,6 +2712,314 @@ class DSI_MainWindow(QMainWindow):
         self.discordStatusIcon.show()
         self.discordStatusLabel.show()
         # enables all the status icons
+
+
+
+### URI Manipulation Window ###
+
+
+class URIFilter(QSortFilterProxyModel):
+    """Class to use to filter through tracks/artists/URIs based on search"""
+    def __init__(self, parent=None):
+    # init 
+        super().__init__(parent)
+        # init 2
+
+    ### Variables ###
+
+        self.currentSearch = ""
+        # current search value
+        self.hideDupes = False
+        # boolean that stores the clone/dupe state
+
+    def textNormaliser(self, text: str) -> str:
+        """Function to normalise text"""
+        return unicodedata.normalize("NFKC", str(text)).casefold()
+        # returns the passed text in normalised form (ensures the text follows unicode characters, then lowers it, if possible)
+
+    def search(self, text:str):
+        """Function to search the URI table for the passed text"""
+        self.currentSearch = self.textNormaliser(text).strip()
+        # ensures the current search stored is normalised and doesn't have any empty characters (whitespace)
+        self.invalidateFilter()
+        # invalidates the currently active filter (resets the search conditions so that only relevant info shows up)
+
+    def filterAcceptsRow(self, rowNum: int, QParent):
+        """Function to filter the rows of data"""
+
+        model = self.sourceModel()
+        # grabs the inherited model (from URIWindow)
+
+        uri = model.index(rowNum, 2, QParent).data()
+        # returns the URI stored in the given row
+        mappedURI = model.index(rowNum, 3, QParent).data()
+        # returns the mapped URI(s) stored in the given row
+
+        if self.hideDupes and mappedURI == uri:
+        # if the option to hide dupes is set and the URI matches the mapped URI
+            return False
+            # can't be shown
+
+        for column in range(model.columnCount()):
+        # goes through every column of data in the model's columns (Track, Artist, URI, URIs)
+            index = model.index(rowNum, column, QParent)
+            # grabs the actual index (address) of the item (eg. row 359, column Track)
+
+            value = model.data(index, Qt.ItemDataRole.DisplayRole)
+            # grabs the data in the matching cell (index)
+
+            if self.currentSearch in self.textNormaliser(value or ""):
+            # if the current search matches (part of) the text in the cell
+                return True
+                # the passed row can be displayed (valid)
+
+        return False
+        # if nothing matches, then it doesn't fit the data -> shouldn't be displayed
+
+
+
+class URIWindow(QDialog):
+    """Window class to show the URI manipulation window"""
+    def __init__(self, parentWindow: DSI_MainWindow):
+    # init
+        super().__init__(parent = parentWindow)
+        # init 2
+        
+        self.mainIcon = iconPath
+        # the directory containing the program icon png (built-in)
+
+        self.setMinimumSize(900, 500)
+        # sets the window size 
+        self.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
+        self.setWindowTitle("DSI URI Manipulator")
+        # sets title name
+
+    ### Base Elements ###
+
+        self.mainLayout = QVBoxLayout()
+        # base layout
+        self.mainLayout.setContentsMargins(25, 25, 25, 25)
+        # 25px margin each side
+        self.mainLayout.setSpacing(25)
+        # 25px spacing between each element
+        self.setLayout(self.mainLayout)
+        # sets the layout
+
+        self.searchLayout = QGridLayout()
+        # nested layout to host the search elements
+        self.mainLayout.addLayout(self.searchLayout)
+        # adds the search element layout to the main layout
+
+    ### Search Elements ###
+
+        self.trackSelector = QLineEdit()
+        # the place to enter a track in question
+        self.trackSelector.setPlaceholderText("Search by track, artist or album name or by URI...")
+        # temp text
+        self.trackSelector.setToolTip("Type a song or any of its identifiers to display its mapped URI details")
+        # tooltip
+        self.trackSelector.setFixedSize(300, 60)
+        # fixed size
+
+        self.searchSpacer = QSpacerItem(50, 60)
+        # a spacer item to sit between the search and the other buttons
+
+        self.copyURIbutton = QPushButton("Copy URI")
+        # button to copy the currently active URI
+        self.copyURIbutton.setToolTip("Press to copy the currently active track's URI to the search bar")
+        # tooltip
+        self.copyURIbutton.setFixedSize(125, 60)
+        # fixed size
+        self.copyURIbutton.clicked.connect(self.copyURItoSearch)
+        # connects the click to the function
+
+        self.removeMappedButton = QPushButton("Unmap URI")
+        # button to remove the mapped URIs from the selected URI
+        self.removeMappedButton.setToolTip("Press to remove the URI mapping from the active track's URI\nThis is useful if you think Spotify has mapped it wrong")
+        # tooltip
+        self.removeMappedButton.setFixedSize(125, 60)
+        # fixed size
+        self.removeMappedButton.clicked.connect(self.promptErase)
+        # connects clicking the remove the mapping to the function to prompt -> erase
+
+        self.hideDuplicatesButton = QCheckBox("Hide Clones")
+        # button to hide the "clone" URIs
+        self.hideDuplicatesButton.setToolTip("Only display URIs that have a different alternate URI\nMost URIs tend to map to the same URI (very licensing-dependant)")
+        # tooltip
+        self.hideDuplicatesButton.setFixedSize(125, 60)
+        # fixed size
+        self.hideDuplicatesButton.clicked.connect(self.hideDuplicateFunc)
+        # connects the click to the function
+
+    ### Table (Internals) ###
+
+        self.searchModel = QStandardItemModel()
+        # a 'model' to use to search the data with
+        self.searchModel.setHorizontalHeaderLabels(["Track", "Artist", "URI", "Mapped URI(s)"])
+        # sets up the header labels
+
+        self.filterProxy = URIFilter()
+        # a filtering proxy
+        self.filterProxy.setSourceModel(self.searchModel)
+        # makes the filter use the created search model
+        self.filterProxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        # the filter doesn't care about cAse sEnSitiVitY
+        self.filterProxy.setSortCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        # the sorting doesn't care about cAse sEnSitiVitY
+
+        self.uriTable = QTableView()
+        # a sheet-like view on the tracks
+        self.uriTable.setModel(self.filterProxy)
+        # makes the UI table use the created proxy
+        self.uriTable.setSortingEnabled(True)
+        # allows clicking the columns to sort them
+        self.uriTable.setMinimumSize(500, 225)
+        # sets the minimum size for the table
+        self.uriTable.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        # disables all methods of editing the cells (there's no function related to actually modifying them)
+
+        self.uriTable.setColumnWidth(0, 200)
+        self.uriTable.setColumnWidth(1, 150)
+        self.uriTable.setColumnWidth(2, 200)
+        self.uriTable.setColumnWidth(3, 200)
+        # ensures all the columns have at least some space
+
+        self.trackSelector.textChanged.connect(self.filterProxy.search)
+        # connects typing in the search bar
+
+        self.searchLayout.addWidget(self.trackSelector, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.searchLayout.addItem(self.searchSpacer, 0, 1)
+        self.searchLayout.addWidget(self.copyURIbutton, 0, 2, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.searchLayout.addWidget(self.removeMappedButton, 0, 3, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.searchLayout.addWidget(self.hideDuplicatesButton, 0, 4, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.mainLayout.addWidget(self.uriTable)
+        # adds all UI elements to layout
+
+        self.trackPlacer(25)
+        # starts up with the first 25 tracks
+
+    def trackPlacer(self, count: int = 250000):
+        """Function that adds all the relevant tracks to the table of tracks"""
+
+        self.searchModel.removeRows(0, self.searchModel.rowCount())
+        # removes every row contained within (calling .Clear() removes the headers, too)
+
+        num = 0
+        # starts counter at 0
+
+        for uri in uriMap.keys():
+        # goes through every stored URI in the mapped URI dict
+            if isinstance(uriMap[uri], dict):
+            # if the entry is a dictionary (str:str means old system, str:dict means new)
+                modelItems = [
+                    QStandardItem(uriMap[uri]["Song Name"]),
+                    QStandardItem(uriMap[uri]["Artist"]),
+                    QStandardItem(uri),
+                    QStandardItem("\n".join(uriMap[uri]["URIs"]))
+                ]
+                # forms a list of items to place into the table
+                self.searchModel.appendRow(modelItems)
+                # adds the items to the rows of data (Song | Artist | URI | Mapped | Remove)
+
+                num += 1
+                # adds 1 to the running tally
+                if num >= count:
+                # if the counter exceeds the requested number (startup, otherwise basically ignored, unless your Spotify somehow has >250K tracks)
+                    break
+                    # stops (caps at passed number)
+
+    def copyURItoSearch(self):
+        """Function that copies the active URI to the filter search bar (and ensures the search is refreshed)"""
+
+        activeURI: str = cppFull.get("URI", None)
+        # grabs the last saved URI from the global variable (if fails, grabs None)
+        if activeURI:
+        # if it found one (not set to None)
+            self.trackSelector.setText(activeURI)
+            # sets the text to match the URI
+
+    def promptErase(self):
+        """Function that prompts before removing a URI mapping/row"""
+
+        selectedRow = self.uriTable.selectionModel().currentIndex()
+        # grabs the QIndex of the selected cell/row
+        if not selectedRow.isValid():
+        # if the index isn't considered "valid" (column, nothing selected, etc.)
+            return
+            # stops
+
+        selectionIndex = self.filterProxy.mapToSource(selectedRow)
+        # turns the selection into the filter's index (translates what the table sees -> what the filter sees)
+        uri = self.searchModel.item(selectionIndex.row(), 2).text()
+        # grabs the URI by getting the text of the 3rd column (0-start) and the selected row
+        track = self.searchModel.item(selectionIndex.row(), 0).text()
+        # does the same for the 1st column to get the track name (QoL)
+
+        confirmErase = QMessageBox.question(self, "Confirm Unmap", f"Unmap {track}'s URIs?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+        # prompts with a QMessageBox
+        if confirmErase == QMessageBox.StandardButton.Yes:
+        # pressing Yes -> confirm -> erase
+            self.eraseRow(uri)
+            # calls the row eraser to delete the given row and wipe the URI's map
+
+    def eraseRow(self, uri: str):
+        """Function that removes the selected row from the table and its mapped URIs"""
+        global uriMap
+        # global -> local
+
+        for row in range(self.searchModel.rowCount()):
+        # goes through the search model's rows
+            if self.searchModel.item(row, 2).text() == uri:
+            # checks the 3rd (0-start) column for the URI, looking for a match
+                self.searchModel.removeRow(row)
+                # matching URI -> removes the row from the 
+                break
+                # stops looking
+
+        uriMap[uri]["URIs"] = []
+        # resets the mapped URIs of the passed URI entry
+
+    def hideDuplicateFunc(self):
+        """Function that hides all the URIs that map to themselves"""
+        visibilityBool = self.hideDuplicatesButton.isChecked()
+        # grabs the state of the checkbox, stores as bool
+
+        self.filterProxy.hideDupes = visibilityBool
+        # sets the dupe hiding state to match the checkbox
+        self.filterProxy.invalidateFilter()
+        # calls the invalidation filter to refresh the table
+
+
+
+### Action Dialog ###
+
+class ActionWindow(QDialog):
+    """Window class to show the action buttons"""
+    def __init__(self, parentWindow: DSI_MainWindow):
+    # init
+        super().__init__(parent = parentWindow)
+        # init 2
+
+        self.mainIcon = iconPath
+        # the directory containing the program icon png (built-in)
+
+        self.setMinimumSize(450, 150)
+        # sets the window size 
+        self.setWindowIcon(QIcon(self.mainIcon))
+        # the window icon
+        self.setWindowTitle("DSI Actions")
+        # sets title name
+
+        self.actionWindowLayout = QHBoxLayout()
+        # base layout
+        self.setLayout(self.actionWindowLayout)
+        # sets the layout
+
+        self.actionWindowLayout.addWidget(parentWindow.currentSongInfoButton)
+        self.actionWindowLayout.addWidget(parentWindow.uriMapConfigureButton)
+        self.actionWindowLayout.addWidget(parentWindow.pauseCPPbutton)
+        # adds all the relevant buttons to the layout
 
 
 
@@ -2423,15 +3035,13 @@ class ConfigWindow(QDialog):
         self.mainIcon = iconPath
         # the directory containing the program icon png (built-in)
 
-        self.setMinimumSize(550, 300)
+        self.setMinimumSize(450, 150)
         # sets the window size 
         self.setWindowIcon(QIcon(self.mainIcon))
         # the window icon
         self.setWindowTitle("DSI Configuration")
         # sets title name
 
-        self.parentWindow = parentWindow
-        # stores parent window (main win) in self
         self.activeConfig = None
         # stores the currently active configuration window
     
@@ -2463,17 +3073,11 @@ class ConfigWindow(QDialog):
         self.shaaConfigButton.clicked.connect(lambda: self.configWindowStart("SHAA"))
         # SHAA config 
 
-        self.hideWindowButton = QPushButton("Close Window")
-        self.hideWindowButton.setFixedSize(120, 45)
-        self.hideWindowButton.clicked.connect(self.hide)
-        # closes the config launcher
-
         self.configLayout.addWidget(self.funcConfigButton)
         self.configLayout.addWidget(self.dsiConfigButton)
         self.configLayout.addWidget(self.shaaConfigButton)
         # adds all the config buttons
         self.mainLayout.addWidget(self.taskLabel, 0, 0, alignment=Qt.AlignmentFlag.AlignCenter)
-        self.mainLayout.addWidget(self.hideWindowButton, 2, 0, alignment=Qt.AlignmentFlag.AlignCenter)
         # adds the button to "close"
 
 ### Threads ###
@@ -2735,7 +3339,6 @@ def spotifyLogin():
 
         time.sleep(5)
         # waits a short amount of time
-
         eventer()
         # calls the eventer to re-create a spotipy instance (to ideally remove old, cached credentials from use)
 
@@ -2743,20 +3346,24 @@ def spotifyLogin():
 
 ### SHA(A) Check ### 
 
-def shaaCheck():
-    """Function that loads CSV stuff related to the SHA(A)"""
-    global uriList, csvReader, uriMap
+def URIFileReader(file: str = "Startup"):
+    """Function that reads and stores variables related to SHAA / URI functionality"""
+    global maplessURIs, csvReader, uriMap
     # global -> local
 
-    if trackCounter > 3:
-    # if there's already been 3 tracks, and this isn't a startup thing
-        pass
-        # does nothing (prevents console spam + unnecessary reassignments and file read)
+    if file == "Startup":
+    # on startup, opens all files and loads contents
+        if not disableShaa:
+        # ensures these files/variables are only loaded if SHAA is in use (URIs don't do anything without it)
+            URIFileReader("SHAA")
+            URIFileReader("URI")
+            URIFileReader("Map")
+            # calls itself with different commands to load each file
 
-    else:
-    # not 3 tracks deep, likely startup
-        if os.path.exists(SHAAdir) and not disableShaa:
-        # if the grouped.csv file exists and SHAA-functionality isn't disabled
+    elif file == "SHAA":
+    # SHAA file (csv) load
+        if os.path.exists(SHAAdir):
+        # if the grouped .csv file exists
             mainWin.labelSwap.emit("Spotify Analyser (Addon) functionality enabled", 0)
             # informs user SHAA is enabled
             csvReader = pd.read_csv(SHAAdir, encoding="utf-8")
@@ -2764,48 +3371,69 @@ def shaaCheck():
             csvReader = csvReader.set_index("URI")
             # sets the track URL as the index
 
-            if os.path.exists(noURIpath):
-            # checks if the uri file (uriList.json) exists
-                with open(noURIpath, "r", encoding="utf-8") as URIs:
-                    # loads the JSON file of URIs
-                    uriList = json.load(URIs)
-                    # stores the loaded file as uriList
-                    if enableUpdates and enableMapping:
-                    # if the user prints and mapping options are enabled
-                        uriLength = len(uriList)
-                        # stores the length of the unmapped URI list
-                        mainWin.labelSwap.emit(f"{uriLength} URIs stored", 1)
-                        # helper print (if using the URI mapper)
-            else:
-            # if file doesn't exist
-                uriList = []
-                # creates a new, empty list
+    elif file == "URI":
+    # unmapped URI file load
+        if os.path.exists(noURIpath):
+        # checks if the uri file (uriList.json) exists
+            with open(noURIpath, "r", encoding="utf-8") as URIs:
+                # loads the JSON file of URIs
+                newURIs = json.load(URIs)
+                # stores the loaded file as newURIs
 
-            if os.path.exists(uriPath):
-            # checks if the URI map file (uriMap.json) exists
-                with open(uriPath) as maps:
-                # loads the URI map file
-                    uriMap = json.load(maps)
-                    # stores the loaded file as uriMap
-                    if enableUpdates and enableMapping:
-                    # if the user prints and mapping options are enabled
-                        uriMLength = len(uriMap)
-                        # stores the length of the mapped URIs
-                        mainWin.labelSwap.emit(f"{uriMLength} URIs mapped", 1)
-                        # user inform
-            else:
-            # if the file doesn't exist
-                uriMap = {}
-                # creates a new, empty list
+                if isinstance(newURIs, list):
+                # if the file still contains a list format (old system)
+                    mainWin.labelSwap.emit(f"Converting URI list to new format...", 1)
+                    # user inform
+                    tempMaplessList = newURIs.copy()
+                    # reassigns to a temp variable
+                    for uri in tempMaplessList:
+                    # goes through every URI in the list
+                        maplessURIs[uri] = {}
+                        # creates an empty dictionary entry for each URI
+                else:
+                # not old system
+                    maplessURIs = newURIs
+                    # reassigns the temp variable to the real dict
+
+                if enableUpdates and enableMapping:
+                # if the user prints and mapping options are enabled
+                    uriLength = len(maplessURIs.keys())
+                    # stores the length of the unmapped URI list
+                    mainWin.labelSwap.emit(f"{uriLength} URIs stored", 1)
+                    # helper print (if using the URI mapper)
+        else:
+        # if file doesn't exist
+            maplessURIs = {}
+            # creates a new, empty dict
+
+    elif file == "Map":
+    # URI map file load
+        if os.path.exists(uriPath):
+        # checks if the URI map file (uriMap.json) exists
+            with open(uriPath) as maps:
+            # loads the URI map file
+                uriMap = json.load(maps)
+                # stores the loaded file as uriMap
+                if enableUpdates and enableMapping:
+                # if the user prints and mapping options are enabled
+                    uriMLength = len(uriMap.keys())
+                    # stores the length of the mapped URIs
+                    mainWin.labelSwap.emit(f"{uriMLength} URIs mapped", 1)
+                    # user inform
+        else:
+        # if the file doesn't exist
+            uriMap = {}
+            # creates a new, empty list
 
 
 
-def uriWriter(URIs: list):
-    """Function that writes the current URI list to file"""
+def uriWriter(URIs: dict):
+    """Function that writes the current unmapped URI dictionary to file"""
+
     with open(noURIpath, "w", encoding="utf-8") as nURI:
     # opens the unfound URI file in write mode
         json.dump(URIs, nURI, indent=3)
-        # "dumps" the list of URIs into the file (with indent)
+        # "dumps" the dict of URIs into the file (with indent)
 
 
 
@@ -3074,7 +3702,7 @@ class pictureClass(threading.Thread):
 
 def runCpp(event):
     """Function to run the C++ / Discord RPC program"""
-    global cppProgram, cppFails
+    global cppProgram
     # global -> local
     
     for process in psutil.process_iter():
@@ -3106,6 +3734,9 @@ def runCpp(event):
     # creates a queue for C++ output
     threading.Thread(target = cppQueueManager, daemon=True, args=(cppProgram.stdout, cppQueue,)).start()
     # makes a thread for the C++ queue manager, passes the C++ output and the queue
+
+    songEvent.set()
+    # sets a song event to force a new data packet to be sent after the C++ program starts (prevents empty data loads)
 
     while True:
     # while the process is running
@@ -3156,8 +3787,6 @@ def runCpp(event):
                 # if the line contains "updated" (means the RPC update went through)
                     mainWin.iconChanger("Discord", "Green", "Icon")
                     # ensures the icon is green
-                    cppFails = 0
-                    # resets fails
                     
                 elif "CPPFAIL" in line:
                 # if the line contains "CPPFAIL" (critical C++ side failure)
@@ -3166,27 +3795,21 @@ def runCpp(event):
                     mainWin.labelSwap.emit(f"Discord RPC program failure, please press the 'Discord API' button to restart the C++ subprocess!", 3)
                     # sends a user log to inform user
 
-                elif "failed" in line.lower() or "paused" in line.lower():
-                # if the line contains "failed"/"Failed" (means the RPC update didn't go through) or "paused"/"Paused" (playback paused -> activity clear)
+                elif "api asset" in line.lower():
+                # if the line contains "API asset" (means RPC failed because of Discord's API refusing to set the assets)
+                    mainWin.iconChanger("Discord", "Red", "Icon")
+                    # ensures the API icon is now red
+                    mainWin.labelSwap.emit(f"Can't update Discord RPC due to Discord API errors, please manually exit and restart DSI\nYou'll likely be prompted to re-authorise Discord", 3)
+                    # sends a user log to inform user
+
+                elif "failed" in line.lower():
+                # if the line contains "failed"/"Failed" (means the RPC update didn't go through)
                     mainWin.iconChanger("Discord", "Yellow", "Icon")
                     # ensures the icon is yellow
                     if "image" in line.lower():
                     # if the line also contains "image"/"Image" (means either of the pictures was broken)
                         mainWin.iconChanger("Discord", "Blue", "Images")
                         # calls the UI option to enable the bool override -> reset fail bools -> hopefully send non-broken images
-
-                elif "api asset" in line.lower():
-                # if the line contains "API asset" (means RPC failed because of Discord's API refusing to set the assets)
-                    mainWin.iconChanger("Discord", "Yellow", "Icon")
-                    # ensures the API icon is now yellow
-                    cppFails += 1
-                    # adds 1 to the fail counter
-                    if cppFails == 2:
-                    # if the fail counter climbs above 3 (starts at 0 -> 3)
-                        mainWin.iconChanger("Discord", "Red", "Icon")
-                        # ensures the API icon is now red
-                        mainWin.labelSwap.emit(f"Can't update Discord RPC due to Discord API errors, please manually exit and restart DSI\nYou'll likely be prompted to re-authorise Discord", 3)
-                        # sends a user log to inform user
 
     cppProgram.wait()
     # waits for the program to close
@@ -3212,7 +3835,7 @@ def cppPackets(packet: dict):
 
 def song(pictureQueue: queue.Queue, event):
     """The function that handles all song data gathering and parsing"""
-    global uriList, cppLargeImage, uriMap, pauseStart, deviceName, volumeLevel
+    global maplessURIs, cppLargeImage, uriMap, pauseStart, deviceName, volumeLevel
     global trackCounter, oldCount, cycleCount, blacklistInfo, hoverText, smallURL, timePlayed, csName, csArtistName, cppFull
     global csSongName, csArtistURL, csAlbumName, csAlbumURL, csPlaylistURL
     # global -> local
@@ -3263,6 +3886,7 @@ def song(pictureQueue: queue.Queue, event):
                 "Song Raw": cppFull.get("Song Raw", "N/A"),
                 "Track ID": cppFull.get("Track ID", trackCounter),
                 "URI": cppFull.get("URI", "N/A"),
+                "Mapped URI": cppFull.get("Mapped URI", "N/A"),
                 "Playcount": cppFull.get("Playcount", "N/A"),
                 "Playtime": cppFull.get("Playtime", "N/A"),
                 "SHAA": cppFull.get("SHAA", not(disableShaa)),
@@ -3354,7 +3978,7 @@ def song(pictureQueue: queue.Queue, event):
                     # gets the name of the only artist
                 try:
                     csArtistURL = csArtists[0].get("name")
-                    # gets the name of the 0th artist
+                    # gets the "name" of the 0th artist (link)
                 except:
                     csArtistURL = "https://open.spotify.com/artist/06HL4z0CvFAxyc27GXpf02"
                     # uses Taylor Swift as fallback
@@ -3371,9 +3995,9 @@ def song(pictureQueue: queue.Queue, event):
             csProgress = int(csFull.get("progress_ms", 1000) / 1000)
             # saves the current song progress in seconds (fallback of 1 second)
 
-            csUnixStart = int(time.time() - csProgress + 2)
+            csUnixStart = int(time.time() - csProgress + 4)
             # stores the start time of the song by taking current time and subtracting progress
-            # adds 2 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
+            # adds 4 seconds to shift the Discord timestamps to be slightly behind Spotify (they were a bit ahead before, actually)
             # this way, there shouldn't be a situation where Discord claims the song has ended when it's still playing on Spotify
             csUnixEnd = (csUnixStart + csLength)
             # stores the end time of the song (by adding up the start + duration)
@@ -3583,32 +4207,52 @@ def song(pictureQueue: queue.Queue, event):
 
                 if enableMapping:
                 # if URI mapping is enabled
-                    
-                    altURI = uriMap.get(csURI)
-                    # creates an alteranate variable from the JSON map by checking with the current URI
 
-                    if finalURI not in uriList:
-                    # if the URI is not in the URI list yet
+                    if finalURI not in maplessURIs or maplessURIs.get(finalURI, {}).get("Song Name") is None:
+                    # if the URI is not in the URI list yet, or it doesn't have nested data
+                        maplessURIs[finalURI] = {"Song Name": csSongName, "Artist": csArtistList[0]}
+                        # adds it to the dictionary of URIs (adds name and artist)
                         if enableUpdates:
                         # if the user updates are enabled
-                            mainWin.labelSwap.emit("Song URI not found in list, added to URI map list", 0)
+                            mainWin.labelSwap.emit(f"URI added to list", 0)
                             # user update
-                        uriList.append(finalURI)
-                        # adds it to the list of URIs
-                        if enableFirstTime:
-                        # if first time behavior is enabled
+                        if enableFirstTime and finalURI not in maplessURIs:
+                        # if first time behavior is enabled and this branch is set off by it not being stored ()
                             firstPlay = True
                             # track hasn't been played before (since it's not in the URI list)
 
-                    if (finalURI not in csvReader.index) and (altURI in csvReader.index):
-                    # if the URI is not found in the CSV index, but the alternate URI is
-                        finalURI = altURI
-                        # sets the URI to use the alternate instead
-                        if enableUpdates:
-                        # if the user updates are enabled
-                            mainWin.labelSwap.emit("Using song stats from mapped URI", 0)
-                            # user update
-                
+                    altURImap: dict | str = uriMap.get(csURI)
+                    # gets the matching URI's dictionary (which contains the alternate URI(s), name and artist or just a string)
+
+                    if altURImap:
+                    # if the URI has stored data
+                        if isinstance(altURImap, str):
+                        # if the alternative URI map is still in string form (URI:URI2)
+                            altURI = altURImap
+                            # reassigns variable
+                            if altURI in csvReader.index and finalURI not in csvReader.index:
+                            # if the URI is not found in the CSV index, but the alternate URI is
+                                finalURI = altURI
+                                # sets the URI to use the alternate instead
+                                if enableUpdates:
+                                # if the user updates are enabled
+                                    mainWin.labelSwap.emit("Using stats from mapped URI", 0)
+                                    # user update
+                        else:
+                        # the map uses the new format (URI: URIs, Song Name, Artist)
+                            for value in altURImap.get("URIs", []):
+                            # goes through that map's URI values
+                                if value in csvReader.index and finalURI not in csvReader.index:
+                                # if the URI is not found in the CSV index, but the alternate URI is
+                                    finalURI = altURI = value
+                                    # sets the URI to use the alternate instead (also stores the alternate to push to webapp)
+                                    if enableUpdates:
+                                    # if the user updates are enabled
+                                        mainWin.labelSwap.emit("Using stats from mapped URI", 0)
+                                        # user update
+                                    break
+                                    # stops the for loop (found a match, don't need to look for a second)
+
                 if finalURI in csvReader.index:
                 # checks if the URI is in the CSV
                     if enableUpdates:
@@ -3955,9 +4599,9 @@ def song(pictureQueue: queue.Queue, event):
 
                     if shaaFallback == "Total":
                     # if the selected fallback is Total/total
-                        shaaPlaycount = f"{csvReader["Playcount"].agg("sum"):,.0f}"
+                        shaaPlaycount = totalPlays if totalPlays else "Several"
                         # uses the total playcount for all songs
-                        shaaPlaytime = f"{((csvReader["Total Time"].agg("sum") / 1000 ) / 60):,.0f}"
+                        shaaPlaytime = totalMinutes if totalMinutes else "Numerous"
                         # uses the total amount of playtime for all songs
                     else:
                     # if the selected fallback isn't total
@@ -4152,7 +4796,8 @@ def song(pictureQueue: queue.Queue, event):
                 "Pause": (not csPlayState),
                 "Song Raw": csName,
                 "Track ID": trackCounter,
-                "URI": finalURI,
+                "URI": csURI,
+                "Mapped URI": (altURI if altURI else "N/A"),
                 "Playcount": (shaaPlaycountSong if shaaPlaycountSong is not None else "N/A"),
                 "Playtime": (shaaPlaytimeMin if shaaPlaytimeMin is not None else "N/A"),
                 "SHAA": (not disableShaa)
@@ -4205,12 +4850,12 @@ def looper():
         now = time.time()
         # gets the current time, saves as local variable (used by a few checks)
 
-        if (lastDSIsave + 7200) < now:
-        # if it's been over 7200 seconds (2 hours) since the last auto-save
-            mainWin.saveSignal.emit("Auto-Save")
-            # sends a save signal to the stopping function of main window (but with not "Shut Down", so it saves, doesn't quit)
-            lastDSIsave = now
-            # sets the time to match current time
+        if autoSaveTimer != 0:
+        # if the auto-saver isn't set to 0 (0 = no saving)
+            if (lastDSIsave + (autoSaveTimer * 3600)) < now:
+            # if it's been over the defined number of hours since the last auto-save
+                mainWin.saveSignal.emit("Auto-Save")
+                # sends a save signal to the stopping function of main window (but with not "Shut Down", so it saves, doesn't quit)
 
         info = authPlayback()
         # picks up all the info Spotify sends in an update
@@ -4299,8 +4944,17 @@ def looper():
         songLeft = (songDur - songProg)
         # calculates the time left on the song
 
-        if (currentURI != songURI) or ((songStart - 15) > storedStart) or (pauseUpdated and playing) or (playbackRestored):
-        # if there's a song change (if the URI has changed or the start timestamp is higher than the stored timestamp) or if the pause has been triggered
+        songScroll = False
+        # defaults the bool to False (no track scrolling)
+        if (abs(songStart - storedStart) > 10):
+        # if the song's start differs more than 10 seconds from stored start (either direction)
+            songScroll = True
+            # sets the bool to True
+
+        if (currentURI != songURI) or (songScroll) or (pauseUpdated and playing) or (playbackRestored):
+        # if there's a song change - if the URI has changed / the start timestamp differs from the stored timestamp
+        # if a pause has been triggered
+        # if the playback was cut and is now restored
 
             if playbackRestored and (currentURI == songURI):
             # if the song "change" is because playback was restored and it's the same song
@@ -4308,11 +4962,11 @@ def looper():
                 # user inform
             elif playbackRestored and (currentURI != songURI):
             # playback was restored AND it's a new song
-                mainWin.labelSwap.emit(f"Playback resumed with new song: {songName}, duration: {songDur:,.0f} seconds", 3)
+                mainWin.labelSwap.emit(f"Playback resumed: {songName}, duration: {songDur:,.0f} seconds", 3)
                 # user inform
             elif enableUpdates and not pauseUpdated:
             # if console updates are enabled and this change wasn't triggered by a pause
-                mainWin.labelSwap.emit(f"New song: {songName}, duration: {songDur:,.0f} seconds", 3)
+                mainWin.labelSwap.emit(f"{songName}, duration: {songDur:,.0f} seconds", 3)
                 # user update on new song
             elif enableUpdates and pauseUpdated and playing:
             # if console updates are enabled and this change *was* triggered by a pause
@@ -4321,12 +4975,6 @@ def looper():
 
             playbackRestored = False
             # resets the boolean
-            currentURI = songURI
-            # changes the internal variable to match new song
-            storedStart = songStart
-            # changes timestamp variable to match
-            songEvent.set()
-            # sets an event to make song() update the presence info
 
             if pauseUpdated and playing:
             # if it's playing and the pauseUpdate has been set to true
@@ -4334,8 +4982,17 @@ def looper():
                 # sets the pauseUpdated to false, so it doesn't run twice
             elif not pauseUpdated and playing:
             # if it's playing but pauseUpdate is false
-                trackCounter += 1
-                # adds 1 to counter (means track has changed)
+                if not (currentURI == songURI and songScroll):
+                # ensures the track counter doesn't go up from just scrolling a track
+                    trackCounter += 1
+                    # adds 1 to counter (means track has changed)
+
+            currentURI = songURI
+            # changes the internal variable to match new song
+            storedStart = songStart
+            # changes timestamp variable to match
+            songEvent.set()
+            # sets an event to make song() update the presence info
 
             time.sleep(2)
             # waits 2 seconds
@@ -4439,12 +5096,12 @@ def mainStart():
     global bg, picThread, songThread, cppThread, mainThread, songThreadEvent, cppThreadEvent
     # global -> local
 
-    shaaCheck()
+    URIFileReader()
     # runs the SHA(A) checker function first, to load global variables
     blacklistReader()
     # runs the blacklist reader to get the blacklist
     eventer()
-    # runs the event reassigner (the spotify authorisation stuff)
+    # runs the event reassigner (the Spotify authorisation stuff)
 
     bg.start()
     # runs the "background" class, which handles the picture updates
