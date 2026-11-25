@@ -1691,13 +1691,17 @@ class DSI_MainWindow(QMainWindow):
                 self.restartTimestamp = datetime.fromtimestamp(time.time() + 1800)
                 # forms a timestamp for when the automatic restart should happen
                 self.restartTimer = QTimer()
-                # makes a QT timer 
+                # makes a QT timer
+                self.restartTimer.setSingleShot(True)
+                # sets the timer to only go off once
                 self.restartTimer.timeout.connect(lambda: self.restartHelper(True))
                 # connects the timer "timeout" (stop) to the restart helper (this function) with True call
                 restartTimestampHuman = self.restartTimestamp.strftime("%H:%M:%S")
                 # "translates" the timestamp from UNIX float to 'human-readable' time
                 self.labelSwap.emit(f"Automatic restart scheduled for {restartTimestampHuman}!", 3)
                 # user inform on pending auto-restart
+                self.restartTimer.start(1800000)
+                # starts the timer with 1,800,000 milliseconds (1800 seconds)
 
 ### Program Closer ###
 
@@ -3346,21 +3350,12 @@ def spotifyLogin():
 
 ### SHA(A) Check ### 
 
-def URIFileReader(file: str = "Startup"):
+def URIFileReader(file: str):
     """Function that reads and stores variables related to SHAA / URI functionality"""
     global maplessURIs, csvReader, uriMap
     # global -> local
 
-    if file == "Startup":
-    # on startup, opens all files and loads contents
-        if not disableShaa:
-        # ensures these files/variables are only loaded if SHAA is in use (URIs don't do anything without it)
-            URIFileReader("SHAA")
-            URIFileReader("URI")
-            URIFileReader("Map")
-            # calls itself with different commands to load each file
-
-    elif file == "SHAA":
+    if file == "SHAA":
     # SHAA file (csv) load
         if os.path.exists(SHAAdir):
         # if the grouped .csv file exists
@@ -3410,7 +3405,7 @@ def URIFileReader(file: str = "Startup"):
     # URI map file load
         if os.path.exists(uriPath):
         # checks if the URI map file (uriMap.json) exists
-            with open(uriPath) as maps:
+            with open(uriPath, "r", encoding="utf-8") as maps:
             # loads the URI map file
                 uriMap = json.load(maps)
                 # stores the loaded file as uriMap
@@ -5096,8 +5091,10 @@ def mainStart():
     global bg, picThread, songThread, cppThread, mainThread, songThreadEvent, cppThreadEvent
     # global -> local
 
-    URIFileReader()
-    # runs the SHA(A) checker function first, to load global variables
+    URIFileReader("SHAA")
+    URIFileReader("URI")
+    URIFileReader("Map")
+    # calls the URI loading function to grab all global variables
     blacklistReader()
     # runs the blacklist reader to get the blacklist
     eventer()
